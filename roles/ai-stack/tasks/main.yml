@@ -13,11 +13,21 @@
     scope: user
   failed_when: false
 
+- name: Wait for Ollama service to be ready
+  ansible.builtin.wait_for:
+    path: /tmp/ollama.sock
+    state: present
+    timeout: 30
+  failed_when: false
+
 - name: Pull default Ollama model
   ansible.builtin.command: ollama pull {{ ollama_default_model }}
-  changed_when: false
+  register: ai_stack_ollama_pull
+  changed_when: "'pulling' in ai_stack_ollama_pull.stdout or 'success' in ai_stack_ollama_pull.stdout"
+  until: ai_stack_ollama_pull.rc == 0
   retries: 3
-  delay: 5
+  delay: 10
+  ignore_errors: true
 
 - name: Check if Miniforge is already installed
   ansible.builtin.stat:
@@ -55,7 +65,8 @@
     pip install transformers jupyter jupyterlab pandas numpy scikit-learn matplotlib
   changed_when: false
 
-- name: Install aider and uv
+- name: Install aider and uv in nikos-ai env
   ansible.builtin.command: >
-    {{ ansible_env.HOME }}/miniforge3/bin/pip install aider-chat uv
+    {{ ansible_env.HOME }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
+    pip install aider-chat uv
   changed_when: false
