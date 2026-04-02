@@ -21,6 +21,7 @@
     update_cache: true
     cache_valid_time: 3600
   become: true
+  when: not ansible_check_mode
 
 - name: Install JetBrains Mono font
   ansible.builtin.apt:
@@ -32,6 +33,7 @@
   ansible.builtin.command: code --install-extension {{ item }} --force
   loop: "{{ nikos_vscode_extensions }}"
   changed_when: false
+  when: not ansible_check_mode
 
 - name: Ensure VS Code user settings directory exists
   ansible.builtin.file:
