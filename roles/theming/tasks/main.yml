@@ -1,0 +1,76 @@
+---
+- name: Create NikOS asset directory
+  ansible.builtin.file:
+    path: /usr/share/nikos
+    state: directory
+    mode: "0755"
+
+- name: Copy wallpaper SVG
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/wallpaper.svg"
+    dest: /usr/share/nikos/wallpaper.svg
+    mode: "0644"
+
+- name: Export wallpaper SVG to PNG
+  ansible.builtin.command: >
+    inkscape /usr/share/nikos/wallpaper.svg
+    --export-filename=/usr/share/nikos/wallpaper.png
+    --export-width=1920 --export-height=1080
+  args:
+    creates: /usr/share/nikos/wallpaper.png
+
+- name: Install Papirus icon theme
+  ansible.builtin.apt:
+    name: papirus-icon-theme
+    state: present
+
+- name: Download Nordic GTK theme
+  ansible.builtin.get_url:
+    url: "{{ nordic_gtk_url }}"
+    dest: /tmp/Nordic.tar.xz
+    mode: "0644"
+
+- name: Create themes directory
+  ansible.builtin.file:
+    path: /usr/share/themes
+    state: directory
+    mode: "0755"
+
+- name: Extract Nordic GTK theme
+  ansible.builtin.unarchive:
+    src: /tmp/Nordic.tar.xz
+    dest: /usr/share/themes/
+    remote_src: true
+    creates: /usr/share/themes/Nordic
+
+- name: Download Nordic GRUB theme
+  ansible.builtin.get_url:
+    url: "{{ nordic_grub_url }}"
+    dest: /tmp/Nordic-grub.tar.xz
+    mode: "0644"
+
+- name: Create GRUB themes directory
+  ansible.builtin.file:
+    path: /boot/grub/themes
+    state: directory
+    mode: "0755"
+
+- name: Extract Nordic GRUB theme
+  ansible.builtin.unarchive:
+    src: /tmp/Nordic-grub.tar.xz
+    dest: /boot/grub/themes/
+    remote_src: true
+    creates: /boot/grub/themes/Nordic
+
+- name: Configure GRUB to use Nordic theme
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: "^#?GRUB_THEME="
+    line: 'GRUB_THEME="/boot/grub/themes/Nordic/theme.txt"'
+  notify: Theming_update_grub
+
+- name: Deploy LightDM GTK greeter config
+  ansible.builtin.copy:
+    src: lightdm-gtk-greeter.conf
+    dest: /etc/lightdm/lightdm-gtk-greeter.conf
+    mode: "0644"

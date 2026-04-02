@@ -1,0 +1,4 @@
+---
+- name: Theming_update_grub
+  ansible.builtin.command: update-grub
+  changed_when: true
