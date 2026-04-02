@@ -7,7 +7,7 @@ nikos_locale: "en_US.UTF-8"
 
 # Theme
 nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/Nordic.tar.xz"
-nordic_grub_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/Nordic-grub.tar.xz"
+nordic_grub_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/Nordic.tar.xz"
 
 # Ollama
 ollama_default_model: "qwen2.5-coder:7b"
