@@ -26,7 +26,13 @@
     mode: "0755"
   become: true
 
-- name: Run GitHub setup wizard (first time only)
-  ansible.builtin.command: /usr/local/bin/nikos-github-wizard
-  args:
-    creates: "{{ ansible_env.HOME }}/.config/nikos/github-configured"
+- name: Register first-login wizard hook in .bashrc
+  ansible.builtin.lineinfile:
+    path: "{{ ansible_env.HOME }}/.bashrc"
+    line: |
+      # NikOS first-run wizard (runs once on first login)
+      if [[ ! -f "${HOME}/.config/nikos/github-configured" ]]; then
+        /usr/local/bin/nikos-github-wizard
+      fi
+    create: true
+    mode: "0644"

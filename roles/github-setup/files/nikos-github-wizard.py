@@ -95,8 +95,8 @@ def main() -> None:
         ("Pull dotfiles repo (optional)", step_dotfiles),
     ]
 
-    for label, fn in steps:
-        print(f"\n[{steps.index((label, fn)) + 1}/{len(steps)}] {label}")
+    for i, (label, fn) in enumerate(steps, start=1):
+        print(f"\n[{i}/{len(steps)}] {label}")
         fn()
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
