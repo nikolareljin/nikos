@@ -1,0 +1,15 @@
+---
+- name: Install agent development Python packages in nikos-ai env
+  ansible.builtin.command: >
+    {{ ansible_env.HOME }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install
+    langchain langchain-community langchain-openai
+    llama-index llama-index-llms-ollama
+    openai anthropic instructor
+    fastapi uvicorn httpx
+  changed_when: false
+
+- name: Install Claude Code globally via npm
+  community.general.npm:
+    name: "@anthropic-ai/claude-code"
+    global: true
+    state: present
