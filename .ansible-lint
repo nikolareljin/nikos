@@ -1,0 +1,4 @@
+---
+# Project-level ansible-lint configuration
+warn_list:
+  - role-name  # github-setup role uses hyphen by convention; suppress as warning only

@@ -1,0 +1,32 @@
+---
+- name: Add GitHub CLI apt key
+  ansible.builtin.get_url:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /usr/share/keyrings/githubcli-archive-keyring.gpg
+    mode: "0644"
+
+- name: Add GitHub CLI apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg]
+      https://cli.github.com/packages stable main
+    filename: github-cli
+
+- name: Install gh CLI
+  ansible.builtin.apt:
+    name: gh
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Copy GitHub setup wizard
+  ansible.builtin.copy:
+    src: nikos-github-wizard.py
+    dest: /usr/local/bin/nikos-github-wizard
+    mode: "0755"
+  become: true
+
+- name: Run GitHub setup wizard (first time only)
+  ansible.builtin.command: /usr/local/bin/nikos-github-wizard
+  args:
+    creates: "{{ ansible_env.HOME }}/.config/nikos/github-configured"
