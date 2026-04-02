@@ -10,7 +10,7 @@ Built on Xfce + Nordic theme. Powered by Ollama, aider, VS Code, and the full AI
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos-os/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos/main/install.sh | bash
 ```
 
 ## What's included

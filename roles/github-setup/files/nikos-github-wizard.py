@@ -21,7 +21,7 @@ def is_gh_authenticated() -> bool:
 
 def is_ssh_key_on_github() -> bool:
     result = run(["gh", "ssh-key", "list"], check=False)
-    return result.returncode == 0 and "nikos-os" in result.stdout
+    return result.returncode == 0 and "nikos" in result.stdout
 
 
 def is_git_identity_set() -> bool:
@@ -43,7 +43,7 @@ def step_ssh_key() -> None:
     if not ssh_key_path.exists():
         print("  Generating SSH key (ed25519)...")
         subprocess.run(
-            ["ssh-keygen", "-t", "ed25519", "-C", "nikos-os", "-f", str(ssh_key_path), "-N", ""],
+            ["ssh-keygen", "-t", "ed25519", "-C", "nikos", "-f", str(ssh_key_path), "-N", ""],
             check=True,
         )
     if is_ssh_key_on_github():
@@ -51,7 +51,7 @@ def step_ssh_key() -> None:
         return
     print("  Uploading SSH key to GitHub...")
     subprocess.run(
-        ["gh", "ssh-key", "add", str(ssh_key_path.with_suffix(".pub")), "--title", "nikos-os"],
+        ["gh", "ssh-key", "add", str(ssh_key_path.with_suffix(".pub")), "--title", "nikos"],
         check=True,
     )
 

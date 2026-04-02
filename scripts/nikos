@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="https://github.com/nikolareljin/nikos-os"
+REPO_URL="https://github.com/nikolareljin/nikos"
 NIKOS_VERSION="0.1.0"
 
 usage() {

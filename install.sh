@@ -3,7 +3,7 @@ set -euo pipefail
 
 [[ "${EUID}" -eq 0 ]] && { echo "ERROR: Do not run NikOS installer as root. Use a regular user account." >&2; exit 1; }
 
-REPO_URL="https://github.com/nikolareljin/nikos-os"
+REPO_URL="https://github.com/nikolareljin/nikos"
 NIKOS_VERSION="0.1.0"
 
 echo "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
