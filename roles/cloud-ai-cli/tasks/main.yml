@@ -28,4 +28,4 @@
 - name: Install GitHub Copilot CLI extension
   ansible.builtin.command: gh extension install github/gh-copilot
   args:
-    creates: "{{ ansible_user_dir }}/.local/share/gh/extensions/gh-copilot"
+    creates: "{{ nikos_home }}/.local/share/gh/extensions/gh-copilot"

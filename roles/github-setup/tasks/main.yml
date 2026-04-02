@@ -28,7 +28,7 @@
 
 - name: Register first-login wizard hook in .bashrc
   ansible.builtin.lineinfile:
-    path: "{{ ansible_user_dir }}/.bashrc"
+    path: "{{ nikos_home }}/.bashrc"
     line: |
       # NikOS first-run wizard (runs once on first login)
       if [[ ! -f "${HOME}/.config/nikos/github-configured" ]]; then

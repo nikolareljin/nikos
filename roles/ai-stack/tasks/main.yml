@@ -31,7 +31,7 @@
 
 - name: Check if Miniforge is already installed
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/miniforge3/bin/conda"
+    path: "{{ nikos_home }}/miniforge3/bin/conda"
   register: ai_stack_miniforge_stat
 
 - name: Download Miniforge installer
@@ -42,31 +42,31 @@
   when: not ai_stack_miniforge_stat.stat.exists
 
 - name: Install Miniforge
-  ansible.builtin.command: bash /tmp/miniforge.sh -b -p {{ ansible_user_dir }}/miniforge3
+  ansible.builtin.command: bash /tmp/miniforge.sh -b -p {{ nikos_home }}/miniforge3
   when: not ai_stack_miniforge_stat.stat.exists
   changed_when: true
 
 - name: Create nikos-ai conda environment
   ansible.builtin.command: >
-    {{ ansible_user_dir }}/miniforge3/bin/conda create -n {{ nikos_conda_env }}
+    {{ nikos_home }}/miniforge3/bin/conda create -n {{ nikos_conda_env }}
     python={{ nikos_python_version }} -y
   args:
-    creates: "{{ ansible_user_dir }}/miniforge3/envs/{{ nikos_conda_env }}"
+    creates: "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}"
 
 - name: Install PyTorch CPU in nikos-ai env
   ansible.builtin.command: >
-    {{ ansible_user_dir }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
+    {{ nikos_home }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
     pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
   changed_when: false
 
 - name: Install data science packages in nikos-ai env
   ansible.builtin.command: >
-    {{ ansible_user_dir }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
+    {{ nikos_home }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
     pip install transformers jupyter jupyterlab pandas numpy scikit-learn matplotlib
   changed_when: false
 
 - name: Install aider and uv in nikos-ai env
   ansible.builtin.command: >
-    {{ ansible_user_dir }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
+    {{ nikos_home }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
     pip install aider-chat uv
   changed_when: false

@@ -4,6 +4,9 @@
   become: true
   vars_files:
     - vars/main.yml
+  vars:
+    # lookup runs on the controller before privilege escalation — gives the real user's home
+    nikos_home: "{{ lookup('env', 'HOME') }}"
 
   roles:
     - role: base

@@ -35,12 +35,12 @@
 
 - name: Ensure VS Code user settings directory exists
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/Code/User"
+    path: "{{ nikos_home }}/.config/Code/User"
     state: directory
     mode: "0755"
 
 - name: Deploy NikOS VS Code settings
   ansible.builtin.template:
     src: vscode-settings.json.j2
-    dest: "{{ ansible_user_dir }}/.config/Code/User/settings.json"
+    dest: "{{ nikos_home }}/.config/Code/User/settings.json"
     mode: "0644"
