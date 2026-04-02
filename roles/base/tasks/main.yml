@@ -1,0 +1,42 @@
+---
+- name: Install nala (apt frontend)
+  ansible.builtin.apt:
+    name: nala
+    state: present
+    update_cache: true
+
+- name: Upgrade all packages
+  ansible.builtin.apt:
+    upgrade: full
+    update_cache: true
+
+- name: Install core dependencies
+  ansible.builtin.apt:
+    name:
+      - git
+      - curl
+      - wget
+      - build-essential
+      - python3-pip
+      - python3-venv
+      - flatpak
+      - gnupg
+      - lsb-release
+      - ca-certificates
+      - software-properties-common
+      - xfconf
+      - inkscape
+    state: present
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ nikos_timezone }}"
+
+- name: Set locale
+  community.general.locale_gen:
+    name: "{{ nikos_locale }}"
+    state: present
+
+- name: Add Flathub remote
+  ansible.builtin.command: flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+  changed_when: false
