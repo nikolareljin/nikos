@@ -4,3 +4,29 @@ __pycache__/
 .superpowers/
 .env
 *.log
+
+# Editor temporaries
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Python artifacts
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Ansible / Vagrant / Molecule
+.vagrant/
+.molecule/
+
+# Secrets and keys (NEVER commit these)
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
