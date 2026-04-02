@@ -1,0 +1,40 @@
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+jobs:
+  ansible-lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ansible-lint
+        run: pip install ansible-lint
+
+      - name: Run ansible-lint
+        run: ansible-lint site.yml
+
+  shellcheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run shellcheck on install.sh
+        run: shellcheck install.sh
+
+      - name: Run shellcheck on nikos CLI
+        run: shellcheck scripts/nikos
+
+  python-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run tests
+        run: pytest tests/ -v

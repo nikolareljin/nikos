@@ -1,0 +1,24 @@
+name: Dry-run Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check-playbook:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: sudo apt-get install -y ansible
+
+      - name: Run playbook in check mode (dry-run)
+        run: >
+          ansible-playbook site.yml
+          -i inventory/local
+          --check
+          --skip-tags network,music,education
+        env:
+          ANSIBLE_FORCE_COLOR: "1"
