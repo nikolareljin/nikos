@@ -18,6 +18,7 @@
     --export-width=1920 --export-height=1080
   args:
     creates: /usr/share/nikos/wallpaper.png
+  when: not ansible_check_mode
 
 - name: Install Papirus icon theme
   ansible.builtin.apt:
@@ -42,6 +43,7 @@
     dest: /usr/share/themes/
     remote_src: true
     creates: /usr/share/themes/Nordic
+  when: not ansible_check_mode
 
 - name: Download Nordic GRUB theme
   ansible.builtin.get_url:
@@ -61,6 +63,7 @@
     dest: /boot/grub/themes/
     remote_src: true
     creates: /boot/grub/themes/Nordic
+  when: not ansible_check_mode
 
 - name: Configure GRUB to use Nordic theme
   ansible.builtin.lineinfile:
