@@ -69,6 +69,12 @@
     line: 'GRUB_THEME="/boot/grub/themes/Nordic/theme.txt"'
   notify: Theming_update_grub
 
+- name: Ensure LightDM config directory exists
+  ansible.builtin.file:
+    path: /etc/lightdm
+    state: directory
+    mode: "0755"
+
 - name: Deploy LightDM GTK greeter config
   ansible.builtin.copy:
     src: lightdm-gtk-greeter.conf
