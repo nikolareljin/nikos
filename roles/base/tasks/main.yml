@@ -4,11 +4,13 @@
     name: nala
     state: present
     update_cache: true
+    cache_valid_time: 3600
 
 - name: Upgrade all packages
   ansible.builtin.apt:
-    upgrade: full
-    update_cache: true
+    upgrade: safe
+    update_cache: false
+    cache_valid_time: 3600
 
 - name: Install core dependencies
   ansible.builtin.apt:
@@ -25,7 +27,7 @@
       - ca-certificates
       - software-properties-common
       - xfconf
-      - inkscape
+      - inkscape  # required by theming role to export wallpaper SVG to PNG
     state: present
 
 - name: Set timezone
@@ -39,4 +41,5 @@
 
 - name: Add Flathub remote
   ansible.builtin.command: flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-  changed_when: false
+  register: base_flathub_result
+  changed_when: "'already exists' not in (base_flathub_result.stderr | default(''))"
