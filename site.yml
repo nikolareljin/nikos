@@ -1,0 +1,36 @@
+---
+- name: NikOS Setup
+  hosts: local
+  become: true
+  vars_files:
+    - vars/main.yml
+
+  roles:
+    - role: base
+    - role: desktop
+    - role: theming
+    - role: github-setup
+      become: false
+    - role: ai-stack
+      become: false
+    - role: editors
+    - role: cloud-ai-cli
+      become: false
+    - role: agent-dev
+      become: false
+    - role: dev-tools
+      become: false
+    - role: optional-network
+      tags: [network]
+    - role: optional-music
+      tags: [music]
+    - role: optional-education
+      tags: [education]
+
+  post_tasks:
+    - name: Install nikos CLI
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/scripts/nikos"
+        dest: /usr/local/bin/nikos
+        mode: "0755"
+      become: true
