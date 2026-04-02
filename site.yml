@@ -14,6 +14,7 @@
     - role: ai-stack
       become: false
     - role: editors
+      become: false
     - role: cloud-ai-cli
       become: false
     - role: agent-dev
