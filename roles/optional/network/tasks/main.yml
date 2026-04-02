@@ -16,7 +16,7 @@
 
 - name: Add user to wireshark group
   ansible.builtin.user:
-    name: "{{ ansible_env.USER }}"
+    name: "{{ ansible_user_id }}"
     groups: wireshark
     append: true
   become: true
