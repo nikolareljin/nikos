@@ -1,0 +1,14 @@
+---
+- name: Install education tools
+  ansible.builtin.apt:
+    name:
+      - libreoffice
+      - anki
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Install draw.io desktop via Flatpak
+  ansible.builtin.command: flatpak install -y flathub com.jgraph.drawio.desktop
+  changed_when: false

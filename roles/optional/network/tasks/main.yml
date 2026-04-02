@@ -1,0 +1,22 @@
+---
+- name: Install network tools
+  ansible.builtin.apt:
+    name:
+      - nmap
+      - wireshark
+      - network-manager-openvpn
+      - network-manager-openvpn-gnome
+      - traceroute
+      - tcpdump
+      - netcat-openbsd
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Add user to wireshark group
+  ansible.builtin.user:
+    name: "{{ ansible_env.USER }}"
+    groups: wireshark
+    append: true
+  become: true

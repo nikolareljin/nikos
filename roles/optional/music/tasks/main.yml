@@ -1,0 +1,14 @@
+---
+- name: Install music production tools
+  ansible.builtin.apt:
+    name:
+      - lmms
+      - audacity
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Install Ardour via Flatpak
+  ansible.builtin.command: flatpak install -y flathub org.ardour.Ardour
+  changed_when: false
