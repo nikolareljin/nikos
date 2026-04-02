@@ -20,11 +20,11 @@
       become: false
     - role: dev-tools
       become: false
-    - role: optional-network
+    - role: optional/network
       tags: [network]
-    - role: optional-music
+    - role: optional/music
       tags: [music]
-    - role: optional-education
+    - role: optional/education
       tags: [education]
 
   post_tasks:
