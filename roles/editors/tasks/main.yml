@@ -1,0 +1,42 @@
+---
+- name: Add Microsoft VS Code apt key
+  ansible.builtin.get_url:
+    url: https://packages.microsoft.com/keys/microsoft.asc
+    dest: /usr/share/keyrings/microsoft.asc
+    mode: "0644"
+
+- name: Add VS Code apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.asc]
+      https://packages.microsoft.com/repos/code stable main
+    filename: vscode
+
+- name: Install VS Code
+  ansible.builtin.apt:
+    name: code
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install JetBrains Mono font
+  ansible.builtin.apt:
+    name: fonts-jetbrains-mono
+    state: present
+
+- name: Install VS Code extensions
+  ansible.builtin.command: code --install-extension {{ item }} --force
+  loop: "{{ nikos_vscode_extensions }}"
+  changed_when: false
+
+- name: Ensure VS Code user settings directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.config/Code/User"
+    state: directory
+    mode: "0755"
+
+- name: Deploy NikOS VS Code settings
+  ansible.builtin.copy:
+    src: vscode-settings.json
+    dest: "{{ ansible_env.HOME }}/.config/Code/User/settings.json"
+    mode: "0644"

@@ -1,0 +1,19 @@
+{
+  "workbench.colorTheme": "Nord",
+  "editor.fontFamily": "'JetBrains Mono', 'Fira Code', monospace",
+  "editor.fontSize": 14,
+  "editor.fontLigatures": true,
+  "editor.lineHeight": 1.6,
+  "terminal.integrated.fontFamily": "'JetBrains Mono', monospace",
+  "terminal.integrated.fontSize": 13,
+  "terminal.integrated.defaultProfile.linux": "xfce4-terminal",
+  "editor.formatOnSave": true,
+  "editor.rulers": [88, 120],
+  "editor.minimap.enabled": false,
+  "workbench.startupEditor": "none",
+  "python.defaultInterpreterPath": "~/miniforge3/envs/nikos-ai/bin/python",
+  "continue.enableTabAutocomplete": true,
+  "git.autofetch": true,
+  "telemetry.telemetryLevel": "off",
+  "workbench.iconTheme": "vs-seti"
+}
