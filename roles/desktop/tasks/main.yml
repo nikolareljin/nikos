@@ -1,29 +1,4 @@
 ---
-- name: Install Xfce desktop environment
-  ansible.builtin.apt:
-    name:
-      - xfce4
-      - xfce4-goodies
-      - xfce4-terminal
-      - xfce4-docklike-plugin
-      - lightdm
-      - lightdm-gtk-greeter
-      - lightdm-gtk-greeter-settings
-    state: present
-
-- name: Set LightDM as default display manager
-  ansible.builtin.debconf:
-    name: lightdm
-    question: shared/default-x-display-manager
-    value: lightdm
-    vtype: select
-
-- name: Configure Xfce panel layout - top bar style
-  ansible.builtin.command: >
-    xfconf-query -c xfce4-panel -p /panels/panel-1/position
-    -s "p=6;x=0;y=0" --create -t string
-  changed_when: false
-
 - name: Remove GNOME session if installed
   ansible.builtin.apt:
     name:
@@ -31,7 +6,42 @@
       - ubuntu-desktop
     state: absent
     autoremove: true
-  register: desktop_gnome_remove_result
-  failed_when:
-    - desktop_gnome_remove_result is failed
-    - "'No packages found' not in (desktop_gnome_remove_result.msg | default(''))"
+  ignore_errors: true # noqa: ignore-errors
+
+- name: Install Xfce desktop environment
+  ansible.builtin.apt:
+    name:
+      - xfce4
+      - xfce4-goodies
+      - xfce4-terminal
+      - lightdm
+      - lightdm-gtk-greeter
+      - lightdm-gtk-greeter-settings
+    state: present
+
+- name: Set LightDM as default display manager
+  ansible.builtin.copy:
+    content: "/usr/sbin/lightdm\n"
+    dest: /etc/X11/default-display-manager
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable LightDM service
+  ansible.builtin.systemd:
+    name: lightdm
+    enabled: true
+
+- name: Create system-wide Xfce4 xfconf directory
+  ansible.builtin.file:
+    path: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
+    state: directory
+    mode: "0755"
+
+- name: Deploy system-wide Xfce panel config
+  ansible.builtin.copy:
+    src: xfce4-panel.xml
+    dest: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
+    owner: root
+    group: root
+    mode: "0644"
