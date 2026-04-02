@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_URL="https://github.com/nikolareljin/nikos-os"
+NIKOS_VERSION="0.1.0"
+
+usage() {
+  cat <<EOF
+nikos ${NIKOS_VERSION} — Neural Innovation for Knowledge OS
+
+Usage:
+  nikos setup            Run full NikOS playbook (first install)
+  nikos update           ansible-pull + re-run playbook (idempotent)
+  nikos add <name>       Install optional role: network | music | education
+  nikos status           Show NikOS version, Ollama models, installed roles
+  nikos doctor           Check for broken configs and missing dependencies
+  nikos help             Show this message
+EOF
+}
+
+cmd_setup() {
+  ansible-pull -U "${REPO_URL}" site.yml -i inventory/local
+}
+
+cmd_update() {
+  ansible-pull -U "${REPO_URL}" site.yml -i inventory/local
+}
+
+cmd_add() {
+  local role="${1:-}"
+  case "${role}" in
+    network | music | education)
+      ansible-pull -U "${REPO_URL}" site.yml -i inventory/local --tags "${role}"
+      ;;
+    *)
+      echo "Unknown optional role: ${role}"
+      echo "Available: network, music, education"
+      exit 1
+      ;;
+  esac
+}
+
+cmd_status() {
+  echo "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
+  echo ""
+  echo "Ollama models:"
+  ollama list 2>/dev/null || echo "  Ollama not running"
+  echo ""
+  echo "distrodeck:"
+  distrodeck --version 2>/dev/null || echo "  distrodeck not found"
+  echo ""
+  echo "conda environments:"
+  "${HOME}/miniforge3/bin/conda" env list 2>/dev/null || echo "  conda not found"
+}
+
+cmd_doctor() {
+  local issues=0
+  check() {
+    local label="$1" cmd="$2"
+    if eval "${cmd}" &>/dev/null; then
+      echo "  [ok] ${label}"
+    else
+      echo "  [!!] ${label}"
+      issues=$((issues + 1))
+    fi
+  }
+  echo "NikOS Doctor — checking system health..."
+  check "ansible installed"     "command -v ansible-playbook"
+  check "gh CLI installed"      "command -v gh"
+  check "Ollama installed"      "command -v ollama"
+  check "VS Code installed"     "command -v code"
+  check "distrodeck installed"  "command -v distrodeck"
+  check "conda installed"       "test -f ${HOME}/miniforge3/bin/conda"
+  check "nikos-ai env exists"   "${HOME}/miniforge3/bin/conda env list | grep -q nikos-ai"
+  check "Claude Code installed" "command -v claude"
+  check "Gemini CLI installed"  "command -v gemini"
+  check "Nordic GTK theme"      "test -d /usr/share/themes/Nordic"
+  check "Papirus icons"         "test -d /usr/share/icons/Papirus-Dark"
+  check "GitHub configured"     "test -f ${HOME}/.config/nikos/github-configured"
+  echo ""
+  if [[ ${issues} -eq 0 ]]; then
+    echo "All checks passed."
+  else
+    echo "${issues} issue(s) found. Run 'nikos update' to attempt repair."
+  fi
+}
+
+case "${1:-help}" in
+  setup) cmd_setup ;;
+  update) cmd_update ;;
+  add) cmd_add "${2:-}" ;;
+  status) cmd_status ;;
+  doctor) cmd_doctor ;;
+  help | --help | -h) usage ;;
+  *)
+    echo "Unknown command: ${1}"
+    usage
+    exit 1
+    ;;
+esac
