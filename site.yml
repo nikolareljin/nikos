@@ -1,6 +1,6 @@
 ---
 - name: NikOS Setup
-  hosts: local
+  hosts: local  # inventory group defined in inventory/local
   become: true
   vars_files:
     - vars/main.yml
@@ -28,9 +28,15 @@
       tags: [education]
 
   post_tasks:
+    - name: Check nikos CLI script exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/scripts/nikos"
+      register: nikos_cli_stat
+
     - name: Install nikos CLI
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/scripts/nikos"
         dest: /usr/local/bin/nikos
         mode: "0755"
       become: true
+      when: nikos_cli_stat.stat.exists
