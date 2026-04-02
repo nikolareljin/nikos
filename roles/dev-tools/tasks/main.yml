@@ -1,0 +1,26 @@
+---
+- name: Ensure Projects directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/Projects"
+    state: directory
+    mode: "0755"
+
+- name: Clone distrodeck
+  ansible.builtin.git:
+    repo: https://github.com/nikolareljin/distrodeck.git
+    dest: "{{ ansible_env.HOME }}/Projects/distrodeck"
+    version: main
+    update: false
+
+- name: Symlink distrodeck to PATH
+  ansible.builtin.file:
+    src: "{{ ansible_env.HOME }}/Projects/distrodeck/distrodeck"
+    dest: /usr/local/bin/distrodeck
+    state: link
+  become: true
+
+- name: Install all developer tools via distrodeck
+  ansible.builtin.command: distrodeck install-tools --all
+  changed_when: false
+  args:
+    creates: "{{ ansible_env.HOME }}/.local/state/distrodeck/installed-tools.txt"
