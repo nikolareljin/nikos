@@ -1,5 +1,5 @@
 ---
-nikos_version: "0.1.0"
+nikos_version: "0.1.0"  # NikOS playbook version
 
 # Timezone and locale
 nikos_timezone: "Europe/Belgrade"
@@ -13,12 +13,13 @@ nordic_grub_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/
 ollama_default_model: "qwen2.5-coder:7b"
 
 # Python / conda
-miniforge_url: "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh"
+miniforge_version: "24.11.3-0"
+miniforge_url: "https://github.com/conda-forge/miniforge/releases/download/{{ miniforge_version }}/Miniforge3-{{ miniforge_version }}-Linux-x86_64.sh"
 nikos_conda_env: "nikos-ai"
 nikos_python_version: "3.11"
 
 # VS Code extensions
-vscode_extensions:
+nikos_vscode_extensions:
   - "Continue.continue"
   - "eamodio.gitlens"
   - "GitHub.copilot"
