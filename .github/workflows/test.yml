@@ -11,8 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Ansible
-        run: sudo apt-get install -y ansible
+      - name: Install Ansible and collections
+        run: |
+          sudo apt-get install -y ansible
+          ansible-galaxy collection install community.general
 
       - name: Run playbook in check mode (dry-run)
         run: >

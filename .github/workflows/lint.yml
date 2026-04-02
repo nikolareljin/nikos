@@ -11,8 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ansible-lint
-        run: pip install ansible-lint
+      - name: Install ansible-lint and collections
+        run: |
+          pip install ansible-lint
+          ansible-galaxy collection install community.general
 
       - name: Run ansible-lint
         run: ansible-lint site.yml
