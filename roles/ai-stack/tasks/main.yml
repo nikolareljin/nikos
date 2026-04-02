@@ -1,0 +1,61 @@
+---
+- name: Install Ollama
+  ansible.builtin.shell: curl -fsSL https://ollama.ai/install.sh | sh  # noqa: command-instead-of-module risky-shell-pipe
+  args:
+    creates: /usr/local/bin/ollama
+    executable: /bin/bash
+
+- name: Start Ollama service (user)
+  ansible.builtin.systemd:
+    name: ollama
+    enabled: true
+    state: started
+    scope: user
+  failed_when: false
+
+- name: Pull default Ollama model
+  ansible.builtin.command: ollama pull {{ ollama_default_model }}
+  changed_when: false
+  retries: 3
+  delay: 5
+
+- name: Check if Miniforge is already installed
+  ansible.builtin.stat:
+    path: "{{ ansible_env.HOME }}/miniforge3/bin/conda"
+  register: ai_stack_miniforge_stat
+
+- name: Download Miniforge installer
+  ansible.builtin.get_url:
+    url: "{{ miniforge_url }}"
+    dest: /tmp/miniforge.sh
+    mode: "0755"
+  when: not ai_stack_miniforge_stat.stat.exists
+
+- name: Install Miniforge
+  ansible.builtin.command: bash /tmp/miniforge.sh -b -p {{ ansible_env.HOME }}/miniforge3
+  when: not ai_stack_miniforge_stat.stat.exists
+  changed_when: true
+
+- name: Create nikos-ai conda environment
+  ansible.builtin.command: >
+    {{ ansible_env.HOME }}/miniforge3/bin/conda create -n {{ nikos_conda_env }}
+    python={{ nikos_python_version }} -y
+  args:
+    creates: "{{ ansible_env.HOME }}/miniforge3/envs/{{ nikos_conda_env }}"
+
+- name: Install PyTorch CPU in nikos-ai env
+  ansible.builtin.command: >
+    {{ ansible_env.HOME }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+  changed_when: false
+
+- name: Install data science packages in nikos-ai env
+  ansible.builtin.command: >
+    {{ ansible_env.HOME }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
+    pip install transformers jupyter jupyterlab pandas numpy scikit-learn matplotlib
+  changed_when: false
+
+- name: Install aider and uv
+  ansible.builtin.command: >
+    {{ ansible_env.HOME }}/miniforge3/bin/pip install aider-chat uv
+  changed_when: false
