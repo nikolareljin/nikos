@@ -1,0 +1,37 @@
+---
+- name: Install Xfce desktop environment
+  ansible.builtin.apt:
+    name:
+      - xfce4
+      - xfce4-goodies
+      - xfce4-terminal
+      - xfce4-docklike-plugin
+      - lightdm
+      - lightdm-gtk-greeter
+      - lightdm-gtk-greeter-settings
+    state: present
+
+- name: Set LightDM as default display manager
+  ansible.builtin.debconf:
+    name: lightdm
+    question: shared/default-x-display-manager
+    value: lightdm
+    vtype: select
+
+- name: Configure Xfce panel layout - top bar style
+  ansible.builtin.command: >
+    xfconf-query -c xfce4-panel -p /panels/panel-1/position
+    -s "p=6;x=0;y=0" --create -t string
+  changed_when: false
+
+- name: Remove GNOME session if installed
+  ansible.builtin.apt:
+    name:
+      - gnome-session
+      - ubuntu-desktop
+    state: absent
+    autoremove: true
+  register: desktop_gnome_remove_result
+  failed_when:
+    - desktop_gnome_remove_result is failed
+    - "'No packages found' not in (desktop_gnome_remove_result.msg | default(''))"
