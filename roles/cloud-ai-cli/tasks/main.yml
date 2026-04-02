@@ -1,0 +1,31 @@
+---
+- name: Download NodeSource setup script
+  ansible.builtin.get_url:
+    url: https://deb.nodesource.com/setup_20.x
+    dest: /tmp/nodesource_setup.sh
+    mode: "0755"
+  become: true
+
+- name: Run NodeSource setup
+  ansible.builtin.command: bash /tmp/nodesource_setup.sh
+  become: true
+  changed_when: false
+
+- name: Install Node.js
+  ansible.builtin.apt:
+    name: nodejs
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Install Gemini CLI
+  community.general.npm:
+    name: "@google/gemini-cli"
+    global: true
+    state: present
+
+- name: Install GitHub Copilot CLI extension
+  ansible.builtin.command: gh extension install github/gh-copilot
+  args:
+    creates: "{{ ansible_env.HOME }}/.local/share/gh/extensions/gh-copilot"
