@@ -1,12 +1,31 @@
 ---
-- name: Remove GNOME session if installed
-  ansible.builtin.apt:
-    name:
-      - gnome-session
-      - ubuntu-desktop
-    state: absent
-    autoremove: true
-  ignore_errors: true # noqa: ignore-errors
+# ── Detect base OS variant ────────────────────────────────────────────────────
+# On Xubuntu: xfce4 is pre-installed, gnome-session is absent — nothing to remove.
+# On Ubuntu (GNOME): gnome-session is present — we remove it and install Xfce.
+
+- name: Check if GNOME session is installed
+  ansible.builtin.command: dpkg-query -W -f='${Status}' gnome-session
+  register: desktop_gnome_check
+  changed_when: false
+  failed_when: false
+
+- name: Remove GNOME desktop (Ubuntu → Xfce migration)
+  when: desktop_gnome_check.rc == 0 and "'install ok installed' in desktop_gnome_check.stdout"
+  block:
+    - name: Purge gnome-session and ubuntu-desktop meta-packages
+      ansible.builtin.apt:
+        name:
+          - gnome-session
+          - ubuntu-desktop
+          - ubuntu-desktop-minimal
+        state: absent
+        purge: true
+
+    - name: Autoremove GNOME dependencies
+      ansible.builtin.apt:
+        autoremove: true
+
+# ── Xfce + LightDM (idempotent — safe to run on Xubuntu too) ─────────────────
 
 - name: Install Xfce desktop environment
   ansible.builtin.apt:

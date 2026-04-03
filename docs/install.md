@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **OS:** Ubuntu 24.04 LTS (fresh install recommended)
+- **OS:** Xubuntu 24.04 LTS (recommended) or Ubuntu 24.04 LTS
 - **User:** a non-root user with `sudo` access
 - **Internet:** required during install (packages, theme files, models)
 - **Disk:** ~20 GB free (Ollama model + conda env + VS Code + tools)
@@ -68,13 +68,22 @@ ansible-playbook site.yml -i inventory/local --ask-become-pass
 
 Not supported in 0.1.0. The playbook downloads theme files, Ollama, and Miniforge at install time.
 
+## Base OS choice
+
+**Recommended: Xubuntu 24.04 LTS** (~3 GB ISO, Xfce pre-installed, minimal footprint)
+
+Also supported: **Ubuntu 24.04 LTS** — the playbook detects GNOME and removes it before installing Xfce. Use the standard Ubuntu desktop ISO.
+
+Starting from Ubuntu adds a GNOME purge step and takes a few extra minutes, but the end state is identical.
+
 ## Testing with VirtualBox
 
 The canonical way to validate a fresh NikOS install:
 
-1. Create an Ubuntu 24.04 LTS VM (minimum 4 GB RAM, 30 GB disk)
-2. Take a snapshot before running the installer
-3. Run the curl install command
-4. Verify with `nikos doctor` after reboot
+1. Download [Xubuntu 24.04 LTS](https://xubuntu.org/download/) (recommended) or Ubuntu 24.04 LTS
+2. Create a VM (minimum 6 GB RAM, 40 GB disk) and attach the ISO
+3. Install the OS, take a snapshot at first boot
+4. Run the curl install command
+5. Verify with `nikos doctor` after reboot
 
 Revert to the snapshot to re-test cleanly.
