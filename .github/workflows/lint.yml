@@ -6,37 +6,18 @@ on:
     branches: [main, dev]
 
 jobs:
-  ansible-lint:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install ansible-lint and collections
-        run: |
-          pip install ansible-lint
-          ansible-galaxy collection install community.general
-
-      - name: Run ansible-lint
-        run: ansible-lint site.yml
-
-  shellcheck:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run shellcheck on install.sh
-        run: shellcheck install.sh
-
-      - name: Run shellcheck on nikos CLI
-        run: shellcheck scripts/nikos
-
-  python-tests:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install pytest
-        run: pip install pytest
-
-      - name: Run tests
-        run: pytest tests/ -v
+  ci:
+    uses: nikolareljin/ci-helpers/.github/workflows/ci.yml@production
+    with:
+      runner: ubuntu-24.04
+      python_version: "3.12"
+      lint_command: |
+        python -m pip install --upgrade pip
+        python -m pip install ansible-lint pytest
+        sudo apt-get update
+        sudo apt-get install -y shellcheck
+        ansible-galaxy collection install community.general
+        ansible-lint site.yml
+        shellcheck install.sh scripts/nikos
+      test_command: |
+        python -m pytest tests/ -v
