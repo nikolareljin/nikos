@@ -1,62 +1,60 @@
 #!/usr/bin/env bash
 # test-vm — automated NikOS end-to-end test in a VirtualBox VM
 #
+# Target OS: Xubuntu 24.04 LTS (the recommended NikOS base)
+#
 # Usage:
-#   scripts/test-vm [--skip-os-install] [--vm-name NAME]
+#   scripts/test-vm                  # full flow: create VM, install OS (GUI), test NikOS
+#   scripts/test-vm --nikos-only     # skip OS install, just run NikOS on existing VM
 #
-# What it does:
-#   1. Downloads Ubuntu Server 24.04 LTS ISO (if needed)
-#   2. Creates a fresh VirtualBox VM
-#   3. Runs unattended Ubuntu Server install (SSH pre-installed)
-#   4. Waits for VM to be reachable via SSH
-#   5. Runs the NikOS install.sh
-#   6. Runs nikos doctor and prints results
+# Flow:
+#   1. Create VM and attach Xubuntu ISO
+#   2. Boot VM in GUI — install Xubuntu manually (takes ~5 min, all defaults)
+#   3. Script waits; when you're done, press Enter to continue
+#   4. Script SSHes in and runs the NikOS installer automatically
+#   5. Prints nikos doctor results
 #
-# Requirements: VirtualBox 7.x, curl, ssh, sshpass
+# Manual step in VM (before pressing Enter):
+#   Open terminal → sudo apt install -y openssh-server
+#   (NikOS base role installs it permanently; this is just for first SSH access)
 #
-# NOTE: sshpass is used ONLY in this test script to bootstrap the fresh VM
-# before SSH keys exist. Production installs use key-based auth exclusively.
+# NOTE: sshpass is used ONLY in this test script to bootstrap the VM before
+#       SSH keys are configured. Production installs use key-based auth only.
 # Install test deps: sudo apt install -y sshpass
 
 set -euo pipefail
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 VM_NAME="${NIKOS_TEST_VM:-NikOS-test}"
-VM_RAM=6144          # MB
+VM_RAM=6144
 VM_CPUS=2
-VM_DISK=40960        # MB
+VM_DISK=40960
 VM_SSH_PORT=2222
 VM_USER="nikos"
 VM_PASS="nikos"
 REPO_URL="https://github.com/nikolareljin/nikos"
 
-SERVER_ISO_URL="https://releases.ubuntu.com/24.04/ubuntu-24.04.4-live-server-amd64.iso"
-SERVER_ISO="${HOME}/Downloads/ubuntu-24.04.4-live-server-amd64.iso"
+XUBUNTU_ISO="${HOME}/Downloads/xubuntu-24.04.4-desktop-amd64.iso"
+XUBUNTU_ISO_URL="https://cdimage.ubuntu.com/xubuntu/releases/24.04/release/xubuntu-24.04.4-desktop-amd64.iso"
 
-SKIP_OS_INSTALL=false
+NIKOS_ONLY=false
 
-# ── Args ──────────────────────────────────────────────────────────────────────
 for arg in "$@"; do
   case "$arg" in
-    --skip-os-install) SKIP_OS_INSTALL=true ;;
-    --vm-name=*) VM_NAME="${arg#--vm-name=}" ;;
+    --nikos-only) NIKOS_ONLY=true ;;
+    --vm-name=*)  VM_NAME="${arg#--vm-name=}" ;;
   esac
 done
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-log()  { echo "[test-vm] $*"; }
-die()  { echo "[test-vm] ERROR: $*" >&2; exit 1; }
+log() { echo "[test-vm] $*"; }
+die() { echo "[test-vm] ERROR: $*" >&2; exit 1; }
 
-# Preflight checks
-command -v VBoxManage &>/dev/null || die "VirtualBox not found"
-command -v sshpass    &>/dev/null || die "sshpass not found — install with: sudo apt install -y sshpass (test dependency only)"
-command -v curl       &>/dev/null || die "curl not found"
-
-vm_exists() { VBoxManage showvminfo "$VM_NAME" &>/dev/null; }
+vm_exists()  { VBoxManage showvminfo "$VM_NAME" &>/dev/null; }
 vm_running() { VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | grep -q 'VMState="running"'; }
 
 wait_for_ssh() {
-  log "Waiting for SSH on localhost:${VM_SSH_PORT} (this takes a few minutes)..."
+  log "Waiting for SSH on localhost:${VM_SSH_PORT}..."
   local attempts=0
   until sshpass -p "${VM_PASS}" ssh \
       -o StrictHostKeyChecking=no \
@@ -64,8 +62,8 @@ wait_for_ssh() {
       -p "${VM_SSH_PORT}" \
       "${VM_USER}@localhost" "echo ok" &>/dev/null; do
     attempts=$((attempts + 1))
-    [[ $attempts -gt 60 ]] && die "SSH never came up after $((attempts * 10))s"
-    sleep 10
+    [[ $attempts -gt 60 ]] && die "SSH not reachable after $((attempts * 5))s. Is openssh-server installed in the VM?"
+    sleep 5
   done
   log "SSH is up."
 }
@@ -78,19 +76,25 @@ vm_ssh() {
     "${VM_USER}@localhost" "$@"
 }
 
-# ── Step 1: ISO ───────────────────────────────────────────────────────────────
-if [[ ! -f "${SERVER_ISO}" ]] || [[ $(stat -c%s "${SERVER_ISO}") -lt 1000000000 ]]; then
-  log "Downloading Ubuntu Server 24.04 ISO (~3.2 GB)..."
-  curl -L "${SERVER_ISO_URL}" -o "${SERVER_ISO}" --progress-bar
-fi
-log "ISO ready: ${SERVER_ISO}"
+# ── Preflight ─────────────────────────────────────────────────────────────────
+command -v VBoxManage &>/dev/null || die "VirtualBox not found"
+command -v sshpass    &>/dev/null || die "sshpass not found — install with: sudo apt install -y sshpass (test dependency only)"
+command -v curl       &>/dev/null || die "curl not found"
 
-# ── Step 2: VM setup ──────────────────────────────────────────────────────────
-if ! $SKIP_OS_INSTALL; then
+# ── Phase 1: OS install (Xubuntu, GUI) ───────────────────────────────────────
+if ! $NIKOS_ONLY; then
+
+  # Get ISO
+  if [[ ! -f "${XUBUNTU_ISO}" ]] || [[ $(stat -c%s "${XUBUNTU_ISO}") -lt 1000000000 ]]; then
+    log "Downloading Xubuntu 24.04 ISO (~4.1 GB)..."
+    curl -L "${XUBUNTU_ISO_URL}" -o "${XUBUNTU_ISO}" --progress-bar
+  fi
+  log "ISO ready: ${XUBUNTU_ISO}"
+
+  # Recreate VM
   if vm_exists; then
     log "Deleting existing VM '${VM_NAME}'..."
-    vm_running && VBoxManage controlvm "${VM_NAME}" poweroff
-    sleep 2
+    vm_running && VBoxManage controlvm "${VM_NAME}" poweroff && sleep 2
     VBoxManage unregistervm "${VM_NAME}" --delete
   fi
 
@@ -105,9 +109,8 @@ if ! $SKIP_OS_INSTALL; then
     --natpf1 "ssh,tcp,,${VM_SSH_PORT},,22" \
     --audio none \
     --graphicscontroller vmsvga \
-    --vram 16
+    --vram 32
 
-  # Disk
   disk_path="${HOME}/VirtualBox VMs/${VM_NAME}/${VM_NAME}.vdi"
   VBoxManage createmedium disk \
     --filename "${disk_path}" \
@@ -121,64 +124,80 @@ if ! $SKIP_OS_INSTALL; then
   VBoxManage storagectl "${VM_NAME}" --name IDE --add ide
   VBoxManage storageattach "${VM_NAME}" \
     --storagectl IDE --port 0 --device 0 \
-    --type dvddrive --medium "${SERVER_ISO}"
+    --type dvddrive --medium "${XUBUNTU_ISO}"
 
-  # ── Step 3: Unattended install ─────────────────────────────────────────────
-  log "Configuring unattended Ubuntu Server install..."
-  VBoxManage unattended install "${VM_NAME}" \
-    --iso="${SERVER_ISO}" \
-    --user="${VM_USER}" \
-    --password="${VM_PASS}" \
-    --hostname="${VM_NAME}.local" \
-    --time-zone="Europe/Belgrade" \
-    --start-vm=headless
+  log "Starting VM for Xubuntu install (GUI)..."
+  VBoxManage startvm "${VM_NAME}" --type gui
 
-  log "Unattended install started (headless). This takes ~10-15 minutes..."
-  log "Monitor with: VBoxManage showvminfo '${VM_NAME}' | grep State"
-
-  # Wait for installer to finish and VM to reboot into installed system
-  # The VM reboots after install; SSH comes up when it's ready
-  sleep 60  # give installer time to start before we poll
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "  MANUAL STEP — Install Xubuntu in the VM window"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "  1. Select 'Try or Install Xubuntu'"
+  echo "  2. Double-click 'Install Xubuntu'"
+  echo "  3. On 'Updates' screen: UNCHECK both update boxes"
+  echo "  4. All other screens: accept defaults"
+  echo "  5. User: nikos  /  Password: nikos"
+  echo "  6. After install: Restart Now"
+  echo "  7. After reboot, open a terminal in Xubuntu and run:"
+  echo ""
+  echo "       sudo apt install -y openssh-server"
+  echo ""
+  echo "  (NikOS will keep it installed permanently)"
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  read -r -p "  Press Enter here when openssh-server is installed... "
+  echo ""
 fi
 
-# ── Step 4: Wait for SSH ──────────────────────────────────────────────────────
+# ── Phase 2: Boot VM (if not running) ────────────────────────────────────────
 if ! vm_running; then
-  log "Starting VM..."
+  log "Starting VM (headless)..."
   VBoxManage startvm "${VM_NAME}" --type headless
 fi
+
+# Detach DVD so VM boots from disk
+VBoxManage storageattach "${VM_NAME}" \
+  --storagectl IDE --port 0 --device 0 \
+  --type dvddrive --medium emptydrive 2>/dev/null || true
+
+# ── Phase 3: SSH + NikOS install ─────────────────────────────────────────────
 wait_for_ssh
 
-# ── Step 5: Run NikOS installer ───────────────────────────────────────────────
-log "Running NikOS installer on VM..."
-vm_ssh "bash -c 'curl -fsSL ${REPO_URL}/raw/main/install.sh | bash'" || {
-  log "Installer exited non-zero — check output above"
-}
+log "Running NikOS installer..."
+vm_ssh "bash -c 'curl -fsSL ${REPO_URL}/raw/main/install.sh | bash'"
 
-# ── Step 6: Verify ────────────────────────────────────────────────────────────
-log ""
+# ── Phase 4: Verify ───────────────────────────────────────────────────────────
+echo ""
 log "═══ nikos doctor ═══"
 vm_ssh "nikos doctor" || true
 
-log ""
-log "═══ nikos status ═══"
-vm_ssh "nikos status" || true
-
-log ""
+echo ""
 log "═══ Verification checklist ═══"
-for check in \
-  "command -v code" \
-  "code --list-extensions | grep -q nordic" \
-  "command -v ollama" \
-  "ollama list" \
-  "command -v image-view" \
-  "command -v lantern" \
-  "test -d /usr/share/themes/Nordic" \
-  "test -d /usr/share/icons/Papirus-Dark"; do
+checks=(
+  "command -v code"
+  "code --list-extensions 2>/dev/null | grep -q arcticicestudio"
+  "command -v ollama"
+  "command -v image-view"
+  "command -v lantern"
+  "test -d /usr/share/themes/Nordic"
+  "test -d /usr/share/icons/Papirus-Dark"
+  "test -f /usr/share/nikos/wallpaper.png"
+  "systemctl is-enabled lightdm 2>/dev/null | grep -q enabled"
+)
+
+pass=0; fail=0
+for check in "${checks[@]}"; do
   if vm_ssh "${check}" &>/dev/null; then
     echo "  [✓] ${check}"
+    pass=$((pass + 1))
   else
     echo "  [✗] ${check}"
+    fail=$((fail + 1))
   fi
 done
 
-log "Test complete."
+echo ""
+log "Results: ${pass} passed, ${fail} failed"
+[[ $fail -eq 0 ]] && log "All checks passed — NikOS is good." || log "Some checks failed — review output above."
