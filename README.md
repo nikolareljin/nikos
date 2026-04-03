@@ -10,6 +10,8 @@ One command turns a fresh Ubuntu install into a fully configured AI workstation 
 
 **Version:** 0.1.0 · **License:** MIT · **Author:** Nikola Reljin
 
+<img src="./assets/nikos-logo.png" />
+
 ---
 
 ## Install
