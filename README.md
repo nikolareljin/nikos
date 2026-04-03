@@ -5,7 +5,7 @@
 [![Lint](https://github.com/nikolareljin/nikos/actions/workflows/lint.yml/badge.svg)](https://github.com/nikolareljin/nikos/actions/workflows/lint.yml)
 [![Dry-run Test](https://github.com/nikolareljin/nikos/actions/workflows/test.yml/badge.svg)](https://github.com/nikolareljin/nikos/actions/workflows/test.yml)
 
-A curated Ubuntu 24.04 LTS setup for AI coding and development.  
+A curated Xubuntu / Ubuntu 24.04 LTS setup for AI coding and development.  
 One command turns a fresh Ubuntu install into a fully configured AI workstation — Xfce desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
 
 **Version:** 0.1.0 · **License:** MIT · **Author:** Nikola Reljin
