@@ -10,7 +10,7 @@
   failed_when: false
 
 - name: Remove GNOME desktop (Ubuntu → Xfce migration)
-  when: desktop_gnome_check.rc == 0 and "'install ok installed' in desktop_gnome_check.stdout"
+  when: desktop_gnome_check.rc == 0 and 'install ok installed' in desktop_gnome_check.stdout
   block:
     - name: Purge gnome-session and ubuntu-desktop meta-packages
       ansible.builtin.apt:

@@ -7,20 +7,11 @@ on:
 
 jobs:
   check-playbook:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Ansible and collections
-        run: |
-          sudo apt-get install -y ansible
-          ansible-galaxy collection install community.general
-
-      - name: Run playbook in check mode (dry-run)
-        run: >
-          ansible-playbook site.yml
-          -i inventory/local
-          --check
-          --skip-tags network,music,education
-        env:
-          ANSIBLE_FORCE_COLOR: "1"
+    uses: nikolareljin/ci-helpers/.github/workflows/ci.yml@production
+    with:
+      runner: ubuntu-24.04
+      extra_command: |
+        sudo apt-get update
+        sudo apt-get install -y ansible
+        ansible-galaxy collection install community.general
+        ANSIBLE_FORCE_COLOR=1 ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education
