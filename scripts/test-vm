@@ -130,7 +130,6 @@ if ! $SKIP_OS_INSTALL; then
     --user="${VM_USER}" \
     --password="${VM_PASS}" \
     --hostname="${VM_NAME}.local" \
-    --install-additions \
     --time-zone="Europe/Belgrade" \
     --start-vm=headless
 
