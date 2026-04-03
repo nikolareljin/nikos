@@ -28,6 +28,7 @@
       - software-properties-common
       - xfconf
       - inkscape  # required by theming role to export wallpaper SVG to PNG
+      - openssh-server  # enables remote access and SSH-based management
     state: present
 
 - name: Set timezone
