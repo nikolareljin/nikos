@@ -5,6 +5,8 @@
     state: directory
     mode: "0755"
 
+# ── distrodeck (installs Rust/cargo, bat, eza, fzf, lazygit, gh, go, docker…) ──
+
 - name: Clone distrodeck
   ansible.builtin.git:
     repo: https://github.com/nikolareljin/distrodeck.git
@@ -26,3 +28,49 @@
   args:
     creates: "{{ nikos_home }}/.local/state/distrodeck/installed-tools.txt"
   when: not ansible_check_mode
+
+# ── image-view (terminal image preview — requires cargo from distrodeck) ──
+
+- name: Clone image-view
+  ansible.builtin.git:
+    repo: https://github.com/nikolareljin/image-view.git
+    dest: "{{ nikos_home }}/Projects/image-view"
+    version: main
+    update: false
+
+- name: Build and install image-view
+  ansible.builtin.command: "{{ nikos_home }}/Projects/image-view/setup"
+  environment:
+    HOME: "{{ nikos_home }}"
+    INSTALL_DIR: "{{ nikos_home }}/.local/bin"
+  args:
+    creates: "{{ nikos_home }}/.local/bin/image-view"
+  when: not ansible_check_mode
+
+# ── git-lantern (repo dashboard CLI — command: lantern) ──
+
+- name: Clone git-lantern
+  ansible.builtin.git:
+    repo: https://github.com/nikolareljin/git-lantern.git
+    dest: "{{ nikos_home }}/Projects/git-lantern"
+    version: main
+    update: false
+
+- name: Install git-lantern
+  ansible.builtin.command: >
+    {{ nikos_home }}/Projects/git-lantern/install
+    --prefix /opt/git-lantern
+    --bin-link /usr/local/bin/lantern
+  become: true
+  args:
+    creates: /usr/local/bin/lantern
+  when: not ansible_check_mode
+
+# ── ai-runner (local Ollama model runner with simple UI) ──
+
+- name: Clone ai-runner
+  ansible.builtin.git:
+    repo: https://github.com/nikolareljin/ai-runner.git
+    dest: "{{ nikos_home }}/Projects/ai-runner"
+    version: main
+    update: false
