@@ -18,9 +18,11 @@
     dest: /usr/local/bin/distrodeck
     state: link
   become: true
+  when: not ansible_check_mode
 
 - name: Install all developer tools via distrodeck
   ansible.builtin.command: distrodeck install-tools --all
   changed_when: false
   args:
     creates: "{{ nikos_home }}/.local/state/distrodeck/installed-tools.txt"
+  when: not ansible_check_mode
