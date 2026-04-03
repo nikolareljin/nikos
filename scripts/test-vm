@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# test-vm — automated NikOS end-to-end test in a VirtualBox VM
+#
+# Usage:
+#   scripts/test-vm [--skip-os-install] [--vm-name NAME]
+#
+# What it does:
+#   1. Downloads Ubuntu Server 24.04 LTS ISO (if needed)
+#   2. Creates a fresh VirtualBox VM
+#   3. Runs unattended Ubuntu Server install (SSH pre-installed)
+#   4. Waits for VM to be reachable via SSH
+#   5. Runs the NikOS install.sh
+#   6. Runs nikos doctor and prints results
+#
+# Requirements: VirtualBox 7.x, curl, ssh, sshpass
+
+set -euo pipefail
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+VM_NAME="${NIKOS_TEST_VM:-NikOS-test}"
+VM_RAM=6144          # MB
+VM_CPUS=2
+VM_DISK=40960        # MB
+VM_SSH_PORT=2222
+VM_USER="nikos"
+VM_PASS="nikos"
+REPO_URL="https://github.com/nikolareljin/nikos"
+
+SERVER_ISO_URL="https://releases.ubuntu.com/24.04/ubuntu-24.04.4-live-server-amd64.iso"
+SERVER_ISO="${HOME}/Downloads/ubuntu-24.04.4-live-server-amd64.iso"
+
+SKIP_OS_INSTALL=false
+
+# ── Args ──────────────────────────────────────────────────────────────────────
+for arg in "$@"; do
+  case "$arg" in
+    --skip-os-install) SKIP_OS_INSTALL=true ;;
+    --vm-name=*) VM_NAME="${arg#--vm-name=}" ;;
+  esac
+done
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+log()  { echo "[test-vm] $*"; }
+die()  { echo "[test-vm] ERROR: $*" >&2; exit 1; }
+
+vm_exists() { VBoxManage showvminfo "$VM_NAME" &>/dev/null; }
+vm_running() { VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | grep -q 'VMState="running"'; }
+
+wait_for_ssh() {
+  log "Waiting for SSH on localhost:${VM_SSH_PORT} (this takes a few minutes)..."
+  local attempts=0
+  until sshpass -p "${VM_PASS}" ssh \
+      -o StrictHostKeyChecking=no \
+      -o ConnectTimeout=5 \
+      -p "${VM_SSH_PORT}" \
+      "${VM_USER}@localhost" "echo ok" &>/dev/null; do
+    attempts=$((attempts + 1))
+    [[ $attempts -gt 60 ]] && die "SSH never came up after $((attempts * 10))s"
+    sleep 10
+  done
+  log "SSH is up."
+}
+
+vm_ssh() {
+  sshpass -p "${VM_PASS}" ssh \
+    -o StrictHostKeyChecking=no \
+    -o ConnectTimeout=10 \
+    -p "${VM_SSH_PORT}" \
+    "${VM_USER}@localhost" "$@"
+}
+
+# ── Step 1: ISO ───────────────────────────────────────────────────────────────
+if [[ ! -f "${SERVER_ISO}" ]] || [[ $(stat -c%s "${SERVER_ISO}") -lt 1000000000 ]]; then
+  log "Downloading Ubuntu Server 24.04 ISO (~3.2 GB)..."
+  curl -L "${SERVER_ISO_URL}" -o "${SERVER_ISO}" --progress-bar
+fi
+log "ISO ready: ${SERVER_ISO}"
+
+# ── Step 2: VM setup ──────────────────────────────────────────────────────────
+if ! $SKIP_OS_INSTALL; then
+  if vm_exists; then
+    log "Deleting existing VM '${VM_NAME}'..."
+    vm_running && VBoxManage controlvm "${VM_NAME}" poweroff
+    sleep 2
+    VBoxManage unregistervm "${VM_NAME}" --delete
+  fi
+
+  log "Creating VM '${VM_NAME}'..."
+  VBoxManage createvm --name "${VM_NAME}" --ostype Ubuntu_64 --register
+
+  VBoxManage modifyvm "${VM_NAME}" \
+    --memory "${VM_RAM}" \
+    --cpus "${VM_CPUS}" \
+    --boot1 dvd --boot2 disk --boot3 none \
+    --nic1 nat \
+    --natpf1 "ssh,tcp,,${VM_SSH_PORT},,22" \
+    --audio none \
+    --graphicscontroller vmsvga \
+    --vram 16
+
+  # Disk
+  disk_path="${HOME}/VirtualBox VMs/${VM_NAME}/${VM_NAME}.vdi"
+  VBoxManage createmedium disk \
+    --filename "${disk_path}" \
+    --size "${VM_DISK}" --format VDI
+
+  VBoxManage storagectl "${VM_NAME}" --name SATA --add sata --controller IntelAhci
+  VBoxManage storageattach "${VM_NAME}" \
+    --storagectl SATA --port 0 --device 0 \
+    --type hdd --medium "${disk_path}"
+
+  VBoxManage storagectl "${VM_NAME}" --name IDE --add ide
+  VBoxManage storageattach "${VM_NAME}" \
+    --storagectl IDE --port 0 --device 0 \
+    --type dvddrive --medium "${SERVER_ISO}"
+
+  # ── Step 3: Unattended install ─────────────────────────────────────────────
+  log "Configuring unattended Ubuntu Server install..."
+  VBoxManage unattended install "${VM_NAME}" \
+    --iso="${SERVER_ISO}" \
+    --user="${VM_USER}" \
+    --password="${VM_PASS}" \
+    --hostname="${VM_NAME}.local" \
+    --install-additions \
+    --time-zone="Europe/Belgrade" \
+    --start-vm=headless
+
+  log "Unattended install started (headless). This takes ~10-15 minutes..."
+  log "Monitor with: VBoxManage showvminfo '${VM_NAME}' | grep State"
+
+  # Wait for installer to finish and VM to reboot into installed system
+  # The VM reboots after install; SSH comes up when it's ready
+  sleep 60  # give installer time to start before we poll
+fi
+
+# ── Step 4: Wait for SSH ──────────────────────────────────────────────────────
+if ! vm_running; then
+  log "Starting VM..."
+  VBoxManage startvm "${VM_NAME}" --type headless
+fi
+wait_for_ssh
+
+# ── Step 5: Run NikOS installer ───────────────────────────────────────────────
+log "Running NikOS installer on VM..."
+vm_ssh "bash -c 'curl -fsSL ${REPO_URL}/raw/main/install.sh | bash'" || {
+  log "Installer exited non-zero — check output above"
+}
+
+# ── Step 6: Verify ────────────────────────────────────────────────────────────
+log ""
+log "═══ nikos doctor ═══"
+vm_ssh "nikos doctor" || true
+
+log ""
+log "═══ nikos status ═══"
+vm_ssh "nikos status" || true
+
+log ""
+log "═══ Verification checklist ═══"
+for check in \
+  "command -v code" \
+  "code --list-extensions | grep -q nordic" \
+  "command -v ollama" \
+  "ollama list" \
+  "command -v image-view" \
+  "command -v lantern" \
+  "test -d /usr/share/themes/Nordic" \
+  "test -d /usr/share/icons/Papirus-Dark"; do
+  if vm_ssh "${check}" &>/dev/null; then
+    echo "  [✓] ${check}"
+  else
+    echo "  [✗] ${check}"
+  fi
+done
+
+log "Test complete."
