@@ -13,6 +13,10 @@
 #   6. Runs nikos doctor and prints results
 #
 # Requirements: VirtualBox 7.x, curl, ssh, sshpass
+#
+# NOTE: sshpass is used ONLY in this test script to bootstrap the fresh VM
+# before SSH keys exist. Production installs use key-based auth exclusively.
+# Install test deps: sudo apt install -y sshpass
 
 set -euo pipefail
 
@@ -42,6 +46,11 @@ done
 # ── Helpers ───────────────────────────────────────────────────────────────────
 log()  { echo "[test-vm] $*"; }
 die()  { echo "[test-vm] ERROR: $*" >&2; exit 1; }
+
+# Preflight checks
+command -v VBoxManage &>/dev/null || die "VirtualBox not found"
+command -v sshpass    &>/dev/null || die "sshpass not found — install with: sudo apt install -y sshpass (test dependency only)"
+command -v curl       &>/dev/null || die "curl not found"
 
 vm_exists() { VBoxManage showvminfo "$VM_NAME" &>/dev/null; }
 vm_running() { VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | grep -q 'VMState="running"'; }
