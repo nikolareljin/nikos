@@ -53,7 +53,13 @@
         chdir: "{{ playbook_dir }}"
       become: false
       register: submodule_result
-      changed_when: submodule_result.stdout != ""
+      changed_when: >-
+        submodule_result.rc == 0 and (
+          'Submodule path ' in (submodule_result.stdout | default('')) or
+          'Submodule path ' in (submodule_result.stderr | default('')) or
+          'Cloning into ' in (submodule_result.stdout | default('')) or
+          'Cloning into ' in (submodule_result.stderr | default(''))
+        )
       when: playbook_git_stat.stat.exists
 
     - name: Check nikos CLI script exists

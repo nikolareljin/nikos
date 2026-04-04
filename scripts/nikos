@@ -39,8 +39,12 @@ _playbook() {
     print_error "NikOS repo not found at ${NIKOS_HOME}. Run the installer first."
     exit 1
   fi
-  ansible-playbook -i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" \
-    --ask-become-pass "${extra_args[@]}"
+  (
+    cd "${NIKOS_HOME}"
+    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook \
+      -i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" \
+      --ask-become-pass "${extra_args[@]}"
+  )
 }
 
 _migrate_local_vars() {
