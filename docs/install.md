@@ -17,9 +17,10 @@ curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos/main/install.sh 
 The script will:
 1. Check you are not running as root
 2. Check you are on an apt-based system
-3. Install Ansible if not present
-4. Ask whether to include optional bundles (network tools, music, education)
-5. Run `ansible-pull` — pulls the playbook from GitHub and applies it
+3. Install bootstrap packages: `git`, `dialog`, `ansible` (if not present)
+4. Clone the repo (with submodules) to `~/.local/share/nikos`
+5. Present a `dialog` TUI checklist to select optional bundles
+6. Run `ansible-playbook` from the local clone
 
 ## What the playbook does (in order)
 
@@ -54,12 +55,13 @@ The wizard writes `~/.config/nikos/github-configured` on completion and will not
 nikos update
 ```
 
-This runs `ansible-pull` again. All roles are idempotent — already-installed components are skipped.
+This runs `git pull --recurse-submodules` on `~/.local/share/nikos` then re-runs the playbook.
+All roles are idempotent — already-installed components are skipped.
 
 ## Manual run (without curl | bash)
 
 ```bash
-git clone https://github.com/nikolareljin/nikos.git
+git clone --recurse-submodules https://github.com/nikolareljin/nikos.git
 cd nikos
 ansible-playbook site.yml -i inventory/local --ask-become-pass
 ```
