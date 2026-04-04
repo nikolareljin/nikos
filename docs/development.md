@@ -4,9 +4,10 @@
 
 ```
 nikos/
-├── install.sh                      # bootstrap: installs Ansible, runs ansible-pull
+├── install.sh                      # bootstrap: installs Ansible, clones repo, runs ansible-playbook
 ├── site.yml                        # top-level playbook — ordered roles
-├── vars/main.yml                   # all user-configurable variables
+├── vars/main.yml                   # tracked defaults
+├── vars/local.yml                  # untracked local overrides (optional)
 ├── inventory/local                 # localhost ansible_connection=local
 ├── assets/wallpaper.svg            # Nord-palette wallpaper (exported to PNG on install)
 ├── scripts/nikos                   # nikos CLI (installed to /usr/local/bin/nikos)
@@ -101,7 +102,7 @@ PRs go to `dev`. `dev` merges to `main` when stable. Tag `main` to release.
 ## Releasing
 
 ```bash
-# Bump version in vars/main.yml and scripts/nikos
+# Bump version in vars/main.yml, install.sh, and scripts/nikos
 # Commit: "chore: bump version to X.Y.Z"
 git tag X.Y.Z
 git push origin main --tags
@@ -111,7 +112,8 @@ The `release.yml` workflow creates a GitHub Release automatically with a changel
 
 ## Versioning
 
-Strict semver `X.Y.Z` — no `v` prefix. The `nikos_version` in `vars/main.yml` is the single source of truth.
+Strict semver `X.Y.Z` — no `v` prefix. Keep the shipped version in sync across `vars/main.yml`,
+`install.sh`, and `scripts/nikos`.
 
 ## CI overview
 

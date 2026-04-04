@@ -7,6 +7,21 @@
   vars:
     # lookup runs on the controller before privilege escalation — gives the real user's home
     nikos_home: "{{ lookup('env', 'HOME') }}"
+  pre_tasks:
+    - name: Check whether local override vars exist
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/vars/local.yml"
+      register: local_vars_stat
+
+    - name: Load local override vars
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/vars/local.yml"
+      when: local_vars_stat.stat.exists
+
+    - name: Check whether playbook directory is a git checkout
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/.git"
+      register: playbook_git_stat
 
   roles:
     - role: base
@@ -39,6 +54,7 @@
       become: false
       register: submodule_result
       changed_when: submodule_result.stdout != ""
+      when: playbook_git_stat.stat.exists
 
     - name: Check nikos CLI script exists
       ansible.builtin.stat:

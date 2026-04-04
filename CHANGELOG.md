@@ -20,7 +20,8 @@ All notable changes to NikOS are documented here.
 
 ### Changed
 - **Repo renamed** from `nikos-os` to `nikos` (directory and GitHub repo).
-- **`nikos update`** now runs `git pull --recurse-submodules` + `ansible-playbook` (was `ansible-pull`).
+- **`nikos update`** now runs `git pull --ff-only` + `git submodule update --init --recursive`
+  + `ansible-playbook` (was `ansible-pull`).
 - **`scripts/nikos` CLI** sources `script-helpers` logging for consistent output;
   falls back to plain `echo` if submodule is not yet initialized.
 - Version bumped `0.1.0` → `0.2.0` in `vars/main.yml`, `install.sh`, and `scripts/nikos`.
