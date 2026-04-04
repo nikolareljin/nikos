@@ -78,12 +78,20 @@ Starting from Ubuntu adds a GNOME purge step and takes a few extra minutes, but 
 
 ## Testing with VirtualBox
 
-The canonical way to validate a fresh NikOS install:
+The canonical way to validate a fresh NikOS install is the `./test` script,
+which automates the full flow (VM creation, unattended OS install, NikOS install, verification):
 
-1. Download [Xubuntu 24.04 LTS](https://xubuntu.org/download/) (recommended) or Ubuntu 24.04 LTS
-2. Create a VM (minimum 6 GB RAM, 40 GB disk) and attach the ISO
-3. Install the OS, take a snapshot at first boot
-4. Run the curl install command
-5. Verify with `nikos doctor` after reboot
+```bash
+./test
+```
 
-Revert to the snapshot to re-test cleanly.
+The script pauses once to copy your SSH key to the VM (you'll type the VM password `nikos` once),
+then runs the installer and prints a `nikos doctor` verification report.
+
+To skip VM/OS setup and re-run only the NikOS install on an existing VM:
+
+```bash
+./test --nikos-only
+```
+
+**Requirements:** VirtualBox, `curl`, `ssh-copy-id` (from `openssh-client`), ~4 GB RAM free.
