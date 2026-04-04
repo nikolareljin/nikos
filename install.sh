@@ -8,6 +8,8 @@ NIKOS_VERSION="0.2.0"
 NIKOS_HOME="${HOME}/.local/share/nikos"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
 USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
+MAIN_VARS_REL="vars/main.yml"
+LOCAL_VARS_REL="vars/local.yml"
 
 echo "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
 echo "Light system. Heavy thinking."
@@ -33,12 +35,52 @@ if [[ ${#_need_packages[@]} -gt 0 ]]; then
   sudo apt-get install -y "${_need_packages[@]}"
 fi
 
+_migrate_local_vars() {
+  local main_vars_path="${NIKOS_HOME}/${MAIN_VARS_REL}"
+  local local_vars_path="${NIKOS_HOME}/${LOCAL_VARS_REL}"
+
+  if [[ -f "${local_vars_path}" ]]; then
+    return
+  fi
+
+  if ! git -C "${NIKOS_HOME}" diff --quiet -- "${MAIN_VARS_REL}" || \
+     ! git -C "${NIKOS_HOME}" diff --cached --quiet -- "${MAIN_VARS_REL}"; then
+    echo "Migrating local vars/main.yml customizations to vars/local.yml..."
+    cp "${main_vars_path}" "${local_vars_path}"
+    git -C "${NIKOS_HOME}" restore --staged --worktree --source=HEAD -- "${MAIN_VARS_REL}"
+  fi
+}
+
+_pull_repo_updates() {
+  local stash_ref=""
+
+  _migrate_local_vars
+
+  if ! git -C "${NIKOS_HOME}" diff --quiet || \
+     ! git -C "${NIKOS_HOME}" diff --cached --quiet || \
+     [[ -n "$(git -C "${NIKOS_HOME}" ls-files --others --exclude-standard)" ]]; then
+    echo "Temporarily stashing local changes before pulling updates..."
+    git -C "${NIKOS_HOME}" stash push --include-untracked --message "nikos-install-autostash" >/dev/null
+    stash_ref="stash@{0}"
+  fi
+
+  git -C "${NIKOS_HOME}" pull --ff-only
+  git -C "${NIKOS_HOME}" submodule update --init --recursive
+
+  if [[ -n "${stash_ref}" ]]; then
+    echo "Re-applying local changes..."
+    if ! git -C "${NIKOS_HOME}" stash pop --index "${stash_ref}" >/dev/null; then
+      echo "ERROR: Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
+      exit 1
+    fi
+  fi
+}
+
 # Clone (or update) the repo with submodules to a persistent location
 mkdir -p "$(dirname "${NIKOS_HOME}")"
 if [[ -d "${NIKOS_HOME}/.git" ]]; then
   echo "Updating NikOS repo at ${NIKOS_HOME}..."
-  git -C "${NIKOS_HOME}" pull --ff-only
-  git -C "${NIKOS_HOME}" submodule update --init --recursive
+  _pull_repo_updates
 else
   echo "Cloning NikOS repo to ${NIKOS_HOME}..."
   git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"
@@ -80,7 +122,7 @@ _select_bundles_dialog() {
 _select_bundles_plain() {
   local _selected=()
   echo "Optional app bundles (press Enter to skip each):"
-  read -r -p "  Install network tools? (nmap, wireshark) [y/N] " opt_network </dev/tty
+  read -r -p "  Install network tools? (nmap, wireshark, OpenVPN) [y/N] " opt_network </dev/tty
   read -r -p "  Install music tools? (LMMS, Ardour, Audacity) [y/N] " opt_music </dev/tty
   read -r -p "  Install education tools? (LibreOffice, draw.io, Anki) [y/N] " opt_education </dev/tty
   [[ "${opt_network,,}"   == "y" ]] && _selected+=("network")
