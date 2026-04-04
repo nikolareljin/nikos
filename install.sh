@@ -84,8 +84,8 @@ _select_bundles_plain() {
 if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
   _raw=$(_select_bundles_dialog)
   # dialog --checklist returns space-separated quoted tokens; normalize
-  # shellcheck disable=SC2086
-  read -ra SELECTED_BUNDLES <<< $(echo "${_raw}" | tr -d '"')
+  _raw=${_raw//\"/}
+  read -ra SELECTED_BUNDLES <<< "${_raw}"
 else
   read -ra SELECTED_BUNDLES <<< "$(_select_bundles_plain)"
 fi

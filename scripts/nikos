@@ -2,7 +2,6 @@
 set -euo pipefail
 
 NIKOS_VERSION="0.2.0"
-REPO_URL="https://github.com/nikolareljin/nikos"
 NIKOS_HOME="${HOME}/.local/share/nikos"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
 
