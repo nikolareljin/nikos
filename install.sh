@@ -7,6 +7,7 @@ REPO_URL="https://github.com/nikolareljin/nikos"
 NIKOS_VERSION="0.2.0"
 NIKOS_HOME="${HOME}/.local/share/nikos"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
+USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
 
 echo "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
 echo "Light system. Heavy thinking."
@@ -18,11 +19,13 @@ if ! command -v apt-get &>/dev/null; then
   exit 1
 fi
 
-# Install core bootstrap deps (git, dialog, ansible)
+# Install core bootstrap deps (git, ansible, and dialog unless plain mode is forced)
 _need_packages=()
 command -v git             &>/dev/null || _need_packages+=(git)
-command -v dialog          &>/dev/null || _need_packages+=(dialog)
 command -v ansible-playbook &>/dev/null || _need_packages+=(ansible)
+if [[ "${USE_DIALOG}" != "0" ]]; then
+  command -v dialog &>/dev/null || _need_packages+=(dialog)
+fi
 
 if [[ ${#_need_packages[@]} -gt 0 ]]; then
   echo "Installing bootstrap packages: ${_need_packages[*]}"
@@ -31,6 +34,7 @@ if [[ ${#_need_packages[@]} -gt 0 ]]; then
 fi
 
 # Clone (or update) the repo with submodules to a persistent location
+mkdir -p "$(dirname "${NIKOS_HOME}")"
 if [[ -d "${NIKOS_HOME}/.git" ]]; then
   echo "Updating NikOS repo at ${NIKOS_HOME}..."
   git -C "${NIKOS_HOME}" pull --ff-only
@@ -44,8 +48,13 @@ fi
 if [[ -f "${HELPERS}" ]]; then
   # shellcheck source=/dev/null
   source "${HELPERS}"
-  shlib_import logging dialog
-  _USE_DIALOG=true
+  if [[ "${USE_DIALOG}" == "0" ]]; then
+    shlib_import logging
+    _USE_DIALOG=false
+  else
+    shlib_import logging dialog
+    _USE_DIALOG=true
+  fi
 else
   echo "WARNING: script-helpers not found; falling back to plain prompts." >&2
   _USE_DIALOG=false
