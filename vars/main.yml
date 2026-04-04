@@ -1,8 +1,8 @@
 ---
-nikos_version: "0.1.0"  # NikOS playbook version
+nikos_version: "0.2.0"  # NikOS playbook version
 
 # Timezone and locale
-nikos_timezone: "Europe/Belgrade"
+nikos_timezone: "Europe/London"
 nikos_locale: "en_US.UTF-8"
 
 # Theme

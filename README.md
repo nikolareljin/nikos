@@ -8,7 +8,7 @@
 A curated Xubuntu / Ubuntu 24.04 LTS setup for AI coding and development.  
 One command turns a fresh Ubuntu install into a fully configured AI workstation — Xfce desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
 
-**Version:** 0.1.0 · **License:** MIT · **Author:** Nikola Reljin
+**Version:** 0.2.0 · **License:** MIT · **Author:** Nikola Reljin
 
 <img src="./assets/nikos-logo.png" />
 
@@ -20,7 +20,17 @@ One command turns a fresh Ubuntu install into a fully configured AI workstation 
 curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos/main/install.sh | bash
 ```
 
-The installer asks which optional bundles to include, then runs the Ansible playbook automatically. Log out and back in when done — Xfce starts on the next login.
+The installer clones the full repo (with submodules) to `~/.local/share/nikos`, presents a
+`dialog`-based TUI to select optional bundles, then runs the Ansible playbook.
+Log out and back in when done — Xfce starts on the next login.
+
+**Clone locally (for development or offline use):**
+
+```bash
+git clone --recurse-submodules https://github.com/nikolareljin/nikos
+cd nikos
+bash install.sh
+```
 
 ---
 
