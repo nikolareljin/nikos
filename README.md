@@ -8,7 +8,7 @@
 A curated Xubuntu / Ubuntu 24.04 LTS setup for AI coding and development.  
 One command turns a fresh Ubuntu install into a fully configured AI workstation — Xfce desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
 
-**Version:** 0.1.0 · **License:** MIT · **Author:** Nikola Reljin
+**Version:** 0.2.0 · **License:** MIT · **Author:** Nikola Reljin
 
 <img src="./assets/nikos-logo.png" />
 
@@ -20,7 +20,18 @@ One command turns a fresh Ubuntu install into a fully configured AI workstation 
 curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos/main/install.sh | bash
 ```
 
-The installer asks which optional bundles to include, then runs the Ansible playbook automatically. Log out and back in when done — Xfce starts on the next login.
+The installer clones the full repo (with submodules) to `~/.local/share/nikos`, presents a
+`dialog`-based TUI to select optional bundles, then runs the Ansible playbook.
+Set `NIKOS_USE_DIALOG=0` to force the plain-prompt fallback.
+Log out and back in when done — Xfce starts on the next login.
+
+**Clone locally (for development or offline use):**
+
+```bash
+git clone --recurse-submodules https://github.com/nikolareljin/nikos
+cd nikos
+bash install.sh
+```
 
 ---
 
@@ -81,7 +92,7 @@ Additional tools installed directly:
 
 ```
 nikos setup          # run full playbook (first install)
-nikos update         # ansible-pull + re-run (idempotent — safe to run anytime)
+nikos update         # git pull --ff-only + submodule sync + playbook re-run
 nikos add network    # install optional: nmap, wireshark, OpenVPN
 nikos add music      # install optional: LMMS, Ardour, Audacity
 nikos add education  # install optional: LibreOffice, draw.io, Anki
@@ -93,10 +104,11 @@ nikos doctor         # check for broken configs and missing tools
 
 ## Customization
 
-Edit `vars/main.yml` before running the playbook:
+Create `vars/local.yml` before running the playbook to override defaults without
+editing tracked files:
 
 ```yaml
-nikos_timezone: "Europe/Belgrade"   # your timezone
+nikos_timezone: "Europe/London"     # override this for your timezone
 ollama_default_model: "qwen2.5-coder:7b"  # model to pre-pull
 nikos_vscode_extensions:            # add/remove VS Code extensions
   - "Continue.continue"
