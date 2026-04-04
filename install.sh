@@ -72,8 +72,7 @@ _select_bundles_dialog() {
       "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 3 \
       "network"   "Network tools (nmap, wireshark, OpenVPN)"         off \
       "music"     "Music tools (LMMS, Ardour, Audacity)"             off \
-      "education" "Education tools (LibreOffice, draw.io, Anki)"     off \
-    2>/dev/null
+      "education" "Education tools (LibreOffice, draw.io, Anki)"     off
   ) || result=""
   echo "${result}"
 }
@@ -117,7 +116,10 @@ fi
 PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
 [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
 
-ansible-playbook "${PLAY_OPTS[@]}"
+(
+  cd "${NIKOS_HOME}"
+  ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
+)
 
 echo ""
 echo "NikOS ${NIKOS_VERSION} installation complete."
