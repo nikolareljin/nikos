@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# test — provision a VirtualBox VM and run the NikOS installer end-to-end
+# test — run the NikOS installer in a VirtualBox VM
 #
 # Usage:
-#   ./test                  # full flow: create VM → install OS → install NikOS
-#   ./test --nikos-only     # skip VM creation/OS install, run NikOS on existing VM
+#   ./test                  # run NikOS install on existing VM (default)
+#   ./test -b               # rebuild: recreate VM + reinstall OS + run NikOS
+#   ./test --build          # same as -b
 #   ./test --vm-name=myvm   # override VM name
 #
-# The script pauses once after OS install so you can type the VM password
+# -b pauses once after OS install so you can type the VM password
 # into ssh-copy-id (sets up key-based auth for all subsequent steps).
 #
 # Dependencies: VirtualBox, curl, ssh-copy-id
@@ -29,12 +30,12 @@ XUBUNTU_ISO_URL="https://cdimage.ubuntu.com/xubuntu/releases/24.04/release/xubun
 SSH_KEY="${HOME}/.ssh/nikos_test_vm"
 INSTALL_SH_URL="https://raw.githubusercontent.com/nikolareljin/nikos-os/main/install.sh"
 
-NIKOS_ONLY=false
+BUILD=false
 
 for arg in "$@"; do
   case "$arg" in
-    --nikos-only)  NIKOS_ONLY=true ;;
-    --vm-name=*)   VM_NAME="${arg#--vm-name=}" ;;
+    -b|--build)   BUILD=true ;;
+    --vm-name=*)  VM_NAME="${arg#--vm-name=}" ;;
   esac
 done
 
@@ -78,7 +79,7 @@ if [[ ! -f "${SSH_KEY}" ]]; then
 fi
 
 # ── Phase 1: Create VM and install OS (unattended) ────────────────────────────
-if ! $NIKOS_ONLY; then
+if $BUILD; then
 
   # ISO
   if [[ ! -f "${XUBUNTU_ISO}" ]] || [[ $(stat -c%s "${XUBUNTU_ISO}") -lt 1000000000 ]]; then
