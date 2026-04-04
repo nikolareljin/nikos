@@ -40,7 +40,7 @@ if ! command -v ansible-playbook &>/dev/null; then
 fi
 
 echo "Running NikOS playbook via ansible-pull..."
-PULL_OPTS=(-U "${REPO_URL}" site.yml -i inventory/local)
+PULL_OPTS=(-U "${REPO_URL}" site.yml -i inventory/local --ask-become-pass)
 [[ -n "${SKIP_TAGS}" ]] && PULL_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
 
 ansible-pull "${PULL_OPTS[@]}"
