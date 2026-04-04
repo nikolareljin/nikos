@@ -24,15 +24,15 @@
       become: false
     - role: dev-tools
       become: false
-    - role: optional/network
+    - role: network
       tags: [network]
-    - role: optional/music
+    - role: music
       tags: [music]
-    - role: optional/education
+    - role: education
       tags: [education]
 
   post_tasks:
-    - name: Initialize git submodules (script-helpers)
+    - name: Initialize git submodules (script-helpers)  # noqa: command-instead-of-module
       ansible.builtin.command:
         cmd: git submodule update --init --recursive
         chdir: "{{ playbook_dir }}"
