@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+# test — provision a VirtualBox VM and run the NikOS installer end-to-end
+#
+# Usage:
+#   ./test                  # full flow: create VM → install OS → install NikOS
+#   ./test --nikos-only     # skip VM creation/OS install, run NikOS on existing VM
+#   ./test --vm-name=myvm   # override VM name
+#
+# The script pauses once after OS install so you can type the VM password
+# into ssh-copy-id (sets up key-based auth for all subsequent steps).
+#
+# Dependencies: VirtualBox, curl, ssh-copy-id
+
+set -euo pipefail
+
+# ── Config ────────────────────────────────────────────────────────────────────
+VM_NAME="${NIKOS_TEST_VM:-NikOS-test}"
+VM_RAM=4096
+VM_CPUS=2
+VM_DISK=40960        # MB
+VM_SSH_PORT=2222
+VM_USER="nikos"
+VM_PASS="nikos"
+VM_HOST="nikos-test-vm.local"
+
+XUBUNTU_ISO="${HOME}/Downloads/xubuntu-24.04.4-desktop-amd64.iso"
+XUBUNTU_ISO_URL="https://cdimage.ubuntu.com/xubuntu/releases/24.04/release/xubuntu-24.04.4-desktop-amd64.iso"
+
+SSH_KEY="${HOME}/.ssh/nikos_test_vm"
+INSTALL_SH_URL="https://raw.githubusercontent.com/nikolareljin/nikos-os/main/install.sh"
+
+NIKOS_ONLY=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --nikos-only)  NIKOS_ONLY=true ;;
+    --vm-name=*)   VM_NAME="${arg#--vm-name=}" ;;
+  esac
+done
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+log() { printf '\n[test] %s\n' "$*"; }
+die() { printf '\n[test] ERROR: %s\n' "$*" >&2; exit 1; }
+hr()  { printf '─%.0s' {1..60}; echo; }
+
+vm_exists()  { VBoxManage showvminfo "$VM_NAME" &>/dev/null; }
+vm_running() { VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | grep -q 'VMState="running"'; }
+vm_off()     { VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | grep -qE 'VMState="(poweroff|aborted)"'; }
+
+wait_for_ssh() {
+  log "Waiting for SSH on localhost:${VM_SSH_PORT}..."
+  attempts=0
+  until ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes \
+        -i "${SSH_KEY}" -p "${VM_SSH_PORT}" "${VM_USER}@localhost" "echo ok" &>/dev/null; do
+    attempts=$((attempts + 1))
+    [[ $attempts -gt 72 ]] && die "SSH unreachable after 6 min — is openssh-server installed?"
+    sleep 5
+  done
+  log "SSH ready."
+}
+
+vm_ssh() {
+  ssh -o StrictHostKeyChecking=no \
+      -i "${SSH_KEY}" \
+      -p "${VM_SSH_PORT}" \
+      "${VM_USER}@localhost" "$@"
+}
+
+# ── Preflight ─────────────────────────────────────────────────────────────────
+command -v VBoxManage  &>/dev/null || die "VirtualBox not found"
+command -v curl        &>/dev/null || die "curl not found"
+command -v ssh-copy-id &>/dev/null || die "ssh-copy-id not found (install openssh-client)"
+
+# ── SSH key ───────────────────────────────────────────────────────────────────
+if [[ ! -f "${SSH_KEY}" ]]; then
+  log "Generating SSH key → ${SSH_KEY}"
+  ssh-keygen -t ed25519 -f "${SSH_KEY}" -N "" -C "nikos-test-vm"
+fi
+
+# ── Phase 1: Create VM and install OS (unattended) ────────────────────────────
+if ! $NIKOS_ONLY; then
+
+  # ISO
+  if [[ ! -f "${XUBUNTU_ISO}" ]] || [[ $(stat -c%s "${XUBUNTU_ISO}") -lt 1000000000 ]]; then
+    log "Downloading Xubuntu 24.04 ISO (~4 GB)..."
+    curl -L "${XUBUNTU_ISO_URL}" -o "${XUBUNTU_ISO}" --progress-bar
+  fi
+  log "ISO ready: ${XUBUNTU_ISO}"
+
+  # Wipe existing VM
+  if vm_exists; then
+    log "Removing existing VM '${VM_NAME}'..."
+    vm_running && VBoxManage controlvm "${VM_NAME}" poweroff && sleep 3
+    VBoxManage unregistervm "${VM_NAME}" --delete
+  fi
+
+  # Create VM
+  log "Creating VM '${VM_NAME}'  (RAM: ${VM_RAM} MB, CPUs: ${VM_CPUS}, Disk: ${VM_DISK} MB)"
+  VBoxManage createvm --name "${VM_NAME}" --ostype Ubuntu_64 --register
+
+  VBoxManage modifyvm "${VM_NAME}" \
+    --memory "${VM_RAM}" \
+    --cpus "${VM_CPUS}" \
+    --boot1 dvd --boot2 disk --boot3 none \
+    --nic1 nat \
+    --natpf1 "ssh,tcp,,${VM_SSH_PORT},,22" \
+    --audio none \
+    --graphicscontroller vmsvga \
+    --vram 32
+
+  disk="${HOME}/VirtualBox VMs/${VM_NAME}/${VM_NAME}.vdi"
+  VBoxManage createmedium disk --filename "${disk}" --size "${VM_DISK}" --format VDI
+  VBoxManage storagectl "${VM_NAME}" --name SATA --add sata --controller IntelAhci
+  VBoxManage storageattach "${VM_NAME}" \
+    --storagectl SATA --port 0 --device 0 --type hdd --medium "${disk}"
+
+  # Unattended OS install — VirtualBox handles preseed, no GUI needed
+  log "Starting unattended Xubuntu install (headless) — this takes ~10-15 min..."
+  VBoxManage unattended install "${VM_NAME}" \
+    --iso="${XUBUNTU_ISO}" \
+    --user="${VM_USER}" \
+    --password="${VM_PASS}" \
+    --hostname="${VM_HOST}" \
+    --country=US \
+    --time-zone=UTC \
+    --locale=en_US \
+    --install-additions \
+    --start-vm=headless
+
+  # Wait for the installer to complete (VM powers off when done)
+  sleep 30
+  dots=0
+  while ! vm_off; do
+    sleep 15
+    dots=$((dots + 1))
+    printf '.'
+    [[ $dots -gt 80 ]] && die "Unattended install timed out (20 min)"
+  done
+  echo  # newline after progress dots
+
+  log "OS install complete. Starting VM..."
+  VBoxManage startvm "${VM_NAME}" --type headless
+  sleep 20
+
+  # ── Phase 2: Copy SSH key (one-time interactive password prompt) ────────────
+  hr
+  log "Copying SSH public key to VM."
+  log "You will be prompted for the VM password: '${VM_PASS}'"
+  hr
+  ssh-copy-id -i "${SSH_KEY}.pub" \
+    -o StrictHostKeyChecking=no \
+    -p "${VM_SSH_PORT}" \
+    "${VM_USER}@localhost"
+  log "Key copied. All further access is key-based."
+fi
+
+# ── Phase 3: Ensure VM is running ────────────────────────────────────────────
+if ! vm_running; then
+  log "Starting VM '${VM_NAME}'..."
+  VBoxManage startvm "${VM_NAME}" --type headless
+fi
+
+# ── Phase 4: SSH in and run NikOS installer ───────────────────────────────────
+wait_for_ssh
+
+log "Running NikOS installer..."
+vm_ssh "bash -c 'curl -fsSL ${INSTALL_SH_URL} | bash'"
+
+# ── Phase 5: Verify ───────────────────────────────────────────────────────────
+log "═══ nikos doctor ═══"
+vm_ssh "nikos doctor" || true
+
+hr
+log "═══ Verification checklist ═══"
+checks=(
+  "command -v code"
+  "code --list-extensions 2>/dev/null | grep -q arcticicestudio"
+  "command -v ollama"
+  "command -v image-view"
+  "command -v lantern"
+  "test -d /usr/share/themes/Nordic"
+  "test -d /usr/share/icons/Papirus-Dark"
+  "test -f /usr/share/nikos/wallpaper.png"
+  "systemctl is-enabled lightdm 2>/dev/null | grep -q enabled"
+)
+
+pass=0; fail=0
+for c in "${checks[@]}"; do
+  if vm_ssh "${c}" &>/dev/null; then
+    echo "  [✓] ${c}"; pass=$((pass + 1))
+  else
+    echo "  [✗] ${c}"; fail=$((fail + 1))
+  fi
+done
+
+hr
+log "Results: ${pass} passed, ${fail} failed"
+[[ $fail -eq 0 ]] && log "All checks passed — NikOS is good." \
+                  || log "Some checks failed — review output above."
