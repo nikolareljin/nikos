@@ -26,6 +26,34 @@
       register: playbook_git_stat
       tags: [always]
 
+    - name: Remove legacy VS Code apt source file before any apt operations
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/vscode.list
+        state: absent
+      tags: [always]
+
+    - name: Find existing VS Code apt source files before any apt operations
+      ansible.builtin.shell: >
+        grep -rl "packages.microsoft.com/repos/code"
+        /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null || true
+      register: vscode_source_files
+      changed_when: false
+      tags: [always]
+
+    - name: Remove existing VS Code apt source files before any apt operations
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ vscode_source_files.stdout_lines }}"
+      when: (vscode_source_files.stdout_lines | length) > 0
+      tags: [always]
+
+    - name: Remove legacy Microsoft VS Code keyring before any apt operations
+      ansible.builtin.file:
+        path: /usr/share/keyrings/microsoft.gpg
+        state: absent
+      tags: [always]
+
   roles:
     - role: base
     - role: desktop
@@ -34,6 +62,7 @@
       become: false
     - role: ai-stack
       become: false
+      tags: [ai-local]
     - role: editors
       become: false
     - role: cloud-ai-cli

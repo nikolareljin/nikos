@@ -18,6 +18,7 @@ else
   print_info()    { echo "[info] $*"; }
   print_error()   { echo "[error] $*" >&2; }
   print_success() { echo "[ok] $*"; }
+  print_warn()    { echo "[warn] $*"; }
 fi
 
 if [[ -f "${REPO_SYNC_HELPERS}" ]]; then
@@ -135,6 +136,14 @@ cmd_doctor() {
       issues=$((issues + 1))
     fi
   }
+  optional_check() {
+    local label="$1" cmd="$2"
+    if eval "${cmd}" &>/dev/null; then
+      print_success "${label}"
+    else
+      print_warn "${label} (optional or pending first login)"
+    fi
+  }
   print_info "NikOS Doctor — checking system health..."
   check "ansible installed"       "command -v ansible-playbook"
   check "dialog installed"        "command -v dialog"
@@ -142,13 +151,13 @@ cmd_doctor() {
   check "Ollama installed"        "command -v ollama"
   check "VS Code installed"       "command -v code"
   check "distrodeck installed"    "command -v distrodeck"
-  check "conda installed"         "test -f ${HOME}/miniforge3/bin/conda"
-  check "nikos-ai env exists"     "${HOME}/miniforge3/bin/conda env list | grep -q nikos-ai"
-  check "Claude Code installed"   "command -v claude"
-  check "Gemini CLI installed"    "command -v gemini"
+  optional_check "conda installed"       "test -f ${HOME}/miniforge3/bin/conda"
+  optional_check "nikos-ai env exists"   "test -f ${HOME}/miniforge3/bin/conda && ${HOME}/miniforge3/bin/conda env list | grep -q nikos-ai"
+  optional_check "Claude Code installed" "command -v claude"
+  optional_check "Gemini CLI installed"  "command -v gemini"
   check "Nordic GTK theme"        "test -d /usr/share/themes/Nordic"
   check "Papirus icons"           "test -d /usr/share/icons/Papirus-Dark"
-  check "GitHub configured"       "test -f ${HOME}/.config/nikos/github-configured"
+  optional_check "GitHub configured" "test -f ${HOME}/.config/nikos/github-configured"
   check "NikOS repo present"      "test -d ${NIKOS_HOME}/.git"
   check "script-helpers present"  "test -f ${HELPERS}"
   echo ""

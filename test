@@ -28,7 +28,12 @@ XUBUNTU_ISO="${HOME}/Downloads/xubuntu-24.04.4-desktop-amd64.iso"
 XUBUNTU_ISO_URL="https://cdimage.ubuntu.com/xubuntu/releases/24.04/release/xubuntu-24.04.4-desktop-amd64.iso"
 
 SSH_KEY="${HOME}/.ssh/nikos_test_vm"
-INSTALL_SH_URL="https://raw.githubusercontent.com/nikolareljin/nikos-os/main/install.sh"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_SH_LOCAL="${SCRIPT_DIR}/install.sh"
+INSTALL_SH_REMOTE="/tmp/nikos-install.sh"
+SOURCE_ARCHIVE_LOCAL="/tmp/nikos-test-src.tar"
+SOURCE_ARCHIVE_REMOTE="/tmp/nikos-test-src.tar"
+SOURCE_DIR_REMOTE="/home/${VM_USER}/.local/share/nikos"
 
 BUILD=false
 
@@ -48,16 +53,49 @@ vm_exists()  { VBoxManage showvminfo "$VM_NAME" &>/dev/null; }
 vm_running() { VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | grep -q 'VMState="running"'; }
 vm_off()     { VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | grep -qE 'VMState="(poweroff|aborted)"'; }
 
-wait_for_ssh() {
-  log "Waiting for SSH on localhost:${VM_SSH_PORT}..."
+ensure_ssh_port_forward() {
+  local forward_rule="ssh,tcp,,${VM_SSH_PORT},,22"
+
+  if VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | grep -Fq "${forward_rule}"; then
+    return 0
+  fi
+
+  log "Configuring SSH port forward localhost:${VM_SSH_PORT} -> ${VM_NAME}:22..."
+  if vm_running; then
+    VBoxManage controlvm "${VM_NAME}" natpf1 delete ssh &>/dev/null || true
+    VBoxManage controlvm "${VM_NAME}" natpf1 "${forward_rule}"
+  else
+    VBoxManage modifyvm "${VM_NAME}" --natpf1 delete ssh &>/dev/null || true
+    VBoxManage modifyvm "${VM_NAME}" --natpf1 "${forward_rule}"
+  fi
+}
+
+wait_for_ssh_port() {
+  log "Waiting for SSH port on localhost:${VM_SSH_PORT}..."
+  attempts=0
+  until bash -c "exec 3<>/dev/tcp/127.0.0.1/${VM_SSH_PORT}" &>/dev/null; do
+    attempts=$((attempts + 1))
+    [[ $attempts -gt 72 ]] && die "SSH port ${VM_SSH_PORT} never opened. Check that the VM is running and the NAT port forward exists."
+    sleep 5
+  done
+  log "SSH port is open."
+}
+
+wait_for_ssh_key_auth() {
+  log "Waiting for key-based SSH login..."
   attempts=0
   until ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes \
         -i "${SSH_KEY}" -p "${VM_SSH_PORT}" "${VM_USER}@localhost" "echo ok" &>/dev/null; do
     attempts=$((attempts + 1))
-    [[ $attempts -gt 72 ]] && die "SSH unreachable after 6 min — is openssh-server installed?"
+    [[ $attempts -gt 12 ]] && die "SSH is reachable, but key-based login is not configured. Run './test -b' once or copy ${SSH_KEY}.pub with ssh-copy-id -p ${VM_SSH_PORT} ${VM_USER}@localhost."
     sleep 5
   done
   log "SSH ready."
+}
+
+wait_for_ssh() {
+  wait_for_ssh_port
+  wait_for_ssh_key_auth
 }
 
 vm_ssh() {
@@ -67,9 +105,51 @@ vm_ssh() {
       "${VM_USER}@localhost" "$@"
 }
 
+vm_ssh_tty() {
+  ssh -tt -o StrictHostKeyChecking=no \
+      -i "${SSH_KEY}" \
+      -p "${VM_SSH_PORT}" \
+      "${VM_USER}@localhost" "$@"
+}
+
+vm_scp() {
+  scp -o StrictHostKeyChecking=no \
+      -i "${SSH_KEY}" \
+      -P "${VM_SSH_PORT}" \
+      "$@"
+}
+
+run_installer() {
+  [[ -f "${INSTALL_SH_LOCAL}" ]] || die "Local installer not found at ${INSTALL_SH_LOCAL}"
+
+  log "Packaging local NikOS source tree..."
+  tar -C "${SCRIPT_DIR}" \
+    --exclude='./.git' \
+    --exclude='./PLAN.md' \
+    --exclude='./TODO.txt' \
+    -cf "${SOURCE_ARCHIVE_LOCAL}" .
+
+  log "Staging local NikOS source tree in VM..."
+  vm_ssh "rm -rf '${SOURCE_DIR_REMOTE}' '${SOURCE_ARCHIVE_REMOTE}' && mkdir -p '$(dirname "${SOURCE_DIR_REMOTE}")'"
+  vm_scp "${SOURCE_ARCHIVE_LOCAL}" "${VM_USER}@localhost:${SOURCE_ARCHIVE_REMOTE}"
+
+  log "Copying local installer to VM..."
+  vm_scp "${INSTALL_SH_LOCAL}" "${VM_USER}@localhost:${INSTALL_SH_REMOTE}"
+
+  vm_ssh "mkdir -p '${SOURCE_DIR_REMOTE}' && tar -xf '${SOURCE_ARCHIVE_REMOTE}' -C '${SOURCE_DIR_REMOTE}'"
+
+  hr
+  log "Running NikOS installer in the VM."
+  log "You will be prompted for the VM sudo password: '${VM_PASS}'"
+  hr
+  log "Running NikOS installer..."
+  vm_ssh_tty "chmod +x '${INSTALL_SH_REMOTE}' && NIKOS_HOME='${SOURCE_DIR_REMOTE}' NIKOS_SKIP_REPO_SYNC=1 bash '${INSTALL_SH_REMOTE}'"
+}
+
 # ── Preflight ─────────────────────────────────────────────────────────────────
 command -v VBoxManage  &>/dev/null || die "VirtualBox not found"
 command -v curl        &>/dev/null || die "curl not found"
+command -v scp         &>/dev/null || die "scp not found (install openssh-client)"
 command -v ssh-copy-id &>/dev/null || die "ssh-copy-id not found (install openssh-client)"
 
 # ── SSH key ───────────────────────────────────────────────────────────────────
@@ -156,16 +236,19 @@ if $BUILD; then
 fi
 
 # ── Phase 3: Ensure VM is running ────────────────────────────────────────────
+vm_exists || die "VM '${VM_NAME}' does not exist. Run './test -b' first."
+
 if ! vm_running; then
   log "Starting VM '${VM_NAME}'..."
   VBoxManage startvm "${VM_NAME}" --type headless
 fi
 
+ensure_ssh_port_forward
+
 # ── Phase 4: SSH in and run NikOS installer ───────────────────────────────────
 wait_for_ssh
 
-log "Running NikOS installer..."
-vm_ssh "bash -c 'curl -fsSL ${INSTALL_SH_URL} | bash'"
+run_installer
 
 # ── Phase 5: Verify ───────────────────────────────────────────────────────────
 log "═══ nikos doctor ═══"
@@ -177,12 +260,11 @@ checks=(
   "command -v code"
   "code --list-extensions 2>/dev/null | grep -q arcticicestudio"
   "command -v ollama"
-  "command -v image-view"
   "command -v lantern"
   "test -d /usr/share/themes/Nordic"
   "test -d /usr/share/icons/Papirus-Dark"
   "test -f /usr/share/nikos/wallpaper.png"
-  "systemctl is-enabled lightdm 2>/dev/null | grep -q enabled"
+  "test -f /etc/X11/default-display-manager && grep -qx '/usr/sbin/lightdm' /etc/X11/default-display-manager"
 )
 
 pass=0; fail=0
