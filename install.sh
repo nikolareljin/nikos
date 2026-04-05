@@ -7,6 +7,7 @@ REPO_URL="https://github.com/nikolareljin/nikos"
 NIKOS_VERSION="0.2.0"
 NIKOS_HOME="${HOME}/.local/share/nikos"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
+REPO_SYNC_HELPERS_REL="scripts/repo-sync.sh"
 USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
 MAIN_VARS_REL="vars/main.yml"
 LOCAL_VARS_REL="vars/local.yml"
@@ -35,26 +36,38 @@ if [[ ${#_need_packages[@]} -gt 0 ]]; then
   sudo apt-get install -y "${_need_packages[@]}"
 fi
 
-_migrate_local_vars() {
-  local main_vars_path="${NIKOS_HOME}/${MAIN_VARS_REL}"
-  local local_vars_path="${NIKOS_HOME}/${LOCAL_VARS_REL}"
+_source_repo_sync_helpers() {
+  local helpers_path=""
+  local script_dir
 
-  if [[ -f "${local_vars_path}" ]]; then
-    return
+  if [[ -f "${NIKOS_HOME}/${REPO_SYNC_HELPERS_REL}" ]]; then
+    helpers_path="${NIKOS_HOME}/${REPO_SYNC_HELPERS_REL}"
+  else
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "${script_dir}/${REPO_SYNC_HELPERS_REL}" ]]; then
+      helpers_path="${script_dir}/${REPO_SYNC_HELPERS_REL}"
+    fi
   fi
 
-  if ! git -C "${NIKOS_HOME}" diff --quiet -- "${MAIN_VARS_REL}" || \
-     ! git -C "${NIKOS_HOME}" diff --cached --quiet -- "${MAIN_VARS_REL}"; then
-    echo "Migrating local vars/main.yml customizations to vars/local.yml..."
-    cp "${main_vars_path}" "${local_vars_path}"
-    git -C "${NIKOS_HOME}" restore --staged --worktree --source=HEAD -- "${MAIN_VARS_REL}"
+  if [[ -z "${helpers_path}" ]]; then
+    return 1
   fi
+
+  # shellcheck source=/dev/null
+  source "${helpers_path}"
 }
 
-_pull_repo_updates() {
+_pull_repo_updates_bootstrap() {
   local stash_ref=""
 
-  _migrate_local_vars
+  if [[ -f "${NIKOS_HOME}/${LOCAL_VARS_REL}" ]]; then
+    :
+  elif ! git -C "${NIKOS_HOME}" diff --quiet -- "${MAIN_VARS_REL}" || \
+       ! git -C "${NIKOS_HOME}" diff --cached --quiet -- "${MAIN_VARS_REL}"; then
+    echo "Migrating local vars/main.yml customizations to vars/local.yml..."
+    cp "${NIKOS_HOME}/${MAIN_VARS_REL}" "${NIKOS_HOME}/${LOCAL_VARS_REL}"
+    git -C "${NIKOS_HOME}" restore --staged --worktree --source=HEAD -- "${MAIN_VARS_REL}"
+  fi
 
   if ! git -C "${NIKOS_HOME}" diff --quiet || \
      ! git -C "${NIKOS_HOME}" diff --cached --quiet || \
@@ -78,9 +91,21 @@ _pull_repo_updates() {
 
 # Clone (or update) the repo with submodules to a persistent location
 mkdir -p "$(dirname "${NIKOS_HOME}")"
+if [[ -e "${NIKOS_HOME}" && ! -d "${NIKOS_HOME}/.git" ]]; then
+  echo "ERROR: ${NIKOS_HOME} exists but is not a git checkout. Move or remove that directory, then rerun the installer." >&2
+  exit 1
+fi
+
 if [[ -d "${NIKOS_HOME}/.git" ]]; then
   echo "Updating NikOS repo at ${NIKOS_HOME}..."
-  _pull_repo_updates
+  if _source_repo_sync_helpers; then
+    if ! _pull_repo_updates "nikos-install-autostash"; then
+      echo "ERROR: Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
+      exit 1
+    fi
+  else
+    _pull_repo_updates_bootstrap
+  fi
 else
   echo "Cloning NikOS repo to ${NIKOS_HOME}..."
   git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"

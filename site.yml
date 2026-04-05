@@ -12,16 +12,19 @@
       ansible.builtin.stat:
         path: "{{ playbook_dir }}/vars/local.yml"
       register: local_vars_stat
+      tags: [always]
 
     - name: Load local override vars
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/vars/local.yml"
       when: local_vars_stat.stat.exists
+      tags: [always]
 
     - name: Check whether playbook directory is a git checkout
       ansible.builtin.stat:
         path: "{{ playbook_dir }}/.git"
       register: playbook_git_stat
+      tags: [always]
 
   roles:
     - role: base
@@ -61,6 +64,7 @@
           'Cloning into ' in (submodule_result.stderr | default(''))
         )
       when: playbook_git_stat.stat.exists
+      tags: [always]
 
     - name: Check nikos CLI script exists
       ansible.builtin.stat:
