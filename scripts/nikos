@@ -4,6 +4,7 @@ set -euo pipefail
 NIKOS_VERSION="0.2.0"
 NIKOS_HOME="${HOME}/.local/share/nikos"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
+REPO_SYNC_HELPERS="${NIKOS_HOME}/scripts/repo-sync.sh"
 MAIN_VARS_REL="vars/main.yml"
 LOCAL_VARS_REL="vars/local.yml"
 
@@ -17,6 +18,11 @@ else
   print_info()    { echo "[info] $*"; }
   print_error()   { echo "[error] $*" >&2; }
   print_success() { echo "[ok] $*"; }
+fi
+
+if [[ -f "${REPO_SYNC_HELPERS}" ]]; then
+  # shellcheck source=/dev/null
+  source "${REPO_SYNC_HELPERS}"
 fi
 
 usage() {
@@ -47,47 +53,6 @@ _playbook() {
   )
 }
 
-_migrate_local_vars() {
-  local main_vars_path="${NIKOS_HOME}/${MAIN_VARS_REL}"
-  local local_vars_path="${NIKOS_HOME}/${LOCAL_VARS_REL}"
-
-  if [[ -f "${local_vars_path}" ]]; then
-    return
-  fi
-
-  if ! git -C "${NIKOS_HOME}" diff --quiet -- "${MAIN_VARS_REL}" || \
-     ! git -C "${NIKOS_HOME}" diff --cached --quiet -- "${MAIN_VARS_REL}"; then
-    print_info "Migrating local vars/main.yml customizations to vars/local.yml..."
-    cp "${main_vars_path}" "${local_vars_path}"
-    git -C "${NIKOS_HOME}" restore --staged --worktree --source=HEAD -- "${MAIN_VARS_REL}"
-  fi
-}
-
-_pull_repo_updates() {
-  local stash_ref=""
-
-  _migrate_local_vars
-
-  if ! git -C "${NIKOS_HOME}" diff --quiet || \
-     ! git -C "${NIKOS_HOME}" diff --cached --quiet || \
-     [[ -n "$(git -C "${NIKOS_HOME}" ls-files --others --exclude-standard)" ]]; then
-    print_info "Temporarily stashing local changes before pulling updates..."
-    git -C "${NIKOS_HOME}" stash push --include-untracked --message "nikos-update-autostash" >/dev/null
-    stash_ref="stash@{0}"
-  fi
-
-  git -C "${NIKOS_HOME}" pull --ff-only
-  git -C "${NIKOS_HOME}" submodule update --init --recursive
-
-  if [[ -n "${stash_ref}" ]]; then
-    print_info "Re-applying local changes..."
-    if ! git -C "${NIKOS_HOME}" stash pop --index "${stash_ref}" >/dev/null; then
-      print_error "Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun 'nikos update'."
-      exit 1
-    fi
-  fi
-}
-
 cmd_setup() {
   print_info "Running full NikOS setup..."
   _playbook
@@ -96,7 +61,14 @@ cmd_setup() {
 cmd_update() {
   print_info "Updating NikOS repo and submodules..."
   if [[ -d "${NIKOS_HOME}/.git" ]]; then
-    _pull_repo_updates
+    if ! declare -F _pull_repo_updates >/dev/null; then
+      print_error "Repo sync helpers not found at ${REPO_SYNC_HELPERS}. Reinstall NikOS or restore that file."
+      exit 1
+    fi
+    if ! _pull_repo_updates "nikos-update-autostash"; then
+      print_error "Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun 'nikos update'."
+      exit 1
+    fi
   else
     print_error "NikOS repo not found at ${NIKOS_HOME}. Run the installer first."
     exit 1
