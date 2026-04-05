@@ -59,6 +59,7 @@ cmd_setup() {
 }
 
 cmd_update() {
+  local update_rc=0
   print_info "Updating NikOS repo and submodules..."
   if [[ -d "${NIKOS_HOME}/.git" ]]; then
     if ! declare -F _pull_repo_updates >/dev/null; then
@@ -66,7 +67,21 @@ cmd_update() {
       exit 1
     fi
     if ! _pull_repo_updates "nikos-update-autostash"; then
-      print_error "Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun 'nikos update'."
+      update_rc=$?
+      case "${update_rc}" in
+        1)
+          print_error "Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun 'nikos update'."
+          ;;
+        2)
+          print_error "Failed to pull updates for ${NIKOS_HOME}. Review the git output above, resolve the issue, then rerun 'nikos update'."
+          ;;
+        3)
+          print_error "Failed to update git submodules in ${NIKOS_HOME}. Review the git output above, resolve the issue, then rerun 'nikos update'."
+          ;;
+        *)
+          print_error "Failed to update NikOS repo and submodules in ${NIKOS_HOME}. Review the git output above, then rerun 'nikos update'."
+          ;;
+      esac
       exit 1
     fi
   else

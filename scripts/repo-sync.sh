@@ -38,8 +38,15 @@ _pull_repo_updates() {
     stash_ref="stash@{0}"
   fi
 
-  git -C "${NIKOS_HOME}" pull --ff-only
-  git -C "${NIKOS_HOME}" submodule update --init --recursive
+  if ! git -C "${NIKOS_HOME}" pull --ff-only; then
+    _repo_sync_print_info "Failed to pull updates in ${NIKOS_HOME}; repository was not updated."
+    return 2
+  fi
+
+  if ! git -C "${NIKOS_HOME}" submodule update --init --recursive; then
+    _repo_sync_print_info "Failed to update git submodules in ${NIKOS_HOME}; resolve the issue before continuing."
+    return 3
+  fi
 
   if [[ -n "${stash_ref}" ]]; then
     _repo_sync_print_info "Re-applying local changes..."
