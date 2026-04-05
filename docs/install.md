@@ -97,10 +97,12 @@ which automates the full flow (VM creation, unattended OS install, NikOS install
 The script pauses once to copy your SSH key to the VM (you'll type the VM password `nikos` once),
 then runs the installer and prints a `nikos doctor` verification report.
 
-To skip VM/OS setup and re-run only the NikOS install on an existing VM:
+To rebuild the VM from scratch and re-run the full OS + NikOS install flow:
 
 ```bash
-./test --nikos-only
+./test -b
+# or
+./test --build
 ```
 
 **Requirements:** VirtualBox, `curl`, `ssh-copy-id` (from `openssh-client`), ~4 GB RAM free.

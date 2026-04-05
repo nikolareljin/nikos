@@ -14,16 +14,18 @@
     version: main
     update: false
 
-- name: Symlink distrodeck to PATH
-  ansible.builtin.file:
-    src: "{{ nikos_home }}/Projects/distrodeck/distrodeck"
+- name: Install distrodeck PATH wrapper
+  ansible.builtin.copy:
     dest: /usr/local/bin/distrodeck
-    state: link
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      exec "{{ nikos_home }}/Projects/distrodeck/distrodeck" "$@"
   become: true
   when: not ansible_check_mode
 
 - name: Install all developer tools via distrodeck
-  ansible.builtin.command: distrodeck install-tools --all
+  ansible.builtin.command: "{{ nikos_home }}/Projects/distrodeck/distrodeck install-tools"
   changed_when: false
   args:
     creates: "{{ nikos_home }}/.local/state/distrodeck/installed-tools.txt"
@@ -38,6 +40,12 @@
     version: main
     update: false
 
+- name: Check whether cargo is available for image-view build
+  ansible.builtin.command: command -v cargo
+  register: dev_tools_cargo_check
+  changed_when: false
+  failed_when: false
+
 - name: Build and install image-view
   ansible.builtin.command: "{{ nikos_home }}/Projects/image-view/setup"
   environment:
@@ -45,7 +53,16 @@
     INSTALL_DIR: "{{ nikos_home }}/.local/bin"
   args:
     creates: "{{ nikos_home }}/.local/bin/image-view"
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - dev_tools_cargo_check.rc == 0
+
+- name: Skip image-view install when cargo was not selected in distrodeck
+  ansible.builtin.debug:
+    msg: "Skipping image-view because cargo is not installed. Select Rust in distrodeck install-tools, then rerun nikos update if you want image-view."
+  when:
+    - not ansible_check_mode
+    - dev_tools_cargo_check.rc != 0
 
 # ── git-lantern (repo dashboard CLI — command: lantern) ──
 
@@ -55,6 +72,7 @@
     dest: "{{ nikos_home }}/Projects/git-lantern"
     version: main
     update: false
+    recursive: false
 
 - name: Install git-lantern
   ansible.builtin.command: >
@@ -74,3 +92,4 @@
     dest: "{{ nikos_home }}/Projects/ai-runner"
     version: main
     update: false
+  tags: [ai-runner]
