@@ -77,8 +77,18 @@ _pull_repo_updates_bootstrap() {
     stash_ref="stash@{0}"
   fi
 
-  git -C "${NIKOS_HOME}" pull --ff-only
-  git -C "${NIKOS_HOME}" submodule update --init --recursive
+  if ! git -C "${NIKOS_HOME}" pull --ff-only; then
+    echo "ERROR: Failed to pull updates for ${NIKOS_HOME}." >&2
+    echo "This can happen because of a non-fast-forward branch state, network/authentication issues, or a repository problem." >&2
+    echo "Review the git output above, resolve the issue in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
+    exit 2
+  fi
+
+  if ! git -C "${NIKOS_HOME}" submodule update --init --recursive; then
+    echo "ERROR: Failed to update NikOS submodules in ${NIKOS_HOME}." >&2
+    echo "Review the git output above, verify network access and repository state, then rerun the installer or 'nikos update'." >&2
+    exit 3
+  fi
 
   if [[ -n "${stash_ref}" ]]; then
     echo "Re-applying local changes..."
@@ -100,7 +110,20 @@ if [[ -d "${NIKOS_HOME}/.git" ]]; then
   echo "Updating NikOS repo at ${NIKOS_HOME}..."
   if _source_repo_sync_helpers; then
     if ! _pull_repo_updates "nikos-install-autostash"; then
-      echo "ERROR: Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
+      case $? in
+        1)
+          echo "ERROR: Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
+          ;;
+        2)
+          echo "ERROR: Failed to pull updates for ${NIKOS_HOME}. Review the git output above, resolve the issue, then rerun the installer or 'nikos update'." >&2
+          ;;
+        3)
+          echo "ERROR: Failed to update NikOS submodules in ${NIKOS_HOME}. Review the git output above, resolve the issue, then rerun the installer or 'nikos update'." >&2
+          ;;
+        *)
+          echo "ERROR: Failed to update NikOS repo at ${NIKOS_HOME}. Review the git output above, then rerun the installer or 'nikos update'." >&2
+          ;;
+      esac
       exit 1
     fi
   else
@@ -129,7 +152,6 @@ fi
 
 # Bundle selection ─────────────────────────────────────────────────
 _select_bundles_dialog() {
-  local _cols _rows
   dialog_init
   local result
   result=$(
