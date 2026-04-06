@@ -149,9 +149,13 @@
   notify: Theming_update_initramfs
 
 - name: Set NikOS as default Plymouth theme
-  ansible.builtin.command: /usr/sbin/plymouth-set-default-theme -R nikos
-  changed_when: true
-  when: not ansible_check_mode
+  ansible.builtin.ini_file:
+    path: /etc/plymouth/plymouthd.conf
+    section: Daemon
+    option: Theme
+    value: nikos
+    mode: "0644"
+  notify: Theming_update_initramfs
 
 - name: Ensure LightDM config directory exists
   ansible.builtin.file:
