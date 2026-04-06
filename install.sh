@@ -136,8 +136,11 @@ else
   if [[ -d "${NIKOS_HOME}/.git" ]]; then
     echo "Updating NikOS repo at ${NIKOS_HOME}..."
     if _source_repo_sync_helpers; then
-      if ! _pull_repo_updates "nikos-install-autostash"; then
-        case $? in
+      if _pull_repo_updates "nikos-install-autostash"; then
+        :
+      else
+        update_rc=$?
+        case "${update_rc}" in
           1)
             echo "ERROR: Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
             ;;
