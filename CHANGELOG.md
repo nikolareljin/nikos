@@ -21,6 +21,8 @@ All notable changes to NikOS are documented here.
   for local AI stack, Gemini CLI, Claude Code, Copilot CLI, ai-runner, and AI-focused VS Code extensions.
 - **System-wide Xfce defaults** for Nordic/Papirus theme application, wallpaper, and Whisker Menu branding.
 - **Whisker Menu defaults** — system-wide menu button branding now points at `/usr/share/nikos/wallpaper.png`.
+- **NikOS logo assets** (`assets/logo.png`, `assets/logo.svg`) — official NikOS visual identity (node-graph + wordmark, Nord palette).
+- **Plymouth boot splash** — custom NikOS theme replacing the default Xubuntu spinner; centered logo with a slow opacity-pulse animation on a dark Nord background. Installed to `/usr/share/plymouth/themes/nikos/` and set as system default.
 
 ### Changed
 - **Repo renamed** from `nikos-os` to `nikos` (directory and GitHub repo).

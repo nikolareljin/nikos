@@ -102,6 +102,57 @@
     - not ansible_check_mode
     - nordic_grub_theme_dir is not defined
 
+- name: Install Plymouth and themes package
+  ansible.builtin.apt:
+    name:
+      - plymouth
+      - plymouth-themes
+    state: present
+
+- name: Copy NikOS logo PNG to system asset directory
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/logo.png"
+    dest: /usr/share/nikos/logo.png
+    mode: "0644"
+
+- name: Copy NikOS logo SVG to system asset directory
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/logo.svg"
+    dest: /usr/share/nikos/logo.svg
+    mode: "0644"
+
+- name: Create NikOS Plymouth theme directory
+  ansible.builtin.file:
+    path: /usr/share/plymouth/themes/nikos
+    state: directory
+    mode: "0755"
+
+- name: Copy NikOS Plymouth theme descriptor
+  ansible.builtin.copy:
+    src: plymouth/nikos.plymouth
+    dest: /usr/share/plymouth/themes/nikos/nikos.plymouth
+    mode: "0644"
+  notify: Theming_update_initramfs
+
+- name: Copy NikOS Plymouth theme script
+  ansible.builtin.copy:
+    src: plymouth/nikos.script
+    dest: /usr/share/plymouth/themes/nikos/nikos.script
+    mode: "0644"
+  notify: Theming_update_initramfs
+
+- name: Copy NikOS logo into Plymouth theme directory
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/logo.png"
+    dest: /usr/share/plymouth/themes/nikos/nikos-logo.png
+    mode: "0644"
+  notify: Theming_update_initramfs
+
+- name: Set NikOS as default Plymouth theme
+  ansible.builtin.command: plymouth-set-default-theme -R nikos
+  changed_when: true
+  when: not ansible_check_mode
+
 - name: Ensure LightDM config directory exists
   ansible.builtin.file:
     path: /etc/lightdm
