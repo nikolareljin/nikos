@@ -308,7 +308,7 @@ checks=(
   "test -f /usr/share/nikos/logo.svg"
   "test -f /usr/share/plymouth/themes/nikos/nikos.plymouth"
   "test -f /usr/share/plymouth/themes/nikos/nikos-logo.png"
-  "plymouth-set-default-theme 2>/dev/null | grep -qx nikos"
+  "grep -q 'Theme=nikos' /etc/plymouth/plymouthd.conf"
   "test -f /etc/X11/default-display-manager && grep -qx '/usr/sbin/lightdm' /etc/X11/default-display-manager"
 )
 
