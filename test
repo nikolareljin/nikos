@@ -83,14 +83,48 @@ wait_for_ssh_port() {
 
 wait_for_ssh_key_auth() {
   log "Waiting for key-based SSH login..."
-  attempts=0
+  local attempts=0 key_copied=false
   until ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes \
         -i "${SSH_KEY}" -p "${VM_SSH_PORT}" "${VM_USER}@localhost" "echo ok" &>/dev/null; do
     attempts=$((attempts + 1))
-    [[ $attempts -gt 12 ]] && die "SSH is reachable, but key-based login is not configured. Run './test -b' once or copy ${SSH_KEY}.pub with ssh-copy-id -p ${VM_SSH_PORT} ${VM_USER}@localhost."
+    # After ~30 s without key auth, try a one-shot auto-copy via sshpass
+    if [[ $attempts -gt 6 && "${key_copied}" == "false" ]]; then
+      log "Key auth not ready — auto-copying SSH key with sshpass..."
+      sshpass -p "${VM_PASS}" ssh-copy-id -i "${SSH_KEY}.pub" \
+        -o StrictHostKeyChecking=no \
+        -p "${VM_SSH_PORT}" "${VM_USER}@localhost" 2>/dev/null && key_copied=true || true
+      attempts=0
+    elif [[ $attempts -gt 12 ]]; then
+      die "SSH is reachable but key-based login could not be established. Verify the VM password or run: ssh-copy-id -i ${SSH_KEY}.pub -p ${VM_SSH_PORT} ${VM_USER}@localhost"
+    fi
     sleep 5
   done
   log "SSH ready."
+}
+
+# Install openssh-server on the VM via VirtualBox Guest Additions.
+# Xubuntu Desktop ISO does not ship openssh-server; --install-additions
+# makes guestcontrol available once the VM has booted after the OS install.
+install_openssh_server() {
+  log "Waiting for Guest Additions to become ready..."
+  local attempts=0
+  until VBoxManage guestcontrol "${VM_NAME}" stat \
+        --username "${VM_USER}" --password "${VM_PASS}" \
+        "/" &>/dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    [[ $attempts -gt 48 ]] && die "Guest Additions not ready after 4 min — cannot install openssh-server. Ensure --install-additions succeeded."
+    sleep 5
+    printf '.'
+  done
+  echo
+  log "Installing openssh-server via guest control..."
+  VBoxManage guestcontrol "${VM_NAME}" run \
+    --exe /bin/bash \
+    --username "${VM_USER}" --password "${VM_PASS}" \
+    --wait-stdout --wait-stderr \
+    -- -c "echo '${VM_PASS}' | sudo -S apt-get install -y openssh-server 2>&1 \
+           && sudo systemctl enable --now ssh 2>&1"
+  log "openssh-server installed and started."
 }
 
 wait_for_ssh() {
@@ -151,6 +185,7 @@ command -v VBoxManage  &>/dev/null || die "VirtualBox not found"
 command -v curl        &>/dev/null || die "curl not found"
 command -v scp         &>/dev/null || die "scp not found (install openssh-client)"
 command -v ssh-copy-id &>/dev/null || die "ssh-copy-id not found (install openssh-client)"
+command -v sshpass     &>/dev/null || die "sshpass not found (install sshpass)"
 
 # ── SSH key ───────────────────────────────────────────────────────────────────
 if [[ ! -f "${SSH_KEY}" ]]; then
@@ -228,14 +263,12 @@ if $BUILD; then
 
   log "OS install complete. Starting VM..."
   VBoxManage startvm "${VM_NAME}" --type headless
-  sleep 20
 
-  # ── Phase 2: Copy SSH key (one-time interactive password prompt) ────────────
-  hr
-  log "Copying SSH public key to VM."
-  log "You will be prompted for the VM password: '${VM_PASS}'"
-  hr
-  ssh-copy-id -i "${SSH_KEY}.pub" \
+  # ── Phase 2: Install openssh-server and copy SSH key (non-interactive) ──────
+  install_openssh_server
+  wait_for_ssh_port
+  log "Copying SSH public key to VM (non-interactive)..."
+  sshpass -p "${VM_PASS}" ssh-copy-id -i "${SSH_KEY}.pub" \
     -o StrictHostKeyChecking=no \
     -p "${VM_SSH_PORT}" \
     "${VM_USER}@localhost"
