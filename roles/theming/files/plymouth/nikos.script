@@ -1,0 +1,42 @@
+// NikOS Plymouth boot splash
+// Displays the NikOS logo centered on screen with a fade-in pulse animation.
+
+Window.SetBackgroundTopColor(0.05, 0.05, 0.08);
+Window.SetBackgroundBottomColor(0.02, 0.02, 0.05);
+
+logo_image = Image("nikos-logo.png");
+logo_sprite = Sprite(logo_image);
+
+screen_width  = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+logo_width  = logo_image.GetWidth();
+logo_height = logo_image.GetHeight();
+
+// Scale logo to at most 30% of screen width while preserving aspect ratio
+max_logo_width = Math.Int(screen_width * 0.30);
+if (logo_width > max_logo_width) {
+    scale = max_logo_width / logo_width;
+} else {
+    scale = 1.0;
+}
+scaled_w = Math.Int(logo_width  * scale);
+scaled_h = Math.Int(logo_height * scale);
+
+logo_sprite.SetImage(logo_image.Scale(scaled_w, scaled_h));
+logo_sprite.SetX(Math.Int((screen_width  - scaled_w) / 2));
+logo_sprite.SetY(Math.Int((screen_height - scaled_h) / 2) - 40);
+logo_sprite.SetZ(10);
+
+// Subtle pulse: opacity oscillates between 0.75 and 1.0
+fun refresh_callback() {
+    t = Math.Int(Plymouth.GetBootTime() * 2) % 20;
+    if (t < 10) {
+        alpha = 0.75 + (t / 10.0) * 0.25;
+    } else {
+        alpha = 1.0 - ((t - 10) / 10.0) * 0.25;
+    }
+    logo_sprite.SetOpacity(alpha);
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);

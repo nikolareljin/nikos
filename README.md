@@ -10,7 +10,7 @@ One command turns a fresh Ubuntu install into a fully configured AI workstation 
 
 **Version:** 0.2.0 · **License:** MIT · **Author:** Nikola Reljin
 
-<img src="./assets/nikos-logo.png" />
+<img src="./assets/logo.png" />
 
 ---
 
@@ -44,6 +44,7 @@ bash install.sh
 | GTK theme | Nordic (Nord palette) |
 | Icon theme | Papirus-Dark |
 | Login screen | LightDM + Nordic greeter |
+| Boot splash | Plymouth — NikOS logo on Nord dark |
 | GRUB theme | Nordic |
 | Wallpaper | NikOS logo on Nord dark |
 | Terminal font | JetBrains Mono |

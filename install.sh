@@ -3,6 +3,8 @@ set -euo pipefail
 
 [[ "${EUID}" -eq 0 ]] && { echo "ERROR: Do not run NikOS installer as root. Use a regular user account." >&2; exit 1; }
 
+# Environment variables:
+# REPO_URL: Custom Git repository URL to clone NikOS from (default:
 REPO_URL="${NIKOS_REPO_URL:-https://github.com/nikolareljin/nikos}"
 NIKOS_VERSION="0.2.0"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
@@ -37,6 +39,7 @@ if [[ ${#_need_packages[@]} -gt 0 ]]; then
   sudo apt-get install -y "${_need_packages[@]}"
 fi
 
+# Source repo sync helpers if available, to reuse the git stash/pop logic for smoother updates if the installer is re-run
 _source_repo_sync_helpers() {
   local helpers_path=""
   local script_dir
@@ -58,6 +61,7 @@ _source_repo_sync_helpers() {
   source "${helpers_path}"
 }
 
+# Check if script-helpers is present, which indicates the repo and submodules are properly staged
 _ensure_script_helpers() {
   if [[ -f "${HELPERS}" ]]; then
     return 0
@@ -72,6 +76,7 @@ _ensure_script_helpers() {
   [[ -f "${HELPERS}" ]]
 }
 
+# Pull repo updates with stashing if needed, for smoother experience when re-running the installer
 _pull_repo_updates_bootstrap() {
   local stash_ref=""
 
