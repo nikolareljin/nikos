@@ -149,7 +149,7 @@
   notify: Theming_update_initramfs
 
 - name: Set NikOS as default Plymouth theme
-  ansible.builtin.command: plymouth-set-default-theme -R nikos
+  ansible.builtin.command: /usr/sbin/plymouth-set-default-theme -R nikos
   changed_when: true
   when: not ansible_check_mode
 
