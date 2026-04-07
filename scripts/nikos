@@ -5,7 +5,10 @@ NIKOS_VERSION="0.2.0"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
 REPO_SYNC_HELPERS="${NIKOS_HOME}/scripts/repo-sync.sh"
+# Used by sourced repo sync helpers.
+# shellcheck disable=SC2034
 MAIN_VARS_REL="vars/main.yml"
+# shellcheck disable=SC2034
 LOCAL_VARS_REL="vars/local.yml"
 
 # Source script-helpers if available (installed via submodule)
