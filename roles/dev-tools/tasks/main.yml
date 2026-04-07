@@ -41,7 +41,7 @@
     update: false
 
 - name: Check whether cargo is available for image-view build
-  ansible.builtin.command: command -v cargo
+  ansible.builtin.command: which cargo
   register: dev_tools_cargo_check
   changed_when: false
   failed_when: false

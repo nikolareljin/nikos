@@ -2,7 +2,7 @@
 set -euo pipefail
 
 NIKOS_VERSION="0.2.0"
-NIKOS_HOME="${HOME}/.local/share/nikos"
+NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
 REPO_SYNC_HELPERS="${NIKOS_HOME}/scripts/repo-sync.sh"
 MAIN_VARS_REL="vars/main.yml"

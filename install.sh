@@ -4,7 +4,14 @@ set -euo pipefail
 [[ "${EUID}" -eq 0 ]] && { echo "ERROR: Do not run NikOS installer as root. Use a regular user account." >&2; exit 1; }
 
 # Environment variables:
-# REPO_URL: Custom Git repository URL to clone NikOS from (default:
+# NIKOS_REPO_URL: Custom Git repository URL to clone NikOS from
+#                  (default: https://github.com/nikolareljin/nikos)
+# NIKOS_HOME: Base installation directory for NikOS
+#             (default: ${HOME}/.local/share/nikos)
+# NIKOS_USE_DIALOG: Use dialog-based prompts when available; set to 0 for plain mode
+#                   (default: 1)
+# NIKOS_SKIP_REPO_SYNC: Skip repository synchronization/update logic when set to 1
+#                       (default: 0)
 REPO_URL="${NIKOS_REPO_URL:-https://github.com/nikolareljin/nikos}"
 NIKOS_VERSION="0.2.0"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
