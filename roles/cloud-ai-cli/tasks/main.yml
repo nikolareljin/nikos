@@ -29,6 +29,8 @@
     name: "@google/gemini-cli"
     global: true
     state: present
+  become: true
+  when: not ansible_check_mode
   tags: [ai-gemini]
 
 - name: Check GitHub CLI authentication status

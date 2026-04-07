@@ -10,8 +10,10 @@
   tags: [ai-local]
 
 - name: Install Claude Code globally via npm
+  become: true
   community.general.npm:
     name: "@anthropic-ai/claude-code"
     global: true
     state: present
+  when: not ansible_check_mode
   tags: [ai-claude]

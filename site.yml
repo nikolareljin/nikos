@@ -35,7 +35,7 @@
     - name: Find existing VS Code apt source files before any apt operations
       ansible.builtin.shell: >
         grep -rl "packages.microsoft.com/repos/code"
-        /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null || true
+        /etc/apt/sources.list.d/*.list 2>/dev/null || true
       register: vscode_source_files
       changed_when: false
       tags: [always]
