@@ -90,10 +90,12 @@ wait_for_ssh_key_auth() {
     # After ~30 s without key auth, try a one-shot auto-copy via sshpass
     if [[ $attempts -gt 6 && "${key_copied}" == "false" ]]; then
       log "Key auth not ready — auto-copying SSH key with sshpass..."
-      sshpass -p "${VM_PASS}" ssh-copy-id -i "${SSH_KEY}.pub" \
+      if sshpass -p "${VM_PASS}" ssh-copy-id -i "${SSH_KEY}.pub" \
         -o StrictHostKeyChecking=no \
-        -p "${VM_SSH_PORT}" "${VM_USER}@localhost" 2>/dev/null && key_copied=true || true
-      attempts=0
+        -p "${VM_SSH_PORT}" "${VM_USER}@localhost" 2>/dev/null; then
+        key_copied=true
+        attempts=0
+      fi
     elif [[ $attempts -gt 12 ]]; then
       die "SSH is reachable but key-based login could not be established. Verify the VM password or run: ssh-copy-id -i ${SSH_KEY}.pub -p ${VM_SSH_PORT} ${VM_USER}@localhost"
     fi

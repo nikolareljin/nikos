@@ -66,25 +66,25 @@
     patterns: theme.txt
     recurse: true
     file_type: file
-  register: nordic_grub_theme_files
+  register: theming_nordic_grub_theme_files
   when: not ansible_check_mode
 
 - name: Set Nordic GRUB theme directory
   ansible.builtin.set_fact:
-    nordic_grub_theme_dir: "{{ (nordic_grub_theme_files.files | map(attribute='path') | first) | dirname }}"
+    theming_nordic_grub_theme_dir: "{{ (theming_nordic_grub_theme_files.files | map(attribute='path') | first) | dirname }}"
   when:
     - not ansible_check_mode
-    - (nordic_grub_theme_files.matched | default(0)) | int > 0
+    - (theming_nordic_grub_theme_files.matched | default(0)) | int > 0
 
 - name: Install Nordic GRUB theme
   ansible.builtin.copy:
-    src: "{{ nordic_grub_theme_dir }}/"
+    src: "{{ theming_nordic_grub_theme_dir }}/"
     dest: /boot/grub/themes/Nordic/
     remote_src: true
     mode: "0644"
   when:
     - not ansible_check_mode
-    - nordic_grub_theme_dir is defined
+    - theming_nordic_grub_theme_dir is defined
 
 - name: Configure GRUB to use Nordic theme
   ansible.builtin.lineinfile:
@@ -92,7 +92,7 @@
     regexp: "^#?GRUB_THEME="
     line: 'GRUB_THEME="/boot/grub/themes/Nordic/theme.txt"'
   when:
-    - ansible_check_mode or nordic_grub_theme_dir is defined
+    - ansible_check_mode or theming_nordic_grub_theme_dir is defined
   notify: Theming_update_grub
 
 - name: Warn when Nordic GRUB theme is unavailable
@@ -100,7 +100,7 @@
     msg: "Nordic GRUB theme was not found in the cloned repo; skipping GRUB theme installation."
   when:
     - not ansible_check_mode
-    - nordic_grub_theme_dir is not defined
+    - theming_nordic_grub_theme_dir is not defined
 
 - name: Install Plymouth and themes package
   ansible.builtin.apt:
@@ -149,7 +149,7 @@
   notify: Theming_update_initramfs
 
 - name: Set NikOS as default Plymouth theme
-  ansible.builtin.ini_file:
+  community.general.ini_file:
     path: /etc/plymouth/plymouthd.conf
     section: Daemon
     option: Theme
