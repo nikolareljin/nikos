@@ -34,7 +34,10 @@
   tags: [ai-gemini]
 
 - name: Check whether GitHub CLI is installed
-  ansible.builtin.shell: command -v gh
+  ansible.builtin.command:
+    argv:
+      - which
+      - gh
   register: cloud_ai_cli_gh_installed
   changed_when: false
   failed_when: false
