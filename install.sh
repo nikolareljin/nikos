@@ -21,6 +21,7 @@ USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
 MAIN_VARS_REL="vars/main.yml"
 LOCAL_VARS_REL="vars/local.yml"
 SKIP_REPO_SYNC="${NIKOS_SKIP_REPO_SYNC:-0}"
+ANSIBLE_REQUIREMENTS_REL="requirements.yml"
 
 echo "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
 echo "Light system. Heavy thinking."
@@ -81,6 +82,28 @@ _ensure_script_helpers() {
   fi
 
   [[ -f "${HELPERS}" ]]
+}
+
+_ensure_ansible_collections() {
+  local requirements_path=""
+  local script_dir=""
+
+  if [[ -f "${NIKOS_HOME}/${ANSIBLE_REQUIREMENTS_REL}" ]]; then
+    requirements_path="${NIKOS_HOME}/${ANSIBLE_REQUIREMENTS_REL}"
+  else
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "${script_dir}/${ANSIBLE_REQUIREMENTS_REL}" ]]; then
+      requirements_path="${script_dir}/${ANSIBLE_REQUIREMENTS_REL}"
+    fi
+  fi
+
+  if [[ -z "${requirements_path}" ]]; then
+    echo "ERROR: Ansible collection requirements file not found. Expected ${ANSIBLE_REQUIREMENTS_REL}." >&2
+    exit 1
+  fi
+
+  echo "Installing required Ansible collections..."
+  ansible-galaxy collection install -r "${requirements_path}"
 }
 
 # Pull repo updates with stashing if needed, for smoother experience when re-running the installer
@@ -187,6 +210,8 @@ else
   echo "ERROR: script-helpers is missing from ${NIKOS_HOME}. Check the git/submodule output above and rerun the installer." >&2
   exit 1
 fi
+
+_ensure_ansible_collections
 
 # Bundle selection ─────────────────────────────────────────────────
 _select_bundles_dialog() {

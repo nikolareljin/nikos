@@ -10,6 +10,7 @@ REPO_SYNC_HELPERS="${NIKOS_HOME}/scripts/repo-sync.sh"
 MAIN_VARS_REL="vars/main.yml"
 # shellcheck disable=SC2034
 LOCAL_VARS_REL="vars/local.yml"
+ANSIBLE_REQUIREMENTS="${NIKOS_HOME}/requirements.yml"
 
 # Source script-helpers if available (installed via submodule)
 if [[ -f "${HELPERS}" ]]; then
@@ -49,6 +50,12 @@ _playbook() {
     print_error "NikOS repo not found at ${NIKOS_HOME}. Run the installer first."
     exit 1
   fi
+  if [[ ! -f "${ANSIBLE_REQUIREMENTS}" ]]; then
+    print_error "Ansible collection requirements file not found at ${ANSIBLE_REQUIREMENTS}."
+    exit 1
+  fi
+  print_info "Installing required Ansible collections..."
+  ansible-galaxy collection install -r "${ANSIBLE_REQUIREMENTS}"
   (
     cd "${NIKOS_HOME}"
     ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook \
