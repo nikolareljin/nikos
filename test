@@ -176,6 +176,7 @@ run_installer() {
     --exclude='./.git' \
     --exclude='./PLAN.md' \
     --exclude='./TODO.txt' \
+    --exclude='./vars/local.yml' \
     -cf "${SOURCE_ARCHIVE_LOCAL}" .
 
   log "Staging local NikOS source tree in VM..."
