@@ -5,14 +5,14 @@
     dest: /tmp/nodesource_setup.sh
     mode: "0755"
   become: true
-  tags: [ai-gemini, ai-claude]
+  tags: [ai-node]
 
 - name: Run NodeSource setup
   ansible.builtin.command: bash /tmp/nodesource_setup.sh
   become: true
   changed_when: false
   when: not ansible_check_mode
-  tags: [ai-gemini, ai-claude]
+  tags: [ai-node]
 
 - name: Install Node.js
   ansible.builtin.apt:
@@ -22,7 +22,7 @@
     cache_valid_time: 3600
   become: true
   when: not ansible_check_mode
-  tags: [ai-gemini, ai-claude]
+  tags: [ai-node]
 
 - name: Install Gemini CLI
   community.general.npm:

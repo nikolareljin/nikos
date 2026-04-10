@@ -321,6 +321,10 @@ for _tool in ai-local ai-gemini ai-claude ai-copilot-cli ai-runner ai-vscode; do
   fi
 done
 
+if ! printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -Eqx 'ai-gemini|ai-claude'; then
+  SKIP_TAGS="${SKIP_TAGS},ai-node"
+fi
+
 # Run the playbook from local clone ───────────────────────────────
 if [[ "${_USE_DIALOG}" == "true" ]]; then
   print_info "Running NikOS ${NIKOS_VERSION} playbook..."
