@@ -13,7 +13,7 @@ _migrate_local_vars() {
   local local_vars_path="${NIKOS_HOME}/${LOCAL_VARS_REL}"
 
   if [[ -f "${local_vars_path}" ]]; then
-    return
+    return 0
   fi
 
   if ! git -C "${NIKOS_HOME}" diff --quiet -- "${MAIN_VARS_REL}" || \
@@ -22,6 +22,8 @@ _migrate_local_vars() {
     cp "${main_vars_path}" "${local_vars_path}"
     git -C "${NIKOS_HOME}" restore --staged --worktree --source=HEAD -- "${MAIN_VARS_REL}"
   fi
+
+  return 0
 }
 
 _pull_repo_updates() {
@@ -55,4 +57,6 @@ _pull_repo_updates() {
       return 1
     fi
   fi
+
+  return 0
 }
