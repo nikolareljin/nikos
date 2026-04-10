@@ -149,7 +149,7 @@
   notify: Theming_update_initramfs
 
 - name: Set NikOS as default Plymouth theme
-  ansible.builtin.ini_file:
+  community.general.ini_file:
     path: /etc/plymouth/plymouthd.conf
     section: Daemon
     option: Theme
