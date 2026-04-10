@@ -155,8 +155,21 @@ vm_scp() {
       "$@"
 }
 
+ensure_staged_submodules() {
+  if [[ -f "${SCRIPT_DIR}/scripts/script-helpers/helpers.sh" ]]; then
+    return 0
+  fi
+
+  log "Initializing required git submodules before packaging test sources..."
+  git -C "${SCRIPT_DIR}" submodule update --init --recursive scripts/script-helpers
+
+  [[ -f "${SCRIPT_DIR}/scripts/script-helpers/helpers.sh" ]] || \
+    die "scripts/script-helpers/helpers.sh is still missing after submodule init"
+}
+
 run_installer() {
   [[ -f "${INSTALL_SH_LOCAL}" ]] || die "Local installer not found at ${INSTALL_SH_LOCAL}"
+  ensure_staged_submodules
 
   log "Packaging local NikOS source tree..."
   tar -C "${SCRIPT_DIR}" \
