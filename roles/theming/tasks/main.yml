@@ -82,6 +82,7 @@
     dest: /boot/grub/themes/Nordic/
     remote_src: true
     mode: "0644"
+    directory_mode: "0755"
   when:
     - not ansible_check_mode
     - theming_nordic_grub_theme_dir is defined
