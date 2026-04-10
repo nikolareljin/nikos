@@ -70,6 +70,7 @@ NIKOS_USE_DIALOG=0 bash install.sh
 ```bash
 git clone --recurse-submodules https://github.com/nikolareljin/nikos.git
 cd nikos
+ansible-galaxy collection install -r requirements.yml
 ansible-playbook site.yml -i inventory/local --ask-become-pass
 ```
 
