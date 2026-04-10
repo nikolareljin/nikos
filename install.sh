@@ -15,6 +15,8 @@ set -euo pipefail
 REPO_URL="${NIKOS_REPO_URL:-https://github.com/nikolareljin/nikos}"
 NIKOS_VERSION="0.2.0"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
+NIKOS_CONFIG_DIR="${HOME}/.config/nikos"
+SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
 REPO_SYNC_HELPERS_REL="scripts/repo-sync.sh"
 USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
@@ -104,6 +106,11 @@ _ensure_ansible_collections() {
 
   echo "Installing required Ansible collections..."
   ansible-galaxy collection install -r "${requirements_path}"
+}
+
+_persist_skip_tags() {
+  mkdir -p "${NIKOS_CONFIG_DIR}"
+  printf 'NIKOS_SKIP_TAGS_SAVED=%q\n' "${1}" > "${SELECTIONS_FILE}"
 }
 
 # Pull repo updates with stashing if needed, for smoother experience when re-running the installer
@@ -324,6 +331,8 @@ done
 if ! printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -Eqx 'ai-gemini|ai-claude'; then
   SKIP_TAGS="${SKIP_TAGS},ai-node"
 fi
+
+_persist_skip_tags "${SKIP_TAGS#,}"
 
 # Run the playbook from local clone ───────────────────────────────
 if [[ "${_USE_DIALOG}" == "true" ]]; then

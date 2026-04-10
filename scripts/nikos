@@ -3,6 +3,8 @@ set -euo pipefail
 
 NIKOS_VERSION="0.2.0"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
+NIKOS_CONFIG_DIR="${HOME}/.config/nikos"
+SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
 REPO_SYNC_HELPERS="${NIKOS_HOME}/scripts/repo-sync.sh"
 # Used by sourced repo sync helpers.
@@ -44,8 +46,44 @@ Usage:
 EOF
 }
 
+_get_default_skip_tags() {
+  local skip_tags="${NIKOS_SKIP_TAGS:-}"
+
+  if [[ -n "${skip_tags}" ]]; then
+    printf '%s\n' "${skip_tags#,}"
+    return 0
+  fi
+
+  if [[ -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    source "${SELECTIONS_FILE}"
+    printf '%s\n' "${NIKOS_SKIP_TAGS_SAVED:-}"
+  fi
+}
+
+_save_skip_tags() {
+  mkdir -p "${NIKOS_CONFIG_DIR}"
+  printf 'NIKOS_SKIP_TAGS_SAVED=%q\n' "${1}" > "${SELECTIONS_FILE}"
+}
+
+_remove_skip_tag() {
+  local tag="$1"
+  local skip_tags item
+  local updated=()
+
+  skip_tags="$(_get_default_skip_tags)"
+  IFS=, read -r -a items <<< "${skip_tags}"
+  for item in "${items[@]}"; do
+    [[ -z "${item}" || "${item}" == "${tag}" ]] && continue
+    updated+=("${item}")
+  done
+
+  _save_skip_tags "$(IFS=,; echo "${updated[*]}")"
+}
+
 _playbook() {
   local extra_args=("$@")
+  local skip_tags=""
   if [[ ! -d "${NIKOS_HOME}/.git" ]]; then
     print_error "NikOS repo not found at ${NIKOS_HOME}. Run the installer first."
     exit 1
@@ -56,11 +94,17 @@ _playbook() {
   fi
   print_info "Installing required Ansible collections..."
   ansible-galaxy collection install -r "${ANSIBLE_REQUIREMENTS}"
+  skip_tags="$(_get_default_skip_tags)"
   (
     cd "${NIKOS_HOME}"
-    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook \
-      -i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" \
-      --ask-become-pass "${extra_args[@]}"
+    local playbook_args=(
+      -i "${NIKOS_HOME}/inventory/local"
+      "${NIKOS_HOME}/site.yml"
+      --ask-become-pass
+    )
+    [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
+    playbook_args+=("${extra_args[@]}")
+    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${playbook_args[@]}"
   )
 }
 
@@ -110,6 +154,7 @@ cmd_add() {
   case "${role}" in
     network | music | education)
       print_info "Installing optional bundle: ${role}"
+      _remove_skip_tag "${role}"
       _playbook --tags "${role}"
       ;;
     *)
