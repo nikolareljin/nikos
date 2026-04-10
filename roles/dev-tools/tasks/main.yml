@@ -25,7 +25,7 @@
   when: not ansible_check_mode
 
 - name: Install all developer tools via distrodeck
-  ansible.builtin.command: "{{ nikos_home }}/Projects/distrodeck/distrodeck install-tools"
+  ansible.builtin.command: "{{ nikos_home }}/Projects/distrodeck/distrodeck install-tools --all"
   changed_when: false
   args:
     creates: "{{ nikos_home }}/.local/state/distrodeck/installed-tools.txt"
