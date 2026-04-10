@@ -1,16 +1,3 @@
----
-- name: Remove legacy VS Code apt source file
-  ansible.builtin.file:
-    path: /etc/apt/sources.list.d/vscode.list
-    state: absent
-  become: true
-
-- name: Remove legacy Microsoft VS Code keyring
-  ansible.builtin.file:
-    path: /usr/share/keyrings/microsoft.gpg
-    state: absent
-  become: true
-
 - name: Add Microsoft VS Code apt key
   ansible.builtin.get_url:
     url: https://packages.microsoft.com/keys/microsoft.asc

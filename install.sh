@@ -191,8 +191,8 @@ fi
 # Bundle selection ─────────────────────────────────────────────────
 _select_bundles_dialog() {
   dialog_init
-  local result
-  result=$(
+  local result dialog_status
+  if result=$(
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
       --checklist "Space to toggle, Enter to confirm:" \
@@ -200,14 +200,20 @@ _select_bundles_dialog() {
       "network"   "Network tools (nmap, wireshark, OpenVPN)"         off \
       "music"     "Music tools (LMMS, Ardour, Audacity)"             off \
       "education" "Education tools (LibreOffice, draw.io, Anki)"     off
-  ) || result=""
-  echo "${result}"
+  ); then
+    echo "${result}"
+    return 0
+  else
+    dialog_status=$?
+  fi
+
+  return "${dialog_status}"
 }
 
 _select_ai_tools_dialog() {
   dialog_init
-  local result
-  result=$(
+  local result dialog_status
+  if result=$(
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — AI Tools" \
       --checklist "Space to toggle, Enter to confirm:" \
@@ -218,8 +224,14 @@ _select_ai_tools_dialog() {
       "ai-copilot-cli"  "GitHub Copilot CLI extension"                         on \
       "ai-runner"       "ai-runner local model UI"                             on \
       "ai-vscode"       "AI VS Code extensions (Continue, Copilot)"            on
-  ) || result=""
-  echo "${result}"
+  ); then
+    echo "${result}"
+    return 0
+  else
+    dialog_status=$?
+  fi
+
+  return "${dialog_status}"
 }
 
 _select_bundles_plain() {
@@ -253,11 +265,17 @@ _select_ai_tools_plain() {
 }
 
 if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
-  _raw=$(_select_bundles_dialog)
+  if ! _raw=$(_select_bundles_dialog); then
+    echo "Installer canceled during optional bundle selection." >&2
+    exit 130
+  fi
   # dialog --checklist returns space-separated quoted tokens; normalize
   _raw=${_raw//\"/}
   read -ra SELECTED_BUNDLES <<< "${_raw}"
-  _raw=$(_select_ai_tools_dialog)
+  if ! _raw=$(_select_ai_tools_dialog); then
+    echo "Installer canceled during AI tool selection." >&2
+    exit 130
+  fi
   _raw=${_raw//\"/}
   read -ra SELECTED_AI_TOOLS <<< "${_raw}"
 else
