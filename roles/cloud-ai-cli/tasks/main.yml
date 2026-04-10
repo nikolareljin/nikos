@@ -33,22 +33,48 @@
   when: not ansible_check_mode
   tags: [ai-gemini]
 
+- name: Check whether GitHub CLI is installed
+  ansible.builtin.shell: command -v gh
+  register: cloud_ai_cli_gh_installed
+  changed_when: false
+  failed_when: false
+  tags: [ai-copilot-cli]
+
 - name: Check GitHub CLI authentication status
   ansible.builtin.command: gh auth status
   register: cloud_ai_cli_gh_auth
   changed_when: false
   failed_when: false
+  when: cloud_ai_cli_gh_installed.rc == 0
   tags: [ai-copilot-cli]
 
 - name: Install GitHub Copilot CLI extension
   ansible.builtin.command: gh extension install github/gh-copilot
   args:
     creates: "{{ nikos_home }}/.local/share/gh/extensions/gh-copilot"
-  when: cloud_ai_cli_gh_auth.rc == 0
+  when:
+    - cloud_ai_cli_gh_installed.rc == 0
+    - cloud_ai_cli_gh_auth.rc == 0
+  tags: [ai-copilot-cli]
+
+- name: Skip GitHub Copilot CLI extension because gh is not installed
+  ansible.builtin.debug:
+    msg: "Skipping GitHub Copilot CLI extension install because 'gh' is not installed or not available in PATH."
+  when: cloud_ai_cli_gh_installed.rc != 0
   tags: [ai-copilot-cli]
 
 - name: Skip GitHub Copilot CLI extension until gh is authenticated
   ansible.builtin.debug:
     msg: "Skipping GitHub Copilot CLI extension install because gh is not authenticated yet. Run 'gh auth login' and rerun NikOS update to add it."
-  when: cloud_ai_cli_gh_auth.rc != 0
+  when:
+    - cloud_ai_cli_gh_installed.rc == 0
+    - cloud_ai_cli_gh_auth.rc == 1
+  tags: [ai-copilot-cli]
+
+- name: Skip GitHub Copilot CLI extension because gh auth status failed
+  ansible.builtin.debug:
+    msg: "Skipping GitHub Copilot CLI extension install because 'gh auth status' failed with exit code {{ cloud_ai_cli_gh_auth.rc }}."
+  when:
+    - cloud_ai_cli_gh_installed.rc == 0
+    - cloud_ai_cli_gh_auth.rc not in [0, 1]
   tags: [ai-copilot-cli]
