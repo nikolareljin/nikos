@@ -1,3 +1,4 @@
+---
 - name: Add Microsoft VS Code apt key
   ansible.builtin.get_url:
     url: https://packages.microsoft.com/keys/microsoft.asc
