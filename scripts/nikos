@@ -84,6 +84,11 @@ _remove_skip_tag() {
 _playbook() {
   local extra_args=("$@")
   local skip_tags=""
+  local playbook_args=(
+    -i "${NIKOS_HOME}/inventory/local"
+    "${NIKOS_HOME}/site.yml"
+    --ask-become-pass
+  )
   if [[ ! -d "${NIKOS_HOME}/.git" ]]; then
     print_error "NikOS repo not found at ${NIKOS_HOME}. Run the installer first."
     exit 1
@@ -95,15 +100,10 @@ _playbook() {
   print_info "Installing required Ansible collections..."
   ansible-galaxy collection install -r "${ANSIBLE_REQUIREMENTS}"
   skip_tags="$(_get_default_skip_tags)"
+  [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
+  playbook_args+=("${extra_args[@]}")
   (
     cd "${NIKOS_HOME}"
-    local playbook_args=(
-      -i "${NIKOS_HOME}/inventory/local"
-      "${NIKOS_HOME}/site.yml"
-      --ask-become-pass
-    )
-    [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
-    playbook_args+=("${extra_args[@]}")
     ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${playbook_args[@]}"
   )
 }
