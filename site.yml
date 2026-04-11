@@ -7,6 +7,52 @@
   vars:
     # lookup runs on the controller before privilege escalation — gives the real user's home
     nikos_home: "{{ lookup('env', 'HOME') }}"
+  pre_tasks:
+    - name: Check whether local override vars exist
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/vars/local.yml"
+      register: local_vars_stat
+      tags: [always]
+
+    - name: Load local override vars
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/vars/local.yml"
+      when: local_vars_stat.stat.exists
+      tags: [always]
+
+    - name: Check whether playbook directory is a git checkout
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/.git"
+      register: playbook_git_stat
+      tags: [always]
+
+    - name: Remove legacy VS Code apt source file before any apt operations
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/vscode.list
+        state: absent
+      tags: [always]
+
+    - name: Find existing VS Code apt source files before any apt operations
+      ansible.builtin.shell: >
+        grep -rl "packages.microsoft.com/repos/code"
+        /etc/apt/sources.list.d/*.list 2>/dev/null || true
+      register: vscode_source_files
+      changed_when: false
+      tags: [always]
+
+    - name: Remove existing VS Code apt source files before any apt operations
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ vscode_source_files.stdout_lines }}"
+      when: (vscode_source_files.stdout_lines | length) > 0
+      tags: [always]
+
+    - name: Remove legacy Microsoft VS Code keyring before any apt operations
+      ansible.builtin.file:
+        path: /usr/share/keyrings/microsoft.gpg
+        state: absent
+      tags: [always]
 
   roles:
     - role: base
@@ -16,6 +62,7 @@
       become: false
     - role: ai-stack
       become: false
+      tags: [ai-local]
     - role: editors
       become: false
     - role: cloud-ai-cli
@@ -24,14 +71,30 @@
       become: false
     - role: dev-tools
       become: false
-    - role: optional/network
+    - role: network
       tags: [network]
-    - role: optional/music
+    - role: music
       tags: [music]
-    - role: optional/education
+    - role: education
       tags: [education]
 
   post_tasks:
+    - name: Initialize git submodules (script-helpers)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: git submodule update --init --recursive
+        chdir: "{{ playbook_dir }}"
+      become: false
+      register: submodule_result
+      changed_when: >-
+        submodule_result.rc == 0 and (
+          'Submodule path ' in (submodule_result.stdout | default('')) or
+          'Submodule path ' in (submodule_result.stderr | default('')) or
+          'Cloning into ' in (submodule_result.stdout | default('')) or
+          'Cloning into ' in (submodule_result.stderr | default(''))
+        )
+      when: playbook_git_stat.stat.exists
+      tags: [always]
+
     - name: Check nikos CLI script exists
       ansible.builtin.stat:
         path: "{{ playbook_dir }}/scripts/nikos"

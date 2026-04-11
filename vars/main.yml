@@ -1,8 +1,8 @@
 ---
-nikos_version: "0.1.0"  # NikOS playbook version
+nikos_version: "0.2.0"  # NikOS playbook version
 
 # Timezone and locale
-nikos_timezone: "Europe/Belgrade"
+nikos_timezone: "Europe/London"
 nikos_locale: "en_US.UTF-8"
 
 # Theme
@@ -23,9 +23,14 @@ nikos_vscode_extensions:
   - "Continue.continue"
   - "eamodio.gitlens"
   - "GitHub.copilot"
+  - "nikolareljin.leak-lock"
   - "ms-python.python"
   - "ms-toolsai.jupyter"
   - "arcticicestudio.nord-visual-studio-code"
   - "ms-vscode-remote.remote-ssh"
   - "ms-azuretools.vscode-docker"
   - "humao.rest-client"
+nikos_vscode_ai_extensions:
+  - "Continue.continue"
+  - "GitHub.copilot"
+  - "nikolareljin.leak-lock"

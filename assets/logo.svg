@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="1080.222"
+   height="1080.5"
+   viewBox="0 0 1080.2221 1080.5"
+   version="1.1"
+   id="svg51"
+   sodipodi:docname="logo.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   inkscape:export-filename="logo.png"
+   inkscape:export-xdpi="45.501755"
+   inkscape:export-ydpi="45.501755"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview53"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="0.65104167"
+     inkscape:cx="631.296"
+     inkscape:cy="542.976"
+     inkscape:window-width="1920"
+     inkscape:window-height="1032"
+     inkscape:window-x="0"
+     inkscape:window-y="25"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg51" />
+  <defs
+     id="defs19">
+    <linearGradient
+       id="bg"
+       x1="0"
+       y1="0"
+       x2="1440"
+       y2="1440"
+       gradientTransform="matrix(0.75103632,0,0,0.75,1227.5609,42.028106)"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         style="stop-color:#2e3440"
+         id="stop9" />
+      <stop
+         offset="100%"
+         style="stop-color:#3b4252"
+         id="stop11" />
+    </linearGradient>
+    <radialGradient
+       id="glow"
+       cx="720"
+       cy="691.19995"
+       r="403.20001"
+       gradientTransform="matrix(1.3333333,0,0,0.75,22.387217,681.38147)"
+       fx="720"
+       fy="691.19995"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         style="stop-color:#434c5e;stop-opacity:0.6"
+         id="stop14" />
+      <stop
+         offset="100%"
+         style="stop-color:#2e3440;stop-opacity:0"
+         id="stop16" />
+    </radialGradient>
+  </defs>
+  <!-- Background -->
+  <rect
+     width="1081.4923"
+     height="1080"
+     fill="url(#bg)"
+     id="rect21"
+     x="1227.5609"
+     y="42.028091"
+     style="fill:url(#bg);stroke-width:0.750518" />
+  <rect
+     width="1920"
+     height="1080"
+     fill="url(#glow)"
+     id="rect23"
+     style="fill:url(#glow)"
+     x="22.387218"
+     y="681.38147" />
+  <!--
+    Node centres (all symmetric across x=960):
+      Top-center:    (960, 330)  r=26
+      Upper-left:    (770, 424)  r=33   ←→  Upper-right: (1150, 424) r=24
+      Lower-left:    (775, 617)  52×52 rect  ←→  Lower-right: (1145, 617) r=21
+      Lower-center:  (964, 664)  r=28
+  -->
+  <!-- ── Lines (drawn before nodes so nodes sit on top) ── -->
+  <!-- Upper-left → Top  (bright blue) -->
+  <!-- Top → Upper-right  (muted, symmetric) -->
+  <!-- Lower-left → Lower-center  (bright blue) -->
+  <!-- Lower-center → Lower-right  (muted, symmetric) -->
+  <!-- ── Nodes ── -->
+  <!-- Top-center -->
+  <!-- Upper-left (r=33) ←→ Upper-right (r=24, muted) — same y=424 -->
+  <!-- Lower-left rounded-rect, centre (775,617) ←→ Lower-right circle, centre (1145,617) -->
+  <!-- Lower-center -->
+  <!-- ── Wordmark ── -->
+  <!-- ── Full name ── -->
+  <!-- ── Tagline ── -->
+  <g
+     id="g226"
+     transform="matrix(2.3780886,0,0,2.3780886,-1730.5374,-709.89337)">
+    <line
+       x1="800"
+       y1="409"
+       x2="937"
+       y2="342"
+       stroke="#2196f3"
+       stroke-width="4.5"
+       stroke-linecap="round"
+       id="line25" />
+    <line
+       x1="983"
+       y1="342"
+       x2="1129"
+       y2="409"
+       stroke="#90a4ae"
+       stroke-width="3.5"
+       stroke-linecap="round"
+       opacity="0.85"
+       id="line27" />
+    <line
+       x1="801"
+       y1="623"
+       x2="937"
+       y2="657"
+       stroke="#2196f3"
+       stroke-width="4.5"
+       stroke-linecap="round"
+       id="line29" />
+    <line
+       x1="991"
+       y1="657"
+       x2="1125"
+       y2="623"
+       stroke="#90a4ae"
+       stroke-width="3.5"
+       stroke-linecap="round"
+       opacity="0.85"
+       id="line31" />
+    <circle
+       cx="960"
+       cy="330"
+       r="26"
+       fill="#2196f3"
+       id="circle33" />
+    <circle
+       cx="770"
+       cy="424"
+       r="33"
+       fill="#2196f3"
+       id="circle35" />
+    <circle
+       cx="1150"
+       cy="424"
+       r="24"
+       fill="#90a4ae"
+       id="circle37" />
+    <rect
+       x="749"
+       y="591"
+       width="52"
+       height="52"
+       rx="14"
+       ry="14"
+       fill="#2196f3"
+       id="rect39" />
+    <circle
+       cx="1145"
+       cy="617"
+       r="21"
+       fill="#90a4ae"
+       id="circle41" />
+    <circle
+       cx="964"
+       cy="664"
+       r="28"
+       fill="#2196f3"
+       id="circle43" />
+    <text
+       x="960"
+       y="570"
+       font-family="Arial, 'Helvetica Neue', sans-serif"
+       font-size="118px"
+       font-weight="800"
+       fill="#eceff4"
+       text-anchor="middle"
+       letter-spacing="-3"
+       id="text45">NikOS</text>
+    <text
+       x="960"
+       y="710"
+       font-family="Arial, 'Helvetica Neue', sans-serif"
+       font-size="19px"
+       fill="#81a1c1"
+       text-anchor="middle"
+       letter-spacing="1"
+       opacity="0.85"
+       id="text47">Neural Innovation for Knowledge OS</text>
+    <text
+       x="960"
+       y="748"
+       font-family="'Courier New', monospace"
+       font-size="15px"
+       fill="#4c566a"
+       text-anchor="middle"
+       letter-spacing="5"
+       id="text49">LIGHT SYSTEM. HEAVY THINKING.</text>
+  </g>
+</svg>

@@ -58,10 +58,24 @@
     state: directory
     mode: "0755"
 
+- name: Ensure system-wide whiskermenu config directory exists
+  ansible.builtin.file:
+    path: /etc/xdg/xfce4/whiskermenu
+    state: directory
+    mode: "0755"
+
 - name: Deploy system-wide Xfce panel config
   ansible.builtin.copy:
     src: xfce4-panel.xml
     dest: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy system-wide whiskermenu defaults
+  ansible.builtin.copy:
+    src: whiskermenu-defaults.rc
+    dest: /etc/xdg/xfce4/whiskermenu/defaults.rc
     owner: root
     group: root
     mode: "0644"

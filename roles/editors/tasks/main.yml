@@ -31,9 +31,32 @@
 
 - name: Install VS Code extensions
   ansible.builtin.command: code --install-extension {{ item }} --force
-  loop: "{{ nikos_vscode_extensions }}"
+  loop: >-
+    {{
+      nikos_vscode_extensions
+      | difference(
+          nikos_vscode_ai_extensions
+          if (nikos_vscode_ai_extensions is defined and nikos_vscode_ai_extensions is sequence and nikos_vscode_ai_extensions is not string)
+          else []
+        )
+    }}
   changed_when: false
   when: not ansible_check_mode
+
+- name: Install AI VS Code extensions
+  ansible.builtin.command: code --install-extension {{ item }} --force
+  loop: >-
+    {{
+      nikos_vscode_extensions
+      | intersect(
+          nikos_vscode_ai_extensions
+          if (nikos_vscode_ai_extensions is defined and nikos_vscode_ai_extensions is sequence and nikos_vscode_ai_extensions is not string)
+          else []
+        )
+    }}
+  changed_when: false
+  when: not ansible_check_mode
+  tags: [ai-vscode]
 
 - name: Ensure VS Code user settings directory exists
   ansible.builtin.file:
