@@ -72,7 +72,7 @@ ensure_ssh_port_forward() {
 
 wait_for_ssh_port() {
   log "Waiting for SSH port on localhost:${VM_SSH_PORT}..."
-  attempts=0
+  local attempts=0
   until bash -c "exec 3<>/dev/tcp/127.0.0.1/${VM_SSH_PORT}" &>/dev/null; do
     attempts=$((attempts + 1))
     [[ $attempts -gt 72 ]] && die "SSH port ${VM_SSH_PORT} never opened. Check that the VM is running and the NAT port forward exists."
@@ -284,7 +284,7 @@ if $BUILD; then
   install_openssh_server
   wait_for_ssh_port
   log "Copying SSH public key to VM (non-interactive)..."
-  sshpass -p "${VM_PASS}" ssh-copy-id -i "${SSH_KEY}.pub" \
+  SSHPASS="${VM_PASS}" sshpass -e ssh-copy-id -i "${SSH_KEY}.pub" \
     -o StrictHostKeyChecking=no \
     -p "${VM_SSH_PORT}" \
     "${VM_USER}@localhost"
