@@ -47,12 +47,9 @@
   ansible.builtin.command: code --install-extension {{ item }} --force
   loop: >-
     {{
-      nikos_vscode_extensions
-      | intersect(
-          nikos_vscode_ai_extensions
-          if (nikos_vscode_ai_extensions is defined and nikos_vscode_ai_extensions is sequence and nikos_vscode_ai_extensions is not string)
-          else []
-        )
+      nikos_vscode_ai_extensions
+      if (nikos_vscode_ai_extensions is defined and nikos_vscode_ai_extensions is sequence and nikos_vscode_ai_extensions is not string)
+      else []
     }}
   changed_when: false
   when: not ansible_check_mode
