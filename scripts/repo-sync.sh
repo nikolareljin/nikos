@@ -71,6 +71,7 @@ _pull_repo_updates() {
     _repo_sync_print_info "Re-applying local changes..."
     if ! git -C "${NIKOS_HOME}" stash pop --index "${stash_ref}" >/dev/null; then
       _repo_sync_print_info "Local changes did not reapply cleanly; resolve git conflicts in ${NIKOS_HOME}."
+      _repo_sync_print_stash_recovery "${stash_ref}"
       return 1
     fi
   fi

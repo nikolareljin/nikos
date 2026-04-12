@@ -34,7 +34,8 @@ All notable changes to NikOS are documented here.
 - **`./test` installer flow** now stages the local NikOS source tree into the VM, runs the local
   bootstrap installer with a TTY, and verifies the installed system using checks aligned with optional installs.
 - **`nikos doctor`** now distinguishes optional or first-login-dependent components from hard failures.
-- **Developer tools install flow** now uses distrodeck's interactive TUI instead of forcing `install-tools --all`.
+- **Developer tools install flow** remains automated via distrodeck and currently runs
+  `install-tools --all`.
 - **VS Code extension defaults** now include `nikolareljin.leak-lock`, and AI-oriented extensions
   are tracked separately for optional installation.
 
