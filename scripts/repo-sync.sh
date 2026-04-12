@@ -8,6 +8,18 @@ _repo_sync_print_info() {
   fi
 }
 
+_repo_sync_print_stash_recovery() {
+  local stash_ref="$1"
+
+  [[ -z "${stash_ref}" ]] && return 0
+
+  _repo_sync_print_info "Your local changes were preserved in ${stash_ref}."
+  _repo_sync_print_info "Recover them with:"
+  _repo_sync_print_info "  git -C ${NIKOS_HOME} stash apply ${stash_ref}"
+  _repo_sync_print_info "or:"
+  _repo_sync_print_info "  git -C ${NIKOS_HOME} stash pop ${stash_ref}"
+}
+
 _migrate_local_vars() {
   local main_vars_path="${NIKOS_HOME}/${MAIN_VARS_REL}"
   local local_vars_path="${NIKOS_HOME}/${LOCAL_VARS_REL}"
@@ -42,11 +54,13 @@ _pull_repo_updates() {
 
   if ! git -C "${NIKOS_HOME}" pull --ff-only; then
     _repo_sync_print_info "Failed to pull updates in ${NIKOS_HOME}; repository was not updated."
+    _repo_sync_print_stash_recovery "${stash_ref}"
     return 2
   fi
 
   if ! git -C "${NIKOS_HOME}" submodule update --init --recursive; then
     _repo_sync_print_info "Failed to update git submodules in ${NIKOS_HOME}; resolve the issue before continuing."
+    _repo_sync_print_stash_recovery "${stash_ref}"
     return 3
   fi
 
