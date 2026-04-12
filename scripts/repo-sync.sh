@@ -10,14 +10,17 @@ _repo_sync_print_info() {
 
 _repo_sync_print_stash_recovery() {
   local stash_ref="$1"
+  local quoted_nikos_home
 
   [[ -z "${stash_ref}" ]] && return 0
 
+  printf -v quoted_nikos_home '%q' "${NIKOS_HOME}"
+
   _repo_sync_print_info "Your local changes were preserved in ${stash_ref}."
   _repo_sync_print_info "Recover them with:"
-  _repo_sync_print_info "  git -C ${NIKOS_HOME} stash apply ${stash_ref}"
+  _repo_sync_print_info "  git -C ${quoted_nikos_home} stash apply ${stash_ref}"
   _repo_sync_print_info "or:"
-  _repo_sync_print_info "  git -C ${NIKOS_HOME} stash pop ${stash_ref}"
+  _repo_sync_print_info "  git -C ${quoted_nikos_home} stash pop ${stash_ref}"
 }
 
 _migrate_local_vars() {
