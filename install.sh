@@ -142,7 +142,12 @@ _pull_repo_updates_bootstrap() {
      ! git -C "${NIKOS_HOME}" diff --cached --quiet || \
      [[ -n "$(git -C "${NIKOS_HOME}" ls-files --others --exclude-standard)" ]]; then
     echo "Temporarily stashing local changes before pulling updates..."
-    git -C "${NIKOS_HOME}" stash push --include-untracked --message "nikos-install-autostash" >/dev/null
+    if ! git -C "${NIKOS_HOME}" stash push --include-untracked --message "nikos-install-autostash" >/dev/null; then
+      echo "ERROR: Failed to stash local changes in ${NIKOS_HOME} before pulling updates." >&2
+      echo "This can happen because of permission problems, an index.lock/git state issue, or another repository error." >&2
+      echo "Review the git output above, resolve the issue in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
+      exit 2
+    fi
     stash_ref="stash@{0}"
   fi
 
