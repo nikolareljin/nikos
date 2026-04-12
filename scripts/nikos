@@ -58,7 +58,11 @@ _get_default_skip_tags() {
     # shellcheck source=/dev/null
     source "${SELECTIONS_FILE}"
     printf '%s\n' "${NIKOS_SKIP_TAGS_SAVED:-}"
+  else
+    printf '\n'
   fi
+
+  return 0
 }
 
 _save_skip_tags() {

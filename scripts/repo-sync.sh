@@ -48,7 +48,10 @@ _pull_repo_updates() {
      ! git -C "${NIKOS_HOME}" diff --cached --quiet || \
      [[ -n "$(git -C "${NIKOS_HOME}" ls-files --others --exclude-standard)" ]]; then
     _repo_sync_print_info "Temporarily stashing local changes before pulling updates..."
-    git -C "${NIKOS_HOME}" stash push --include-untracked --message "${stash_label}" >/dev/null
+    if ! git -C "${NIKOS_HOME}" stash push --include-untracked --message "${stash_label}" >/dev/null; then
+      _repo_sync_print_info "Failed to stash local changes in ${NIKOS_HOME}; repository was not updated."
+      return 4
+    fi
     stash_ref="stash@{0}"
   fi
 
