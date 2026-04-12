@@ -185,8 +185,11 @@ if [[ "${SKIP_REPO_SYNC}" == "1" ]]; then
   fi
 else
   if [[ -e "${NIKOS_HOME}" && ! -d "${NIKOS_HOME}/.git" ]]; then
-    echo "ERROR: ${NIKOS_HOME} exists but is not a git checkout. Move or remove that directory, then rerun the installer." >&2
-    exit 1
+    # Allow git clone into an existing empty directory
+    if [[ ! -d "${NIKOS_HOME}" ]] || [[ -n "$(ls -A "${NIKOS_HOME}" 2>/dev/null)" ]]; then
+      echo "ERROR: ${NIKOS_HOME} exists but is not a git checkout. Move or remove that directory, then rerun the installer." >&2
+      exit 1
+    fi
   fi
 
   if [[ -d "${NIKOS_HOME}/.git" ]]; then
