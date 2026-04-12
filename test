@@ -54,7 +54,7 @@ vm_running() { VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | 
 vm_off()     { VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | grep -qE 'VMState="(poweroff|aborted)"'; }
 
 ensure_ssh_port_forward() {
-  local forward_rule="ssh,tcp,,${VM_SSH_PORT},,22"
+  local forward_rule="ssh,tcp,127.0.0.1,${VM_SSH_PORT},,22"
 
   if VBoxManage showvminfo "$VM_NAME" --machinereadable 2>/dev/null | grep -Fq "${forward_rule}"; then
     return 0
