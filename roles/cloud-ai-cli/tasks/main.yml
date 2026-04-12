@@ -56,6 +56,7 @@
   args:
     creates: "{{ nikos_home }}/.local/share/gh/extensions/gh-copilot"
   when:
+    - not ansible_check_mode
     - cloud_ai_cli_gh_installed.rc == 0
     - cloud_ai_cli_gh_auth.rc == 0
   tags: [ai-copilot-cli]
