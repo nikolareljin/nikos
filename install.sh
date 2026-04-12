@@ -108,6 +108,18 @@ _ensure_ansible_collections() {
   ansible-galaxy collection install -r "${requirements_path}"
 }
 
+_print_bootstrap_stash_recovery() {
+  local stash_ref="$1"
+
+  [[ -z "${stash_ref}" ]] && return 0
+
+  echo "Your local changes were preserved in ${stash_ref}." >&2
+  echo "Recover them with:" >&2
+  echo "  git -C ${NIKOS_HOME} stash apply ${stash_ref}" >&2
+  echo "or:" >&2
+  echo "  git -C ${NIKOS_HOME} stash pop ${stash_ref}" >&2
+}
+
 _persist_skip_tags() {
   mkdir -p "${NIKOS_CONFIG_DIR}"
   printf 'NIKOS_SKIP_TAGS_SAVED=%q\n' "${1}" > "${SELECTIONS_FILE}"
@@ -137,12 +149,14 @@ _pull_repo_updates_bootstrap() {
   if ! git -C "${NIKOS_HOME}" pull --ff-only; then
     echo "ERROR: Failed to pull updates for ${NIKOS_HOME}." >&2
     echo "This can happen because of a non-fast-forward branch state, network/authentication issues, or a repository problem." >&2
+    _print_bootstrap_stash_recovery "${stash_ref}"
     echo "Review the git output above, resolve the issue in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
     exit 2
   fi
 
   if ! git -C "${NIKOS_HOME}" submodule update --init --recursive; then
     echo "ERROR: Failed to update NikOS submodules in ${NIKOS_HOME}." >&2
+    _print_bootstrap_stash_recovery "${stash_ref}"
     echo "Review the git output above, verify network access and repository state, then rerun the installer or 'nikos update'." >&2
     exit 3
   fi
