@@ -92,7 +92,9 @@
           'Cloning into ' in (submodule_result.stdout | default('')) or
           'Cloning into ' in (submodule_result.stderr | default(''))
         )
-      when: playbook_git_stat.stat.exists
+      when:
+        - playbook_git_stat.stat.exists
+        - not ansible_check_mode
       tags: [always]
 
     - name: Check nikos CLI script exists
