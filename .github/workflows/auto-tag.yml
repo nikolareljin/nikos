@@ -4,37 +4,13 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+  pull-requests: read
+
 jobs:
-  auto-tag:
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Detect version from release branch merge
-        id: version
-        run: |
-          merge_msg=$(git log -1 --pretty=%s)
-          if [[ "${merge_msg}" =~ release/([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            echo "version=${BASH_REMATCH[1]}" >> "${GITHUB_OUTPUT}"
-          else
-            echo "version=" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Create and push tag
-        if: steps.version.outputs.version != ''
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          if git rev-parse "${VERSION}" >/dev/null 2>&1; then
-            echo "Tag ${VERSION} already exists — skipping."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag "${VERSION}"
-            git push origin "${VERSION}"
-            echo "Tagged ${VERSION} on $(git rev-parse HEAD)"
-          fi
+  tag:
+    uses: nikolareljin/ci-helpers/.github/workflows/auto-tag-release.yml@production
+    with:
+      runner: ubuntu-24.04
+      update_production_tag: false
