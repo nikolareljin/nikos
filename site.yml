@@ -95,7 +95,6 @@
       when:
         - playbook_git_stat.stat.exists
         - not ansible_check_mode
-      tags: [always]
 
     - name: Check nikos CLI script exists
       ansible.builtin.stat:
