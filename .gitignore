@@ -4,6 +4,7 @@ __pycache__/
 .superpowers/
 .env
 *.log
+vars/local.yml
 
 # Editor temporaries
 *.swp

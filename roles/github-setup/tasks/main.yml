@@ -4,6 +4,7 @@
     url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
     dest: /usr/share/keyrings/githubcli-archive-keyring.gpg
     mode: "0644"
+  become: true
 
 - name: Add GitHub CLI apt repository
   ansible.builtin.apt_repository:
@@ -11,6 +12,7 @@
       deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg]
       https://cli.github.com/packages stable main
     filename: github-cli
+  become: true
 
 - name: Install gh CLI
   ansible.builtin.apt:
@@ -18,6 +20,7 @@
     state: present
     update_cache: true
     cache_valid_time: 3600
+  become: true
   when: not ansible_check_mode
 
 - name: Copy GitHub setup wizard

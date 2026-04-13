@@ -26,6 +26,7 @@
       - lsb-release
       - ca-certificates
       - software-properties-common
+      - dialog  # TUI prompts used by install.sh and nikos scripts
       - xfconf
       - inkscape  # required by theming role to export wallpaper SVG to PNG
       - openssh-server  # enables remote access and SSH-based management

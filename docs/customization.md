@@ -1,15 +1,14 @@
 # Customization
 
-All user-facing knobs live in `vars/main.yml`. Edit before running the playbook, or fork the repo and change defaults.
+Keep local overrides in `vars/local.yml`. `site.yml` loads `vars/main.yml` first, then
+overlays any values from `vars/local.yml`, so updates can refresh tracked defaults without
+clobbering your machine-specific settings.
 
-## vars/main.yml reference
+## vars/local.yml reference
 
 ```yaml
-# ── Version ──────────────────────────────────────────
-nikos_version: "0.1.0"
-
 # ── System ───────────────────────────────────────────
-nikos_timezone: "Europe/Belgrade"   # any tz from timedatectl list-timezones
+nikos_timezone: "Europe/London"     # override with any tz from timedatectl list-timezones
 nikos_locale: "en_US.UTF-8"
 
 # ── Theme ─────────────────────────────────────────────
@@ -39,7 +38,7 @@ nikos_vscode_extensions:
 
 ## Changing the Ollama model
 
-Edit `vars/main.yml`:
+Edit `vars/local.yml`:
 
 ```yaml
 ollama_default_model: "llama3.2"
@@ -57,7 +56,7 @@ ollama list
 
 ## Adding VS Code extensions
 
-Add extension IDs (from the VS Code Marketplace URL) to `nikos_vscode_extensions` in `vars/main.yml`, then run `nikos update`.
+Add extension IDs (from the VS Code Marketplace URL) to `nikos_vscode_extensions` in `vars/local.yml`, then run `nikos update`.
 
 ## Adding optional bundles
 
@@ -94,4 +93,10 @@ Fork `nikolareljin/nikos` on GitHub, then install from your fork:
 curl -fsSL https://raw.githubusercontent.com/YOUR_USER/nikos/main/install.sh | bash
 ```
 
-Or change the `REPO_URL` in `install.sh` and `scripts/nikos` to point to your fork.
+Or set `NIKOS_REPO_URL` to your fork URL before running the installer:
+
+```bash
+NIKOS_REPO_URL=https://github.com/YOUR_USER/nikos bash install.sh
+```
+
+This keeps `install.sh` unmodified and works with the repo-sync flow (`nikos update` will continue pulling from your fork).

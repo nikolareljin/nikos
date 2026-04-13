@@ -60,28 +60,133 @@
     state: directory
     mode: "0755"
 
+- name: Locate Nordic GRUB theme
+  ansible.builtin.find:
+    paths: /tmp/Nordic-git
+    patterns: theme.txt
+    recurse: true
+    file_type: file
+  register: theming_nordic_grub_theme_files
+  when: not ansible_check_mode
+
+- name: Set Nordic GRUB theme directory
+  ansible.builtin.set_fact:
+    theming_nordic_grub_theme_dir: "{{ (theming_nordic_grub_theme_files.files | map(attribute='path') | first) | dirname }}"
+  when:
+    - not ansible_check_mode
+    - (theming_nordic_grub_theme_files.matched | default(0)) | int > 0
+
 - name: Install Nordic GRUB theme
   ansible.builtin.copy:
-    # Path validated during VirtualBox testing — adjust if Nordic repo layout differs
-    src: /tmp/Nordic-git/extra/grub2/
+    src: "{{ theming_nordic_grub_theme_dir }}/"
     dest: /boot/grub/themes/Nordic/
     remote_src: true
     mode: "0644"
-  ignore_errors: true # noqa: ignore-errors
-  when: not ansible_check_mode
+    directory_mode: "0755"
+  when:
+    - not ansible_check_mode
+    - theming_nordic_grub_theme_dir is defined
 
 - name: Configure GRUB to use Nordic theme
   ansible.builtin.lineinfile:
     path: /etc/default/grub
     regexp: "^#?GRUB_THEME="
     line: 'GRUB_THEME="/boot/grub/themes/Nordic/theme.txt"'
+  when:
+    - ansible_check_mode or theming_nordic_grub_theme_dir is defined
   notify: Theming_update_grub
+
+- name: Warn when Nordic GRUB theme is unavailable
+  ansible.builtin.debug:
+    msg: "Nordic GRUB theme was not found in the cloned repo; skipping GRUB theme installation."
+  when:
+    - not ansible_check_mode
+    - theming_nordic_grub_theme_dir is not defined
+
+- name: Install Plymouth and themes package
+  ansible.builtin.apt:
+    name:
+      - plymouth
+      - plymouth-themes
+    state: present
+
+- name: Copy NikOS logo PNG to system asset directory
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/logo.png"
+    dest: /usr/share/nikos/logo.png
+    mode: "0644"
+
+- name: Copy NikOS logo SVG to system asset directory
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/logo.svg"
+    dest: /usr/share/nikos/logo.svg
+    mode: "0644"
+
+- name: Create NikOS Plymouth theme directory
+  ansible.builtin.file:
+    path: /usr/share/plymouth/themes/nikos
+    state: directory
+    mode: "0755"
+
+- name: Copy NikOS Plymouth theme descriptor
+  ansible.builtin.copy:
+    src: plymouth/nikos.plymouth
+    dest: /usr/share/plymouth/themes/nikos/nikos.plymouth
+    mode: "0644"
+  notify: Theming_update_initramfs
+
+- name: Copy NikOS Plymouth theme script
+  ansible.builtin.copy:
+    src: plymouth/nikos.script
+    dest: /usr/share/plymouth/themes/nikos/nikos.script
+    mode: "0644"
+  notify: Theming_update_initramfs
+
+- name: Copy NikOS logo into Plymouth theme directory
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/logo.png"
+    dest: /usr/share/plymouth/themes/nikos/nikos-logo.png
+    mode: "0644"
+  notify: Theming_update_initramfs
+
+- name: Set NikOS as default Plymouth theme
+  community.general.ini_file:
+    path: /etc/plymouth/plymouthd.conf
+    section: Daemon
+    option: Theme
+    value: nikos
+    mode: "0644"
+  notify: Theming_update_initramfs
 
 - name: Ensure LightDM config directory exists
   ansible.builtin.file:
     path: /etc/lightdm
     state: directory
     mode: "0755"
+
+- name: Ensure system-wide Xfce xfconf directory exists
+  ansible.builtin.file:
+    path: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
+    state: directory
+    mode: "0755"
+
+- name: Deploy Xfce appearance defaults
+  ansible.builtin.copy:
+    src: xsettings.xml
+    dest: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
+    mode: "0644"
+
+- name: Deploy Xfce window manager theme defaults
+  ansible.builtin.copy:
+    src: xfwm4.xml
+    dest: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+    mode: "0644"
+
+- name: Deploy Xfce wallpaper defaults
+  ansible.builtin.copy:
+    src: xfce4-desktop.xml
+    dest: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+    mode: "0644"
 
 - name: Deploy LightDM GTK greeter config
   ansible.builtin.copy:
