@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=NikOS
+Description=NikOS boot splash — Neural Innovation for Knowledge OS
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/nikos
+ScriptFile=/usr/share/plymouth/themes/nikos/nikos.script

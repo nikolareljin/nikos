@@ -17,9 +17,10 @@ curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos/main/install.sh 
 The script will:
 1. Check you are not running as root
 2. Check you are on an apt-based system
-3. Install Ansible if not present
-4. Ask whether to include optional bundles (network tools, music, education)
-5. Run `ansible-pull` — pulls the playbook from GitHub and applies it
+3. Install bootstrap packages: `git`, `ansible`, and `dialog` unless `NIKOS_USE_DIALOG=0`
+4. Clone the repo (with submodules) to `~/.local/share/nikos`
+5. Present a `dialog` TUI checklist to select optional bundles
+6. Run `ansible-playbook` from the local clone
 
 ## What the playbook does (in order)
 
@@ -54,13 +55,22 @@ The wizard writes `~/.config/nikos/github-configured` on completion and will not
 nikos update
 ```
 
-This runs `ansible-pull` again. All roles are idempotent — already-installed components are skipped.
+This runs `git pull --ff-only` on `~/.local/share/nikos`, then
+`git submodule update --init --recursive`, and finally re-runs the playbook.
+All roles are idempotent — already-installed components are skipped.
+
+To force the plain-prompt installer path instead of the `dialog` UI:
+
+```bash
+NIKOS_USE_DIALOG=0 bash install.sh
+```
 
 ## Manual run (without curl | bash)
 
 ```bash
-git clone https://github.com/nikolareljin/nikos.git
+git clone --recurse-submodules https://github.com/nikolareljin/nikos.git
 cd nikos
+ansible-galaxy collection install -r requirements.yml
 ansible-playbook site.yml -i inventory/local --ask-become-pass
 ```
 
@@ -85,13 +95,15 @@ which automates the full flow (VM creation, unattended OS install, NikOS install
 ./test
 ```
 
-The script pauses once to copy your SSH key to the VM (you'll type the VM password `nikos` once),
+The script waits for SSH, uses `sshpass` to copy your SSH key to the VM non-interactively,
 then runs the installer and prints a `nikos doctor` verification report.
 
-To skip VM/OS setup and re-run only the NikOS install on an existing VM:
+To rebuild the VM from scratch and re-run the full OS + NikOS install flow:
 
 ```bash
-./test --nikos-only
+./test -b
+# or
+./test --build
 ```
 
-**Requirements:** VirtualBox, `curl`, `ssh-copy-id` (from `openssh-client`), ~4 GB RAM free.
+**Requirements:** VirtualBox, `curl`, `sshpass`, OpenSSH client tools (`ssh`, `scp`, `ssh-copy-id`), ~4 GB RAM free.
