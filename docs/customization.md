@@ -93,4 +93,10 @@ Fork `nikolareljin/nikos` on GitHub, then install from your fork:
 curl -fsSL https://raw.githubusercontent.com/YOUR_USER/nikos/main/install.sh | bash
 ```
 
-Or change the `REPO_URL` in `install.sh` and clone the fork into `~/.local/share/nikos`.
+Or set `NIKOS_REPO_URL` to your fork URL before running the installer:
+
+```bash
+NIKOS_REPO_URL=https://github.com/YOUR_USER/nikos bash install.sh
+```
+
+This keeps `install.sh` unmodified and works with the repo-sync flow (`nikos update` will continue pulling from your fork).
