@@ -2,6 +2,19 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.2.1] — 2026-04-14
+
+### Fixed
+- **`./test` VirtualBox repair path** now retries existing VMs that never had `openssh-server`
+  installed. If the SSH port is still closed during the default `./test` flow, NikOS now
+  uses VirtualBox guest control to install and start `openssh-server`, then retries SSH
+  before failing.
+- **`./test -b` unattended desktop boot** now adds `only-ubiquity` so the Xubuntu live ISO
+  launches the installer automatically instead of stopping in the live session and waiting
+  for a manual click on the install shortcut.
+- Version bumped `0.2.0` → `0.2.1` in `vars/main.yml`, `install.sh`, and `scripts/nikos`.
+- **Testing docs** now document the SSH repair behavior for older VirtualBox VMs.
+
 ## [0.2.0] — 2026-04-05
 
 ### Added

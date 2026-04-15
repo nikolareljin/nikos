@@ -96,7 +96,11 @@ which automates the full flow (VM creation, unattended OS install, NikOS install
 ```
 
 The script waits for SSH, uses `sshpass` to copy your SSH key to the VM non-interactively,
-then runs the installer and prints a `nikos doctor` verification report.
+then runs the installer and prints a `nikos doctor` verification report. On older test VMs,
+if SSH is still unavailable, the script now tries to install and start `openssh-server`
+through VirtualBox guest control before retrying the SSH checks. During `./test -b`,
+the unattended Xubuntu desktop boot now also forces the ISO straight into the installer
+instead of stopping at the live session.
 
 To rebuild the VM from scratch and re-run the full OS + NikOS install flow:
 
