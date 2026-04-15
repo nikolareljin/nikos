@@ -1,5 +1,5 @@
 ---
-nikos_version: "0.2.0"  # NikOS playbook version
+nikos_version: "0.2.1"  # NikOS playbook version
 
 # Timezone and locale
 nikos_timezone: "Europe/London"

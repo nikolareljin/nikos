@@ -10,7 +10,7 @@
 # -b pauses once after OS install so you can type the VM password
 # into ssh-copy-id (sets up key-based auth for all subsequent steps).
 #
-# Dependencies: VirtualBox, curl, ssh-copy-id
+# Dependencies: VirtualBox, curl, ssh-copy-id, sshpass
 
 set -euo pipefail
 
@@ -75,7 +75,9 @@ wait_for_ssh_port() {
   local attempts=0
   until bash -c "exec 3<>/dev/tcp/127.0.0.1/${VM_SSH_PORT}" &>/dev/null; do
     attempts=$((attempts + 1))
-    [[ $attempts -gt 72 ]] && die "SSH port ${VM_SSH_PORT} never opened. Check that the VM is running and the NAT port forward exists."
+    if [[ $attempts -gt 72 ]]; then
+      return 1
+    fi
     sleep 5
   done
   log "SSH port is open."
@@ -131,7 +133,11 @@ install_openssh_server() {
 }
 
 wait_for_ssh() {
-  wait_for_ssh_port
+  if ! wait_for_ssh_port; then
+    log "SSH port is still closed — attempting to install openssh-server via guest control..."
+    install_openssh_server
+    wait_for_ssh_port || die "SSH port ${VM_SSH_PORT} never opened after installing openssh-server. Check Guest Additions and VM networking."
+  fi
   wait_for_ssh_key_auth
 }
 
@@ -263,6 +269,7 @@ if $BUILD; then
     --country=US \
     --time-zone=UTC \
     --locale=en_US \
+    --extra-install-kernel-parameters="only-ubiquity" \
     --install-additions \
     --start-vm=headless
 
