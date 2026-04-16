@@ -30,6 +30,36 @@ def test_is_git_identity_set_returns_false_when_empty():
         assert wizard.is_git_identity_set() is False
 
 
+def test_is_ssh_key_on_github_returns_true_when_key_present():
+    with patch("nikos_github_wizard.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="nikos  ssh-ed25519 AAAA...")
+        assert wizard.is_ssh_key_on_github() is True
+
+
+def test_is_ssh_key_on_github_returns_false_when_key_absent():
+    with patch("nikos_github_wizard.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="other-key  ssh-ed25519 BBBB...")
+        assert wizard.is_ssh_key_on_github() is False
+
+
+def test_is_ssh_key_on_github_assumes_present_when_scope_missing(capsys):
+    with patch("nikos_github_wizard.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stderr="This API operation needs the \"admin:public_key\" scope.",
+        )
+        result = wizard.is_ssh_key_on_github()
+    assert result is True
+    captured = capsys.readouterr()
+    assert "admin:public_key" in captured.out
+
+
+def test_is_ssh_key_on_github_returns_false_on_other_error():
+    with patch("nikos_github_wizard.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1, stderr="network error")
+        assert wizard.is_ssh_key_on_github() is False
+
+
 def test_main_exits_early_if_already_configured(tmp_path, monkeypatch):
     flag = tmp_path / "github-configured"
     flag.touch()

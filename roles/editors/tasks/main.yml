@@ -1,17 +1,51 @@
 ---
-- name: Add Microsoft VS Code apt key
+# VS Code's own dpkg postinst script writes vscode.sources (DEB822 format) using
+# microsoft.gpg (binary/dearmored). Using the same keyring path and format here
+# makes VS Code's postinst idempotent (it overwrites with identical content) and
+# prevents the "Conflicting values set for option Signed-By" apt error that occurs
+# when our entry and VS Code's entry disagree on the keyring path.
+- name: Download Microsoft VS Code apt key
   ansible.builtin.get_url:
     url: https://packages.microsoft.com/keys/microsoft.asc
-    dest: /usr/share/keyrings/microsoft.asc
+    dest: /tmp/microsoft.asc
+    mode: "0644"
+  check_mode: false
+  become: true
+
+- name: Dearmor Microsoft VS Code apt key to temp file
+  ansible.builtin.command:
+    cmd: gpg --dearmor --yes -o /tmp/microsoft.gpg /tmp/microsoft.asc
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Install refreshed Microsoft VS Code apt key
+  ansible.builtin.copy:
+    src: /tmp/microsoft.gpg
+    remote_src: true
+    dest: /usr/share/keyrings/microsoft.gpg
     mode: "0644"
   become: true
 
-- name: Add VS Code apt repository
-  ansible.builtin.apt_repository:
-    repo: >-
-      deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.asc]
-      https://packages.microsoft.com/repos/code stable main
-    filename: vscode
+- name: Remove temporary Microsoft VS Code apt key files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/microsoft.asc
+    - /tmp/microsoft.gpg
+  become: true
+
+- name: Add VS Code apt repository (DEB822)
+  ansible.builtin.deb822_repository:
+    name: vscode
+    types: deb
+    uris: https://packages.microsoft.com/repos/code
+    suites: stable
+    components: main
+    architectures: amd64
+    signed_by: /usr/share/keyrings/microsoft.gpg
+    state: present
   become: true
 
 - name: Install VS Code
@@ -40,7 +74,15 @@
           else []
         )
     }}
+  register: editors_ext_result
   changed_when: false
+  # Ansible evaluates failed_when per loop iteration; at that point the registered
+  # variable holds the current item's result dict (.rc, .stderr), not the aggregate.
+  # VS Code refuses to downgrade built-in bundled extensions — safe to ignore since
+  # the installed version is already newer. Any other non-zero rc is a real failure.
+  failed_when: >-
+    editors_ext_result.rc != 0 and
+    'cannot be downgraded' not in (editors_ext_result.stderr | default(''))
   when: not ansible_check_mode
 
 - name: Install AI VS Code extensions
@@ -51,7 +93,12 @@
       if (nikos_vscode_ai_extensions is defined and nikos_vscode_ai_extensions is sequence and nikos_vscode_ai_extensions is not string)
       else []
     }}
+  register: editors_ai_ext_result
   changed_when: false
+  # See comment on the non-AI extensions task above — same per-iteration semantics.
+  failed_when: >-
+    editors_ai_ext_result.rc != 0 and
+    'cannot be downgraded' not in (editors_ai_ext_result.stderr | default(''))
   when: not ansible_check_mode
   tags: [ai-vscode]
 
