@@ -46,6 +46,23 @@
   changed_when: false
   failed_when: false
 
+- name: Check whether image-view binary is already installed
+  ansible.builtin.stat:
+    path: "{{ nikos_home }}/.local/bin/image-view"
+  register: dev_tools_image_view_bin
+
+- name: Remove image-view Cargo.lock before build
+  # Cargo.lock version 4 (written by Cargo 1.78+) cannot be parsed by older
+  # stable/apt-installed Cargo. Removing it lets the installed cargo regenerate
+  # it in the correct format for the version in use.
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/Projects/image-view/Cargo.lock"
+    state: absent
+  when:
+    - not ansible_check_mode
+    - dev_tools_cargo_check.rc == 0
+    - not dev_tools_image_view_bin.stat.exists
+
 - name: Build and install image-view
   ansible.builtin.command: "{{ nikos_home }}/Projects/image-view/setup"
   environment:
