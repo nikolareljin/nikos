@@ -26,14 +26,18 @@ All notable changes to NikOS are documented here.
   for a manual click on the install shortcut.
 - Version bumped `0.2.0` → `0.2.1` in `vars/main.yml`, `install.sh`, and `scripts/nikos`.
 - **Testing docs** now document the SSH repair behavior for older VirtualBox VMs.
-- **VS Code apt source conflict** (`Conflicting values set for option Signed-By`) fixed.
-  The pre-playbook cleanup only searched `*.list` files, silently missing
-  `vscode.sources` (DEB822 format written by `software-properties-common`).
-  With both files present the same repo appeared twice with different `Signed-By`
-  keyrings, blocking all subsequent apt operations. Fix: explicitly remove both
-  `vscode.list` and `vscode.sources` as legacy paths, and broaden the grep to
-  search the entire `sources.list.d/` directory (not just `*.list`) so any
-  future format variants are also caught.
+- **VS Code apt source conflict** (`Conflicting values set for option Signed-By`)
+  fixed systematically. Root cause: VS Code's own `dpkg` postinst script detects
+  `vscode.list`, writes `vscode.sources` (DEB822 format, `Signed-By: microsoft.gpg`),
+  then deletes `vscode.list`. The playbook was writing `vscode.list` with
+  `microsoft.asc`, so every VS Code install/upgrade left both files present with
+  different keyring paths — causing apt to refuse to read its source list.
+  Fix: align with VS Code's own format. The editors role now downloads and dearmors
+  the key to `microsoft.gpg` and registers the repository via
+  `ansible.builtin.deb822_repository` (`vscode.sources`). VS Code's postinst now
+  overwrites the entry with identical content, making it fully idempotent. The
+  pre-playbook cleanup now only removes the legacy `vscode.list`; `vscode.sources`
+  and `microsoft.gpg` are no longer treated as legacy artifacts to be deleted.
 - **VS Code extension downgrade conflict** no longer fails the playbook. When
   `code --install-extension` refuses to downgrade a built-in bundled extension
   (e.g. `github.copilot-chat` already at a newer built-in version), the task now
