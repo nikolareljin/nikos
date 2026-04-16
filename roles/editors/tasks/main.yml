@@ -4,11 +4,16 @@
 # makes VS Code's postinst idempotent (it overwrites with identical content) and
 # prevents the "Conflicting values set for option Signed-By" apt error that occurs
 # when our entry and VS Code's entry disagree on the keyring path.
-- name: Download and dearmor Microsoft VS Code apt key
-  ansible.builtin.shell:
-    cmd: >
-      curl -fsSL https://packages.microsoft.com/keys/microsoft.asc
-      | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg
+- name: Download Microsoft VS Code apt key
+  ansible.builtin.get_url:
+    url: https://packages.microsoft.com/keys/microsoft.asc
+    dest: /tmp/microsoft.asc
+    mode: "0644"
+  become: true
+
+- name: Dearmor Microsoft VS Code apt key
+  ansible.builtin.command:
+    cmd: gpg --dearmor -o /usr/share/keyrings/microsoft.gpg /tmp/microsoft.asc
     creates: /usr/share/keyrings/microsoft.gpg
   become: true
 
@@ -50,13 +55,13 @@
           else []
         )
     }}
-  register: _ext_result
+  register: editors_ext_result
   changed_when: false
   # VS Code refuses to downgrade built-in bundled extensions; that is safe to ignore
   # (the installed version is already newer). Any other non-zero rc is a real failure.
   failed_when: >-
-    _ext_result.rc != 0 and
-    'cannot be downgraded' not in (_ext_result.stderr | default(''))
+    editors_ext_result.rc != 0 and
+    'cannot be downgraded' not in (editors_ext_result.stderr | default(''))
   when: not ansible_check_mode
 
 - name: Install AI VS Code extensions
@@ -67,11 +72,11 @@
       if (nikos_vscode_ai_extensions is defined and nikos_vscode_ai_extensions is sequence and nikos_vscode_ai_extensions is not string)
       else []
     }}
-  register: _ai_ext_result
+  register: editors_ai_ext_result
   changed_when: false
   failed_when: >-
-    _ai_ext_result.rc != 0 and
-    'cannot be downgraded' not in (_ai_ext_result.stderr | default(''))
+    editors_ai_ext_result.rc != 0 and
+    'cannot be downgraded' not in (editors_ai_ext_result.stderr | default(''))
   when: not ansible_check_mode
   tags: [ai-vscode]
 
