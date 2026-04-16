@@ -4,6 +4,18 @@ All notable changes to NikOS are documented here.
 
 ## [0.2.1] — 2026-04-14
 
+### Added
+- **Install logging** — `install.sh` and `scripts/nikos` now write timestamped log files
+  to `~/.config/nikos/logs/`. Each installer run produces
+  `install-YYYYMMDD-HHMMSS.log`; each `nikos setup/update/add` run produces
+  `nikos-YYYYMMDD-HHMMSS-playbook.log`. A `*-latest.log` symlink always points at the
+  most recent run. The full Ansible playbook output (stdout + stderr) is captured via
+  `tee`, ANSI escape codes are stripped from the file, and a summary block reporting
+  `ok/changed/failed/unreachable` counts plus the names of any failed tasks is printed
+  at the end of every run.
+- **`nikos log [N]`** — new CLI command; shows the last N lines (default 50) of the
+  latest playbook log. `nikos log list` lists all available log files.
+
 ### Fixed
 - **`./test` VirtualBox repair path** now retries existing VMs that never had `openssh-server`
   installed. If the SSH port is still closed during the default `./test` flow, NikOS now

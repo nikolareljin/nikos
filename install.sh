@@ -18,12 +18,74 @@ NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 NIKOS_CONFIG_DIR="${HOME}/.config/nikos"
 SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
+NIKOS_LOG_DIR="${NIKOS_CONFIG_DIR}/logs"
+INSTALL_LOG="${NIKOS_LOG_DIR}/install-$(date +%Y%m%d-%H%M%S).log"
 REPO_SYNC_HELPERS_REL="scripts/repo-sync.sh"
 USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
 MAIN_VARS_REL="vars/main.yml"
 LOCAL_VARS_REL="vars/local.yml"
 SKIP_REPO_SYNC="${NIKOS_SKIP_REPO_SYNC:-0}"
 ANSIBLE_REQUIREMENTS_REL="requirements.yml"
+
+# Log file helpers (available before script-helpers is sourced)
+_logfile() {
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "${INSTALL_LOG}"
+}
+
+# Strip ANSI escape codes from the log after a tee'd run
+_strip_ansi_from_log() {
+  sed -i 's/\x1b\[[0-9;:]*[a-zA-Z]//g' "${INSTALL_LOG}" 2>/dev/null || true
+}
+
+# Parse Ansible PLAY RECAP and print a summary to screen + log
+_install_summary() {
+  local rc="${1:-0}"
+
+  _strip_ansi_from_log
+
+  local recap ok=0 changed=0 failed=0 unreachable=0
+  recap=$(grep -A2 "^PLAY RECAP" "${INSTALL_LOG}" 2>/dev/null | grep "localhost" || true)
+  if [[ -n "${recap}" ]]; then
+    ok=$(echo "${recap}"          | grep -oP 'ok=\K[0-9]+' || echo 0)
+    changed=$(echo "${recap}"     | grep -oP 'changed=\K[0-9]+' || echo 0)
+    failed=$(echo "${recap}"      | grep -oP 'failed=\K[0-9]+' || echo 0)
+    unreachable=$(echo "${recap}" | grep -oP 'unreachable=\K[0-9]+' || echo 0)
+  fi
+
+  echo ""
+  echo "----------------------------------------"
+  echo "NikOS ${NIKOS_VERSION} install summary"
+  echo "  Tasks OK:       ${ok}"
+  echo "  Tasks changed:  ${changed}"
+  [[ "${failed}"      -gt 0 ]] && echo "  Tasks FAILED:   ${failed}"
+  [[ "${unreachable}" -gt 0 ]] && echo "  Unreachable:    ${unreachable}"
+
+  if [[ "${failed}" -gt 0 || "${unreachable}" -gt 0 ]]; then
+    echo ""
+    echo "Failed tasks:"
+    awk '/^TASK \[/{task=$0} /fatal: \[/{print task}' "${INSTALL_LOG}" 2>/dev/null \
+      | sed 's/^TASK \[//;s/\] \*.*$//' \
+      | sort -u \
+      | while IFS= read -r t; do echo "  - ${t}"; done
+  fi
+
+  echo ""
+  echo "Full log: ${INSTALL_LOG}"
+  echo "Latest:   ${NIKOS_LOG_DIR}/install-latest.log"
+  echo "----------------------------------------"
+
+  _logfile "[SUMMARY] rc=${rc} ok=${ok} changed=${changed} failed=${failed} unreachable=${unreachable}"
+  if [[ "${rc}" -ne 0 ]]; then
+    _logfile "[FAILED] Playbook exited with rc=${rc}"
+  else
+    _logfile "[DONE] Install complete"
+  fi
+}
+
+mkdir -p "${NIKOS_LOG_DIR}"
+ln -sf "${INSTALL_LOG}" "${NIKOS_LOG_DIR}/install-latest.log"
+_logfile "=== NikOS ${NIKOS_VERSION} install started ==="
+_logfile "User: $(id -un)   Host: $(hostname -s)"
 
 echo "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
 echo "Light system. Heavy thinking."
@@ -45,8 +107,12 @@ fi
 
 if [[ ${#_need_packages[@]} -gt 0 ]]; then
   echo "Installing bootstrap packages: ${_need_packages[*]}"
+  _logfile "Bootstrap packages: ${_need_packages[*]}"
   sudo apt-get update -qq
   sudo apt-get install -y "${_need_packages[@]}"
+  _logfile "Bootstrap packages installed OK"
+else
+  _logfile "Bootstrap packages: none needed"
 fi
 
 # Source repo sync helpers if available, to reuse the git stash/pop logic for smoother updates if the installer is re-run
@@ -194,6 +260,7 @@ else
 
   if [[ -d "${NIKOS_HOME}/.git" ]]; then
     echo "Updating NikOS repo at ${NIKOS_HOME}..."
+    _logfile "Updating repo at ${NIKOS_HOME}"
     if _source_repo_sync_helpers; then
       if _pull_repo_updates "nikos-install-autostash"; then
         :
@@ -220,7 +287,9 @@ else
     fi
   else
     echo "Cloning NikOS repo to ${NIKOS_HOME}..."
+    _logfile "Cloning repo from ${REPO_URL} to ${NIKOS_HOME}"
     git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"
+    _logfile "Repo cloned OK"
   fi
 fi
 
@@ -355,6 +424,9 @@ if ! printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -Eqx 'ai-gemini|ai-claude'; 
 fi
 
 _persist_skip_tags "${SKIP_TAGS#,}"
+_logfile "Selected bundles: ${SELECTED_BUNDLES[*]:-none}"
+_logfile "Selected AI tools: ${SELECTED_AI_TOOLS[*]:-none}"
+_logfile "Skip tags: ${SKIP_TAGS#,}"
 
 # Run the playbook from local clone ───────────────────────────────
 if [[ "${_USE_DIALOG}" == "true" ]]; then
@@ -366,11 +438,25 @@ fi
 PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
 [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
 
+_logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
+_logfile "--- ansible-playbook output start ---"
+
+_playbook_rc=0
 (
   cd "${NIKOS_HOME}"
   ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
-)
+) 2>&1 | tee -a "${INSTALL_LOG}" || _playbook_rc=${PIPESTATUS[0]}
+
+_logfile "--- ansible-playbook output end ---"
+
+_install_summary "${_playbook_rc}"
 
 echo ""
-echo "NikOS ${NIKOS_VERSION} installation complete."
-echo "Log out and back in to start Xfce."
+if [[ "${_playbook_rc}" -eq 0 ]]; then
+  echo "NikOS ${NIKOS_VERSION} installation complete."
+  echo "Log out and back in to start Xfce."
+else
+  echo "NikOS ${NIKOS_VERSION} installation finished with errors (rc=${_playbook_rc})."
+  echo "Review the log above or: cat ${INSTALL_LOG}"
+  exit "${_playbook_rc}"
+fi
