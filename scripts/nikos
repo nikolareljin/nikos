@@ -6,6 +6,7 @@ NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 NIKOS_CONFIG_DIR="${HOME}/.config/nikos"
 SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
+NIKOS_LOG_DIR="${NIKOS_CONFIG_DIR}/logs"
 REPO_SYNC_HELPERS="${NIKOS_HOME}/scripts/repo-sync.sh"
 # Used by sourced repo sync helpers.
 # shellcheck disable=SC2034
@@ -13,6 +14,56 @@ MAIN_VARS_REL="vars/main.yml"
 # shellcheck disable=SC2034
 LOCAL_VARS_REL="vars/local.yml"
 ANSIBLE_REQUIREMENTS="${NIKOS_HOME}/requirements.yml"
+
+_logfile() {
+  local log_file="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d).log"
+  mkdir -p "${NIKOS_LOG_DIR}"
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "${log_file}"
+}
+
+# Strip ANSI escape codes from a log file
+_strip_ansi_from_log() {
+  sed -i 's/\x1b\[[0-9;:]*[a-zA-Z]//g' "$1" 2>/dev/null || true
+}
+
+# Parse Ansible PLAY RECAP and print a summary
+_playbook_summary() {
+  local log_file="$1" rc="${2:-0}"
+
+  _strip_ansi_from_log "${log_file}"
+
+  local recap ok=0 changed=0 failed=0 unreachable=0
+  recap=$(grep -A2 "^PLAY RECAP" "${log_file}" 2>/dev/null | grep "localhost" || true)
+  if [[ -n "${recap}" ]]; then
+    ok=$(echo "${recap}"          | grep -oP 'ok=\K[0-9]+' || echo 0)
+    changed=$(echo "${recap}"     | grep -oP 'changed=\K[0-9]+' || echo 0)
+    failed=$(echo "${recap}"      | grep -oP 'failed=\K[0-9]+' || echo 0)
+    unreachable=$(echo "${recap}" | grep -oP 'unreachable=\K[0-9]+' || echo 0)
+  fi
+
+  echo ""
+  echo "----------------------------------------"
+  echo "Playbook summary"
+  echo "  Tasks OK:       ${ok}"
+  echo "  Tasks changed:  ${changed}"
+  [[ "${failed}"      -gt 0 ]] && echo "  Tasks FAILED:   ${failed}"
+  [[ "${unreachable}" -gt 0 ]] && echo "  Unreachable:    ${unreachable}"
+
+  if [[ "${failed}" -gt 0 || "${unreachable}" -gt 0 ]]; then
+    echo ""
+    echo "Failed tasks:"
+    awk '/^TASK \[/{task=$0} /fatal: \[/{print task}' "${log_file}" 2>/dev/null \
+      | sed 's/^TASK \[//;s/\] \*.*$//' \
+      | sort -u \
+      | while IFS= read -r t; do echo "  - ${t}"; done
+  fi
+
+  echo ""
+  echo "Log: ${log_file}"
+  echo "----------------------------------------"
+
+  _logfile "[SUMMARY] rc=${rc} ok=${ok} changed=${changed} failed=${failed} unreachable=${unreachable}"
+}
 
 # Source script-helpers if available (installed via submodule)
 if [[ -f "${HELPERS}" ]]; then
@@ -42,6 +93,8 @@ Usage:
   nikos add <name>       Install optional role: network | music | education
   nikos status           Show NikOS version, Ollama models, installed roles
   nikos doctor           Check for broken configs and missing dependencies
+  nikos log [N]          Show last N lines of the latest playbook log (default 50)
+  nikos log list         List available log files
   nikos help             Show this message
 EOF
 }
@@ -106,10 +159,23 @@ _playbook() {
   skip_tags="$(_get_default_skip_tags)"
   [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
   playbook_args+=("${extra_args[@]}")
+
+  local run_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-playbook.log"
+  mkdir -p "${NIKOS_LOG_DIR}"
+  ln -sf "${run_log}" "${NIKOS_LOG_DIR}/playbook-latest.log"
+  _logfile "Playbook start: ansible-playbook ${playbook_args[*]}"
+  _logfile "--- ansible-playbook output start ---"
+
+  local _rc=0
   (
     cd "${NIKOS_HOME}"
     ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${playbook_args[@]}"
-  )
+  ) 2>&1 | tee -a "${run_log}" || _rc=${PIPESTATUS[0]}
+
+  _logfile "--- ansible-playbook output end ---"
+  _playbook_summary "${run_log}" "${_rc}"
+
+  return "${_rc}"
 }
 
 cmd_setup() {
@@ -235,12 +301,44 @@ cmd_doctor() {
   fi
 }
 
+cmd_log() {
+  local arg="${1:-50}"
+  if [[ "${arg}" == "list" ]]; then
+    if [[ ! -d "${NIKOS_LOG_DIR}" ]]; then
+      print_info "No logs yet. Run 'nikos setup' or 'nikos update' first."
+      return 0
+    fi
+    print_info "Available logs in ${NIKOS_LOG_DIR}:"
+    ls -lt "${NIKOS_LOG_DIR}"/*.log 2>/dev/null \
+      | awk '{print "  " $NF}' \
+      | grep -v 'latest' \
+      || echo "  (none)"
+    return 0
+  fi
+
+  local latest="${NIKOS_LOG_DIR}/playbook-latest.log"
+  if [[ ! -f "${latest}" ]]; then
+    # Fall back to install log if no playbook log exists yet
+    latest="${NIKOS_LOG_DIR}/install-latest.log"
+  fi
+  if [[ ! -f "${latest}" ]]; then
+    print_info "No log found. Run 'nikos setup' first."
+    return 0
+  fi
+
+  print_info "Last ${arg} lines of $(readlink -f "${latest}"):"
+  echo "----------------------------------------"
+  tail -n "${arg}" "${latest}"
+  echo "----------------------------------------"
+}
+
 case "${1:-help}" in
   setup)  cmd_setup ;;
   update) cmd_update ;;
   add)    cmd_add "${2:-}" ;;
   status) cmd_status ;;
   doctor) cmd_doctor ;;
+  log)    cmd_log "${2:-50}" ;;
   help | --help | -h) usage ;;
   *)
     print_error "Unknown command: ${1}"
