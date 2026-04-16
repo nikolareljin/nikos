@@ -14,6 +14,15 @@ All notable changes to NikOS are documented here.
   for a manual click on the install shortcut.
 - Version bumped `0.2.0` → `0.2.1` in `vars/main.yml`, `install.sh`, and `scripts/nikos`.
 - **Testing docs** now document the SSH repair behavior for older VirtualBox VMs.
+- **GitHub setup wizard crash loop** fixed. When `gh` lacks the `admin:public_key` OAuth
+  scope, `gh ssh-key list` returns a non-zero exit code; the wizard previously misread this
+  as "key not uploaded", attempted `gh ssh-key add`, crashed with an unhandled
+  `CalledProcessError`, and never wrote the completion flag — causing the wizard to re-run
+  on every shell session. Fixed by treating a scope-missing error as "assume present, warn
+  user" rather than triggering an upload attempt. The `gh ssh-key add` call is also now
+  wrapped in a try/except for a clean error message instead of a traceback. The `main()`
+  early-exit no longer prints a noisy message on sessions where setup is already complete.
+  Four new unit tests cover the scope-missing, key-present, key-absent, and other-error paths.
 
 ## [0.2.0] — 2026-04-05
 
