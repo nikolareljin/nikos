@@ -9,6 +9,7 @@
     url: https://packages.microsoft.com/keys/microsoft.asc
     dest: /tmp/microsoft.asc
     mode: "0644"
+  check_mode: false
   become: true
 
 - name: Dearmor Microsoft VS Code apt key to temp file
