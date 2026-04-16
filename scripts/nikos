@@ -16,7 +16,8 @@ LOCAL_VARS_REL="vars/local.yml"
 ANSIBLE_REQUIREMENTS="${NIKOS_HOME}/requirements.yml"
 
 _logfile() {
-  local log_file="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d).log"
+  local log_file
+  log_file="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d).log"
   mkdir -p "${NIKOS_LOG_DIR}"
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "${log_file}"
 }
@@ -160,7 +161,8 @@ _playbook() {
   [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
   playbook_args+=("${extra_args[@]}")
 
-  local run_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-playbook.log"
+  local run_log
+  run_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-playbook.log"
   mkdir -p "${NIKOS_LOG_DIR}"
   ln -sf "${run_log}" "${NIKOS_LOG_DIR}/playbook-latest.log"
   _logfile "Playbook start: ansible-playbook ${playbook_args[*]}"
@@ -309,9 +311,9 @@ cmd_log() {
       return 0
     fi
     print_info "Available logs in ${NIKOS_LOG_DIR}:"
-    ls -lt "${NIKOS_LOG_DIR}"/*.log 2>/dev/null \
-      | awk '{print "  " $NF}' \
-      | grep -v 'latest' \
+    find "${NIKOS_LOG_DIR}" -maxdepth 1 -name '*.log' ! -name '*latest*' \
+      -printf '%T@ %p\n' 2>/dev/null \
+      | sort -rn | awk '{print "  " $2}' \
       || echo "  (none)"
     return 0
   fi
