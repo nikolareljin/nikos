@@ -26,32 +26,32 @@
       register: playbook_git_stat
       tags: [always]
 
-    - name: Remove legacy VS Code apt source file before any apt operations
+    # Remove any old-format vscode.list entry. The playbook now uses DEB822
+    # (vscode.sources + microsoft.gpg) which matches what VS Code's own dpkg
+    # postinst writes, so the two entries are always identical and never conflict.
+    - name: Remove legacy VS Code apt source list before any apt operations
       ansible.builtin.file:
         path: /etc/apt/sources.list.d/vscode.list
         state: absent
       tags: [always]
 
-    - name: Find existing VS Code apt source files before any apt operations
+    - name: Find any remaining VS Code apt source files before any apt operations
       ansible.builtin.shell: >
         grep -rl "packages.microsoft.com/repos/code"
-        /etc/apt/sources.list.d/*.list 2>/dev/null || true
+        /etc/apt/sources.list.d/ 2>/dev/null || true
       register: vscode_source_files
       changed_when: false
       tags: [always]
 
-    - name: Remove existing VS Code apt source files before any apt operations
+    - name: Remove any remaining VS Code apt source files before any apt operations
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
       loop: "{{ vscode_source_files.stdout_lines }}"
-      when: (vscode_source_files.stdout_lines | length) > 0
-      tags: [always]
-
-    - name: Remove legacy Microsoft VS Code keyring before any apt operations
-      ansible.builtin.file:
-        path: /usr/share/keyrings/microsoft.gpg
-        state: absent
+      # Exclude vscode.sources — that is now the canonical file managed by this playbook
+      when: >-
+        (vscode_source_files.stdout_lines | length) > 0 and
+        item != '/etc/apt/sources.list.d/vscode.sources'
       tags: [always]
 
   roles:

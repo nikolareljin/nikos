@@ -2,6 +2,58 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.2.1] — 2026-04-14
+
+### Added
+- **Install logging** — `install.sh` and `scripts/nikos` now write timestamped log files
+  to `~/.config/nikos/logs/`. Each installer run produces
+  `install-YYYYMMDD-HHMMSS.log`; each `nikos setup/update/add` run produces
+  `nikos-YYYYMMDD-HHMMSS-playbook.log`. A `*-latest.log` symlink always points at the
+  most recent run. The full Ansible playbook output (stdout + stderr) is captured via
+  `tee`, ANSI escape codes are stripped from the file, and a summary block reporting
+  `ok/changed/failed/unreachable` counts plus the names of any failed tasks is printed
+  at the end of every run.
+- **`nikos log [N]`** — new CLI command; shows the last N lines (default 50) of the
+  latest playbook log. `nikos log list` lists all available log files.
+
+### Fixed
+- **`./test` VirtualBox repair path** now retries existing VMs that never had `openssh-server`
+  installed. If the SSH port is still closed during the default `./test` flow, NikOS now
+  uses VirtualBox guest control to install and start `openssh-server`, then retries SSH
+  before failing.
+- **`./test -b` unattended desktop boot** now adds `only-ubiquity` so the Xubuntu live ISO
+  launches the installer automatically instead of stopping in the live session and waiting
+  for a manual click on the install shortcut.
+- Version bumped `0.2.0` → `0.2.1` in `vars/main.yml`, `install.sh`, and `scripts/nikos`.
+- **Testing docs** now document the SSH repair behavior for older VirtualBox VMs.
+- **VS Code apt source conflict** (`Conflicting values set for option Signed-By`)
+  fixed systematically. Root cause: VS Code's own `dpkg` postinst script detects
+  `vscode.list`, writes `vscode.sources` (DEB822 format, `Signed-By: microsoft.gpg`),
+  then deletes `vscode.list`. The playbook was writing `vscode.list` with
+  `microsoft.asc`, so every VS Code install/upgrade left both files present with
+  different keyring paths — causing apt to refuse to read its source list.
+  Fix: align with VS Code's own format. The editors role now downloads and dearmors
+  the key to `microsoft.gpg` and registers the repository via
+  `ansible.builtin.deb822_repository` (`vscode.sources`). VS Code's postinst now
+  overwrites the entry with identical content, making it fully idempotent. The
+  pre-playbook cleanup now only removes the legacy `vscode.list`; `vscode.sources`
+  and `microsoft.gpg` are no longer treated as legacy artifacts to be deleted.
+- **VS Code extension downgrade conflict** no longer fails the playbook. When
+  `code --install-extension` refuses to downgrade a built-in bundled extension
+  (e.g. `github.copilot-chat` already at a newer built-in version), the task now
+  treats that as `ok` rather than `failed`. Any other non-zero exit code from the
+  extension install still surfaces as a real failure. Applied to both the standard
+  and AI extension install tasks in the `editors` role.
+- **GitHub setup wizard crash loop** fixed. When `gh` lacks the `admin:public_key` OAuth
+  scope, `gh ssh-key list` returns a non-zero exit code; the wizard previously misread this
+  as "key not uploaded", attempted `gh ssh-key add`, crashed with an unhandled
+  `CalledProcessError`, and never wrote the completion flag — causing the wizard to re-run
+  on every shell session. Fixed by treating a scope-missing error as "assume present, warn
+  user" rather than triggering an upload attempt. The `gh ssh-key add` call is also now
+  wrapped in a try/except for a clean error message instead of a traceback. The `main()`
+  early-exit no longer prints a noisy message on sessions where setup is already complete.
+  Four new unit tests cover the scope-missing, key-present, key-absent, and other-error paths.
+
 ## [0.2.0] — 2026-04-05
 
 ### Added

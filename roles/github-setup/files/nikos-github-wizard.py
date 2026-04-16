@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """NikOS first-run GitHub setup wizard."""
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,7 +20,14 @@ def is_gh_authenticated() -> bool:
 
 def is_ssh_key_on_github() -> bool:
     result = run(["gh", "ssh-key", "list"], check=False)
-    return result.returncode == 0 and "nikos" in result.stdout
+    if result.returncode != 0:
+        # Missing admin:public_key scope — cannot verify. Assume present and warn.
+        if "admin:public_key" in result.stderr or "scope" in result.stderr.lower():
+            print("  [!] Cannot verify SSH key: missing admin:public_key scope.")
+            print("      To grant it later: gh auth refresh -h github.com -s admin:public_key")
+            return True
+        return False
+    return "nikos" in result.stdout
 
 
 def is_git_identity_set() -> bool:
@@ -50,10 +56,15 @@ def step_ssh_key() -> None:
         print("  [✓] SSH key already on GitHub")
         return
     print("  Uploading SSH key to GitHub...")
-    subprocess.run(
-        ["gh", "ssh-key", "add", str(ssh_key_path.with_suffix(".pub")), "--title", "nikos"],
-        check=True,
-    )
+    try:
+        subprocess.run(
+            ["gh", "ssh-key", "add", str(ssh_key_path.with_suffix(".pub")), "--title", "nikos"],
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        print("  [!] Could not upload SSH key.")
+        print("      Grant scope and retry: gh auth refresh -h github.com -s admin:public_key")
+        sys.exit(1)
 
 
 def step_git_identity() -> None:
@@ -78,7 +89,6 @@ def step_dotfiles() -> None:
 
 def main() -> None:
     if CONFIG_FLAG.exists():
-        print("NikOS GitHub setup already completed. Run 'rm ~/.config/nikos/github-configured' to re-run.")
         sys.exit(0)
 
     print()
