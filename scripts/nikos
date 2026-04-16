@@ -168,11 +168,25 @@ _playbook() {
   _logfile "Playbook start: ansible-playbook ${playbook_args[*]}"
   _logfile "--- ansible-playbook output start ---"
 
-  local _rc=0
+  local _rc=0 ansible_rc=0 tee_rc=0
+  local -a pipe_status=()
+  set +e
   (
     cd "${NIKOS_HOME}"
     ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${playbook_args[@]}"
-  ) 2>&1 | tee -a "${run_log}" || _rc=${PIPESTATUS[0]}
+  ) 2>&1 | tee -a "${run_log}"
+  pipe_status=("${PIPESTATUS[@]}")
+  set -e
+  ansible_rc=${pipe_status[0]}
+  tee_rc=${pipe_status[1]}
+
+  if [[ "${ansible_rc}" -ne 0 ]]; then
+    _rc="${ansible_rc}"
+  elif [[ "${tee_rc}" -ne 0 ]]; then
+    print_error "Failed to write playbook log to ${run_log}."
+    _logfile "[FAILED] tee could not write ${run_log} (rc=${tee_rc})"
+    _rc="${tee_rc}"
+  fi
 
   _logfile "--- ansible-playbook output end ---"
   _playbook_summary "${run_log}" "${_rc}"
