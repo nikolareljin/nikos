@@ -208,6 +208,9 @@ command -v VBoxManage  &>/dev/null || die "VirtualBox not found"
 command -v curl        &>/dev/null || die "curl not found"
 command -v scp         &>/dev/null || die "scp not found (install openssh-client)"
 command -v ssh-copy-id &>/dev/null || die "ssh-copy-id not found (install openssh-client)"
+# sshpass is required unconditionally in -b/--build mode; non-build uses it only
+# as a fallback in wait_for_ssh_key_auth (checked lazily there).
+$BUILD && { command -v sshpass &>/dev/null || die "sshpass not found (required for -b/--build; install sshpass)"; }
 
 # ── SSH key ───────────────────────────────────────────────────────────────────
 if [[ ! -f "${SSH_KEY}" ]]; then
@@ -289,7 +292,7 @@ if $BUILD; then
 
   # ── Phase 2: Install openssh-server and copy SSH key (non-interactive) ──────
   install_openssh_server
-  wait_for_ssh_port
+  wait_for_ssh_port || die "SSH port ${VM_SSH_PORT} never opened after installing openssh-server. Check Guest Additions and VM networking."
   log "Copying SSH public key to VM (non-interactive)..."
   SSHPASS="${VM_PASS}" sshpass -e ssh-copy-id -i "${SSH_KEY}.pub" \
     -o StrictHostKeyChecking=no \
