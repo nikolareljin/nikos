@@ -35,6 +35,11 @@
 - name: Set timezone
   community.general.timezone:
     name: "{{ nikos_timezone }}"
+    hwclock: UTC
+
+- name: Enable NTP time synchronization
+  ansible.builtin.command: timedatectl set-ntp true
+  changed_when: false
 
 - name: Set locale
   community.general.locale_gen:
