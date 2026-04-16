@@ -170,19 +170,20 @@
     state: directory
     mode: "0755"
 
-- name: Deploy Xfce appearance defaults
+# System-wide defaults (applied for new user accounts only)
+- name: Deploy system-wide Xfce appearance defaults
   ansible.builtin.copy:
     src: xsettings.xml
     dest: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
     mode: "0644"
 
-- name: Deploy Xfce window manager theme defaults
+- name: Deploy system-wide Xfce window manager theme defaults
   ansible.builtin.copy:
     src: xfwm4.xml
     dest: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
     mode: "0644"
 
-- name: Deploy Xfce wallpaper defaults
+- name: Deploy system-wide Xfce wallpaper defaults
   ansible.builtin.copy:
     src: xfce4-desktop.xml
     dest: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
@@ -193,3 +194,75 @@
     src: lightdm-gtk-greeter.conf
     dest: /etc/lightdm/lightdm-gtk-greeter.conf
     mode: "0644"
+
+# ── Apply theme settings to current user ─────────────────────────────────────
+# System-wide /etc/xdg/ defaults are only loaded for brand-new user accounts
+# with no personal config. Existing users need direct writes to their own
+# ~/.config/xfce4/xfconf/xfce-perchannel-xml/ store.
+
+- name: Ensure user Xfce xfconf directory exists
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.config/xfce4/xfconf/xfce-perchannel-xml"
+    state: directory
+    mode: "0755"
+  become: false
+
+- name: Apply GTK theme and icon theme to user xfconf
+  ansible.builtin.copy:
+    src: xsettings.xml
+    dest: "{{ nikos_home }}/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml"
+    mode: "0600"
+  become: false
+
+- name: Apply window manager theme to user xfconf
+  ansible.builtin.copy:
+    src: xfwm4.xml
+    dest: "{{ nikos_home }}/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml"
+    mode: "0600"
+  become: false
+
+- name: Apply NikOS wallpaper to all configured monitor backdrop paths
+  # Replace every last-image value regardless of monitor name, so the wallpaper
+  # is applied for all displays (eDP-1, HDMI, VirtualBox, etc.) without needing
+  # to know the monitor identifier in advance.
+  ansible.builtin.replace:
+    path: "{{ nikos_home }}/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml"
+    regexp: '(property name="last-image" type="string" value=")[^"]*(")'
+    replace: '\g<1>/usr/share/nikos/wallpaper.png\g<2>'
+  become: false
+  failed_when: false  # file may not exist on first login; system-wide default covers that
+
+- name: Set wallpaper image-style to Zoomed for all configured monitors
+  # image-style int values: 0=None 1=Centered 2=Tiled 3=Stretched 4=Scaled 5=Zoomed
+  # Some monitors default to 0 (None), which hides the wallpaper entirely.
+  ansible.builtin.replace:
+    path: "{{ nikos_home }}/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml"
+    regexp: '(property name="image-style" type="int" value=")[^"]*(")'
+    replace: '\g<1>5\g<2>'
+  become: false
+  failed_when: false
+
+- name: Apply theme settings live via xfconf-query (if Xfce session is running)
+  # xfconf-query writes via D-Bus/xfconfd; changes take effect immediately in a
+  # running session. If no session is active the command fails silently — the
+  # file-level changes above ensure settings load on next login.
+  ansible.builtin.shell: |
+    xfconf-query -c xsettings   -p /Net/ThemeName     -s "Nordic"        2>/dev/null || true
+    xfconf-query -c xsettings   -p /Net/IconThemeName -s "Papirus-Dark"  2>/dev/null || true
+    xfconf-query -c xfwm4       -p /general/theme     -s "Nordic"        2>/dev/null || true
+    for p in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep '/last-image$'); do
+      xfconf-query -c xfce4-desktop -p "${p}" -s "/usr/share/nikos/wallpaper.png" 2>/dev/null || true
+      xfconf-query -c xfce4-desktop -p "${p%/last-image}/image-style" \
+        --create --type int -s 5 2>/dev/null || true
+    done
+    # Ensure a canonical default path exists for newly created workspaces
+    xfconf-query -c xfce4-desktop \
+      -p /backdrop/screen0/monitor0/workspace0/last-image \
+      --create --type string -s "/usr/share/nikos/wallpaper.png" 2>/dev/null || true
+    xfconf-query -c xfce4-desktop \
+      -p /backdrop/screen0/monitor0/workspace0/image-style \
+      --create --type int -s 5 2>/dev/null || true
+  become: false
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
