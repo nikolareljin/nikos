@@ -32,6 +32,10 @@ _logfile() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "${INSTALL_LOG}"
 }
 
+_safe_logfile() {
+  _logfile "$@" 2>/dev/null || true
+}
+
 # Strip ANSI escape codes from the log after a tee'd run
 _strip_ansi_from_log() {
   sed -i 's/\x1b\[[0-9;:]*[a-zA-Z]//g' "${INSTALL_LOG}" 2>/dev/null || true
@@ -442,10 +446,26 @@ _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
 _logfile "--- ansible-playbook output start ---"
 
 _playbook_rc=0
+_ansible_rc=0
+_tee_rc=0
+_pipe_status=()
+set +e
 (
   cd "${NIKOS_HOME}"
   ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
-) 2>&1 | tee -a "${INSTALL_LOG}" || _playbook_rc=${PIPESTATUS[0]}
+) 2>&1 | tee -a "${INSTALL_LOG}"
+_pipe_status=("${PIPESTATUS[@]}")
+set -e
+_ansible_rc=${_pipe_status[0]}
+_tee_rc=${_pipe_status[1]}
+
+if [[ "${_ansible_rc}" -ne 0 ]]; then
+  _playbook_rc="${_ansible_rc}"
+elif [[ "${_tee_rc}" -ne 0 ]]; then
+  echo "ERROR: Failed to write installer log to ${INSTALL_LOG}." >&2
+  _safe_logfile "[FAILED] tee could not write ${INSTALL_LOG} (rc=${_tee_rc})"
+  _playbook_rc="${_tee_rc}"
+fi
 
 _logfile "--- ansible-playbook output end ---"
 

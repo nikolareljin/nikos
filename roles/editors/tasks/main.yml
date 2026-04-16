@@ -11,10 +11,26 @@
     mode: "0644"
   become: true
 
-- name: Dearmor Microsoft VS Code apt key
+- name: Dearmor Microsoft VS Code apt key to temp file
   ansible.builtin.command:
-    cmd: gpg --dearmor -o /usr/share/keyrings/microsoft.gpg /tmp/microsoft.asc
-    creates: /usr/share/keyrings/microsoft.gpg
+    cmd: gpg --dearmor --yes -o /tmp/microsoft.gpg /tmp/microsoft.asc
+  become: true
+
+- name: Install refreshed Microsoft VS Code apt key
+  ansible.builtin.copy:
+    src: /tmp/microsoft.gpg
+    remote_src: true
+    dest: /usr/share/keyrings/microsoft.gpg
+    mode: "0644"
+  become: true
+
+- name: Remove temporary Microsoft VS Code apt key files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/microsoft.asc
+    - /tmp/microsoft.gpg
   become: true
 
 - name: Add VS Code apt repository (DEB822)
