@@ -2,6 +2,9 @@
 nikos_version: "0.2.1"  # NikOS playbook version
 
 # Timezone and locale
+# Fallback only — install.sh detects the system timezone via timedatectl and writes
+# the chosen value to vars/local.yml, which overrides this. Europe/London is used
+# only when the installer is run non-interactively without a vars/local.yml present.
 nikos_timezone: "Europe/London"
 nikos_locale: "en_US.UTF-8"
 

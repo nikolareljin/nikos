@@ -195,6 +195,133 @@ _persist_skip_tags() {
   printf 'NIKOS_SKIP_TAGS_SAVED=%q\n' "${1}" > "${SELECTIONS_FILE}"
 }
 
+# ── Timezone helpers ──────────────────────────────────────────────────────────
+
+_detect_system_timezone() {
+  local tz=""
+  tz=$(timedatectl show --property=Timezone --value 2>/dev/null) || true
+  if [[ -z "${tz}" ]]; then
+    tz=$(cat /etc/timezone 2>/dev/null | tr -d '[:space:]') || true
+  fi
+  printf '%s\n' "${tz:-Europe/London}"
+}
+
+_get_configured_timezone() {
+  local file="${NIKOS_HOME}/${LOCAL_VARS_REL}"
+  if [[ -f "${file}" ]]; then
+    grep -oP '^nikos_timezone:\s*["\x27]?\K[^"\x27\s]+' "${file}" 2>/dev/null || true
+  fi
+}
+
+_set_timezone_in_local_vars() {
+  local tz="$1"
+  local file="${NIKOS_HOME}/${LOCAL_VARS_REL}"
+
+  mkdir -p "$(dirname "${file}")"
+  if [[ ! -f "${file}" ]]; then
+    printf -- '---\nnikos_timezone: "%s"\n' "${tz}" > "${file}"
+    return
+  fi
+  if grep -q '^nikos_timezone:' "${file}"; then
+    sed -i "s|^nikos_timezone:.*|nikos_timezone: \"${tz}\"|" "${file}"
+  else
+    printf 'nikos_timezone: "%s"\n' "${tz}" >> "${file}"
+  fi
+}
+
+_select_timezone_dialog() {
+  local detected_tz="$1" configured_tz="$2"
+  dialog_init
+
+  # Build menu items (tag + description pairs)
+  local items=()
+  items+=("auto"   "Auto: use system timezone (${detected_tz})")
+  if [[ -n "${configured_tz}" && "${configured_tz}" != "${detected_tz}" ]]; then
+    items+=("keep"   "Keep configured: ${configured_tz}")
+  fi
+  items+=("custom" "Enter a specific timezone")
+
+  local n_items=$(( ${#items[@]} / 2 ))
+  local default_item="auto"
+  [[ -n "${configured_tz}" && "${configured_tz}" != "${detected_tz}" ]] && default_item="keep"
+
+  local choice
+  if ! choice=$(
+    dialog --stdout \
+      --title "NikOS ${NIKOS_VERSION} — Timezone" \
+      --default-item "${default_item}" \
+      --menu "System timezone: ${detected_tz}" \
+      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" "${n_items}" \
+      "${items[@]}"
+  ); then
+    return $?
+  fi
+
+  case "${choice}" in
+    auto)   printf '%s\n' "${detected_tz}" ;;
+    keep)   printf '%s\n' "${configured_tz}" ;;
+    custom)
+      local default_input="${configured_tz:-${detected_tz}}"
+      local custom_tz
+      if ! custom_tz=$(
+        dialog --stdout \
+          --title "NikOS ${NIKOS_VERSION} — Custom Timezone" \
+          --inputbox "Enter IANA timezone (e.g. America/New_York, Asia/Tokyo):" \
+          8 60 "${default_input}"
+      ); then
+        return $?
+      fi
+      printf '%s\n' "${custom_tz:-${detected_tz}}"
+      ;;
+  esac
+}
+
+_select_timezone_plain() {
+  local detected_tz="$1" configured_tz="$2"
+
+  echo "Timezone setup:"
+  echo "  System timezone (NTP): ${detected_tz}"
+  if [[ -n "${configured_tz}" && "${configured_tz}" != "${detected_tz}" ]]; then
+    echo "  Configured timezone:   ${configured_tz}"
+  fi
+  echo ""
+
+  # Build numbered option list
+  local -a opts=()
+  opts+=("1) Auto: use system timezone (${detected_tz})")
+  local keep_n=""
+  if [[ -n "${configured_tz}" && "${configured_tz}" != "${detected_tz}" ]]; then
+    opts+=("2) Keep configured: ${configured_tz}")
+    keep_n="2"
+    opts+=("3) Enter a specific timezone")
+  else
+    opts+=("2) Enter a specific timezone")
+  fi
+
+  for o in "${opts[@]}"; do echo "  ${o}"; done
+
+  local default_n="1"
+  [[ -n "${keep_n}" ]] && default_n="${keep_n}"
+
+  local choice
+  read -r -p "  Choice [${default_n}]: " choice </dev/tty
+  choice="${choice:-${default_n}}"
+
+  case "${choice}" in
+    1)
+      printf '%s\n' "${detected_tz}"
+      ;;
+    "${keep_n}")
+      printf '%s\n' "${configured_tz}"
+      ;;
+    *)
+      local custom_tz
+      read -r -p "  Enter IANA timezone (e.g. America/New_York): " custom_tz </dev/tty
+      printf '%s\n' "${custom_tz:-${detected_tz}}"
+      ;;
+  esac
+}
+
 # Pull repo updates with stashing if needed, for smoother experience when re-running the installer
 _pull_repo_updates_bootstrap() {
   local stash_ref=""
@@ -409,6 +536,22 @@ else
   read -ra SELECTED_BUNDLES <<< "$(_select_bundles_plain)"
   read -ra SELECTED_AI_TOOLS <<< "$(_select_ai_tools_plain)"
 fi
+
+# Timezone ─────────────────────────────────────────────────────────
+_detected_tz=$(_detect_system_timezone)
+_configured_tz=$(_get_configured_timezone)
+
+if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
+  if ! _chosen_tz=$(_select_timezone_dialog "${_detected_tz}" "${_configured_tz}"); then
+    echo "Installer canceled during timezone selection." >&2
+    exit 130
+  fi
+else
+  _chosen_tz=$(_select_timezone_plain "${_detected_tz}" "${_configured_tz}")
+fi
+
+_set_timezone_in_local_vars "${_chosen_tz}"
+_logfile "Timezone: ${_chosen_tz} (detected: ${_detected_tz}, was: ${_configured_tz:-unset})"
 
 # Build ansible tag args ───────────────────────────────────────────
 SKIP_TAGS=""
