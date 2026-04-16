@@ -57,8 +57,10 @@
     }}
   register: editors_ext_result
   changed_when: false
-  # VS Code refuses to downgrade built-in bundled extensions; that is safe to ignore
-  # (the installed version is already newer). Any other non-zero rc is a real failure.
+  # Ansible evaluates failed_when per loop iteration; at that point the registered
+  # variable holds the current item's result dict (.rc, .stderr), not the aggregate.
+  # VS Code refuses to downgrade built-in bundled extensions — safe to ignore since
+  # the installed version is already newer. Any other non-zero rc is a real failure.
   failed_when: >-
     editors_ext_result.rc != 0 and
     'cannot be downgraded' not in (editors_ext_result.stderr | default(''))
@@ -74,6 +76,7 @@
     }}
   register: editors_ai_ext_result
   changed_when: false
+  # See comment on the non-AI extensions task above — same per-iteration semantics.
   failed_when: >-
     editors_ai_ext_result.rc != 0 and
     'cannot be downgraded' not in (editors_ai_ext_result.stderr | default(''))
