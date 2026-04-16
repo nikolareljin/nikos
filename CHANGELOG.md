@@ -26,6 +26,12 @@ All notable changes to NikOS are documented here.
   for a manual click on the install shortcut.
 - Version bumped `0.2.0` → `0.2.1` in `vars/main.yml`, `install.sh`, and `scripts/nikos`.
 - **Testing docs** now document the SSH repair behavior for older VirtualBox VMs.
+- **VS Code extension downgrade conflict** no longer fails the playbook. When
+  `code --install-extension` refuses to downgrade a built-in bundled extension
+  (e.g. `github.copilot-chat` already at a newer built-in version), the task now
+  treats that as `ok` rather than `failed`. Any other non-zero exit code from the
+  extension install still surfaces as a real failure. Applied to both the standard
+  and AI extension install tasks in the `editors` role.
 - **GitHub setup wizard crash loop** fixed. When `gh` lacks the `admin:public_key` OAuth
   scope, `gh ssh-key list` returns a non-zero exit code; the wizard previously misread this
   as "key not uploaded", attempted `gh ssh-key add`, crashed with an unhandled

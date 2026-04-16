@@ -40,7 +40,13 @@
           else []
         )
     }}
+  register: _ext_result
   changed_when: false
+  # VS Code refuses to downgrade built-in bundled extensions; that is safe to ignore
+  # (the installed version is already newer). Any other non-zero rc is a real failure.
+  failed_when: >-
+    _ext_result.rc != 0 and
+    'cannot be downgraded' not in (_ext_result.stderr | default(''))
   when: not ansible_check_mode
 
 - name: Install AI VS Code extensions
@@ -51,7 +57,11 @@
       if (nikos_vscode_ai_extensions is defined and nikos_vscode_ai_extensions is sequence and nikos_vscode_ai_extensions is not string)
       else []
     }}
+  register: _ai_ext_result
   changed_when: false
+  failed_when: >-
+    _ai_ext_result.rc != 0 and
+    'cannot be downgraded' not in (_ai_ext_result.stderr | default(''))
   when: not ansible_check_mode
   tags: [ai-vscode]
 
