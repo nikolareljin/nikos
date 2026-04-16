@@ -26,16 +26,19 @@
       register: playbook_git_stat
       tags: [always]
 
-    - name: Remove legacy VS Code apt source file before any apt operations
+    - name: Remove legacy VS Code apt source files before any apt operations
       ansible.builtin.file:
-        path: /etc/apt/sources.list.d/vscode.list
+        path: "{{ item }}"
         state: absent
+      loop:
+        - /etc/apt/sources.list.d/vscode.list
+        - /etc/apt/sources.list.d/vscode.sources
       tags: [always]
 
     - name: Find existing VS Code apt source files before any apt operations
       ansible.builtin.shell: >
         grep -rl "packages.microsoft.com/repos/code"
-        /etc/apt/sources.list.d/*.list 2>/dev/null || true
+        /etc/apt/sources.list.d/ 2>/dev/null || true
       register: vscode_source_files
       changed_when: false
       tags: [always]
