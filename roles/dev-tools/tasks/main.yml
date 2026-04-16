@@ -80,13 +80,27 @@
     PATH: "{{ (dev_tools_cargo_path.stdout | dirname) + ':' + ansible_env.PATH }}"
   args:
     creates: "{{ nikos_home }}/.local/bin/image-view"
+  register: dev_tools_image_view_result
+  ignore_errors: true
   when:
     - not ansible_check_mode
     - dev_tools_cargo_path.stdout | default('') | length > 0
 
-- name: Skip image-view install when cargo was not found
+- name: Warn when image-view build failed
   ansible.builtin.debug:
-    msg: "Skipping image-view: no cargo binary found. Select Rust in distrodeck install-tools, then rerun nikos update."
+    msg: >-
+      image-view build failed (rc={{ dev_tools_image_view_result.rc | default('n/a') }}).
+      It is optional — the rest of NikOS is fully installed.
+      To retry: cd {{ nikos_home }}/Projects/image-view && cargo build --release
+      Error: {{ dev_tools_image_view_result.stderr | default('') | truncate(200) }}
+  when:
+    - not ansible_check_mode
+    - dev_tools_image_view_result is defined
+    - dev_tools_image_view_result.failed | default(false)
+
+- name: Warn when cargo was not found for image-view
+  ansible.builtin.debug:
+    msg: "image-view skipped: no cargo binary found. Select Rust in distrodeck install-tools, then rerun nikos update."
   when:
     - not ansible_check_mode
     - dev_tools_cargo_path.stdout | default('') | length == 0
