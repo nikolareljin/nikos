@@ -318,6 +318,13 @@ cmd_log() {
     return 0
   fi
 
+  if ! [[ "${arg}" =~ ^[0-9]+$ ]]; then
+    print_error "'nikos log' expects a number or 'list', got: ${arg}"
+    print_info "Usage: nikos log [N]        # show last N lines (default 50)"
+    print_info "       nikos log list       # list all log files"
+    return 1
+  fi
+
   local latest="${NIKOS_LOG_DIR}/playbook-latest.log"
   if [[ ! -f "${latest}" ]]; then
     # Fall back to install log if no playbook log exists yet
