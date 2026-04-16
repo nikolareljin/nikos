@@ -8,7 +8,7 @@ clobbering your machine-specific settings.
 
 ```yaml
 # ── System ───────────────────────────────────────────
-nikos_timezone: "Europe/London"     # override with any tz from timedatectl list-timezones
+nikos_timezone: "Europe/London"     # set interactively during install; any tz from timedatectl list-timezones
 nikos_locale: "en_US.UTF-8"
 
 # ── Theme ─────────────────────────────────────────────
@@ -72,11 +72,19 @@ The wallpaper is `assets/wallpaper.svg` — a vector file exported to PNG on ins
 
 ## Changing the timezone
 
+The installer detects the system timezone via `timedatectl` and prompts you to confirm or
+override it. The chosen value is written to `vars/local.yml` automatically.
+
+To change it later, edit `vars/local.yml`:
+
 ```yaml
 nikos_timezone: "America/New_York"
 ```
 
-Run `nikos update` to apply.
+Use any IANA timezone identifier — list all available with `timedatectl list-timezones`.
+
+Run `nikos update` to apply. The playbook sets the timezone and enables NTP via
+`systemd-timesyncd` (no extra packages required).
 
 ## Adding a new role
 

@@ -20,13 +20,20 @@ The script will:
 3. Install bootstrap packages: `git`, `ansible`, and `dialog` unless `NIKOS_USE_DIALOG=0`
 4. Clone the repo (with submodules) to `~/.local/share/nikos`
 5. Present a `dialog` TUI checklist to select optional bundles
-6. Run `ansible-playbook` from the local clone
+6. Present a `dialog` TUI checklist to select AI tools
+7. Ask for the timezone to use — detects the system timezone via `timedatectl` and offers:
+   - **Auto** — use the detected system timezone (NTP-synchronized)
+   - **Keep existing** — if `vars/local.yml` already has `nikos_timezone` set (shown only
+     when the configured value differs from the detected one)
+   - **Custom** — enter any IANA timezone string (e.g. `America/New_York`, `Asia/Tokyo`)
+   The chosen timezone is written to `vars/local.yml` before the playbook runs.
+8. Run `ansible-playbook` from the local clone
 
 ## What the playbook does (in order)
 
 | Role | What it installs |
 |---|---|
-| `base` | apt update, nala, core build deps, flatpak, locale, timezone |
+| `base` | apt update, nala, core build deps, flatpak, locale, timezone, NTP sync |
 | `desktop` | Xfce 4, LightDM, xfce4-terminal |
 | `theming` | Nordic GTK theme, Papirus-Dark icons, GRUB theme, LightDM greeter, wallpaper |
 | `github-setup` | gh CLI, first-login wizard (SSH key, git identity) |
