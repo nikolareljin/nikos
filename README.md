@@ -33,6 +33,11 @@ cd nikos
 bash install.sh
 ```
 
+At the end, you should end up with something like: 
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/570e5927-9a05-42c0-909c-474a8204aa7b" />
+
+
 ---
 
 ## What's included
