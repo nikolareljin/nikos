@@ -247,6 +247,7 @@
   # running session. If no session is active the command fails silently — the
   # file-level changes above ensure settings load on next login.
   ansible.builtin.shell: |
+    set -o pipefail
     xfconf-query -c xsettings   -p /Net/ThemeName     -s "Nordic"        2>/dev/null || true
     xfconf-query -c xsettings   -p /Net/IconThemeName -s "Papirus-Dark"  2>/dev/null || true
     xfconf-query -c xfwm4       -p /general/theme     -s "Nordic"        2>/dev/null || true
@@ -262,6 +263,8 @@
     xfconf-query -c xfce4-desktop \
       -p /backdrop/screen0/monitor0/workspace0/image-style \
       --create --type int -s 5 2>/dev/null || true
+  args:
+    executable: /bin/bash
   become: false
   changed_when: false
   failed_when: false
