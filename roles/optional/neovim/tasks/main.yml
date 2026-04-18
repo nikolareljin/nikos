@@ -1,0 +1,21 @@
+---
+- name: Install Neovim
+  ansible.builtin.apt:
+    name: neovim
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Ensure Neovim config directory exists
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.config/nvim"
+    state: directory
+    mode: "0755"
+
+- name: Deploy default Neovim config
+  ansible.builtin.copy:
+    src: init.lua
+    dest: "{{ nikos_home }}/.config/nvim/init.lua"
+    mode: "0644"
+    force: false

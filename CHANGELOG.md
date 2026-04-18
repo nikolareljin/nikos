@@ -2,6 +2,21 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.3.0] — 2026-04-17
+
+### Added
+- **Optional Neovim bundle** — new `neovim` role installs `neovim`, creates
+  `~/.config/nvim/`, and deploys a minimal `init.lua` that bootstraps `lazy.nvim`.
+  The config is written with `force: false` so an existing Neovim setup is preserved.
+- **Optional Java bundle** — new `java` role installs `openjdk-21-jdk`.
+- **Optional Podman bundle** — new `podman` role installs `podman`.
+
+### Changed
+- **Optional role wiring** — `site.yml` now registers `neovim`, `java`, and `podman`
+  with explicit tags, and `nikos add` now accepts all three bundles.
+- Version bumped `0.2.1` → `0.3.0` in `vars/main.yml`, `install.sh`, `scripts/nikos`,
+  and `README.md`.
+
 ## [0.2.1] — 2026-04-16
 
 ### Added
