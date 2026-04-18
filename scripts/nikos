@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NIKOS_VERSION="0.2.1"
+NIKOS_VERSION="0.3.0"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 NIKOS_CONFIG_DIR="${HOME}/.config/nikos"
 SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
@@ -91,7 +91,7 @@ nikos ${NIKOS_VERSION} — Neural Innovation for Knowledge OS
 Usage:
   nikos setup            Run full NikOS playbook (first install)
   nikos update           git pull + re-run playbook (idempotent)
-  nikos add <name>       Install optional role: network | music | education
+  nikos add <name>       Install optional role: network | music | education | neovim | java | podman
   nikos status           Show NikOS version, Ollama models, installed roles
   nikos doctor           Check for broken configs and missing dependencies
   nikos log [N]          Show last N lines of the latest playbook log (default 50)
@@ -238,14 +238,14 @@ cmd_update() {
 cmd_add() {
   local role="${1:-}"
   case "${role}" in
-    network | music | education)
+    network | music | education | neovim | java | podman)
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
       _playbook --tags "${role}"
       ;;
     *)
       print_error "Unknown optional role: ${role}"
-      echo "Available: network, music, education"
+      echo "Available: network, music, education, neovim, java, podman"
       exit 1
       ;;
   esac

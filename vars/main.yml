@@ -1,5 +1,5 @@
 ---
-nikos_version: "0.2.1"  # NikOS playbook version
+nikos_version: "0.3.0"  # NikOS playbook version
 
 # Timezone and locale
 # Fallback only — install.sh detects the system timezone via timedatectl and writes
