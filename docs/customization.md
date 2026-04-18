@@ -64,6 +64,9 @@ Add extension IDs (from the VS Code Marketplace URL) to `nikos_vscode_extensions
 nikos add network    # nmap, wireshark, OpenVPN, traceroute, tcpdump
 nikos add music      # LMMS, Ardour (Flatpak), Audacity
 nikos add education  # LibreOffice, draw.io (Flatpak), Anki
+nikos add neovim     # Neovim plus a minimal lazy.nvim bootstrap config
+nikos add java       # OpenJDK 21
+nikos add podman     # Podman container runtime
 ```
 
 ## Changing the wallpaper

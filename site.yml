@@ -77,6 +77,13 @@
       tags: [music]
     - role: education
       tags: [education]
+    - role: neovim
+      become: false
+      tags: [neovim]
+    - role: java
+      tags: [java]
+    - role: podman
+      tags: [podman]
 
   post_tasks:
     - name: Initialize git submodules (script-helpers)  # noqa: command-instead-of-module
