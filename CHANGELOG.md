@@ -16,6 +16,8 @@ All notable changes to NikOS are documented here.
   with explicit tags, and `nikos add` now accepts all three bundles.
 - Version bumped `0.2.1` → `0.3.0` in `vars/main.yml`, `install.sh`, `scripts/nikos`,
   and `README.md`.
+- **Documentation refresh** — install, development, and debugging docs now list the new
+  optional bundles and updated dry-run examples.
 
 ## [0.2.1] — 2026-04-16
 

@@ -120,4 +120,4 @@ ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags theming
 ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags ai-stack
 ```
 
-Note: role tags must be explicitly set in `site.yml`. The optional roles (`network`, `music`, `education`) are tag-gated by default.
+Note: role tags must be explicitly set in `site.yml`. The optional roles (`network`, `music`, `education`, `neovim`, `java`, `podman`) are tag-gated by default.
