@@ -24,7 +24,10 @@ nikos/
 │   └── optional/
 │       ├── network/                # nmap, wireshark, OpenVPN
 │       ├── music/                  # LMMS, Ardour, Audacity
-│       └── education/              # LibreOffice, draw.io, Anki
+│       ├── education/              # LibreOffice, draw.io, Anki
+│       ├── neovim/                 # Neovim + starter lazy.nvim config
+│       ├── java/                   # OpenJDK 21
+│       └── podman/                 # Podman container runtime
 ├── tests/
 │   └── test_github_wizard.py       # pytest tests for the first-login wizard
 └── .github/workflows/
@@ -44,7 +47,7 @@ shellcheck install.sh scripts/nikos
 python3 -m pytest tests/ -v
 
 # Dry-run (needs ansible installed)
-ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education
+ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education,neovim,java,podman
 ```
 
 ## Writing a new role

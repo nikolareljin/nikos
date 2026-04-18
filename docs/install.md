@@ -42,7 +42,7 @@ The script will:
 | `cloud-ai-cli` | Node.js, Gemini CLI, GitHub Copilot CLI extension |
 | `agent-dev` | LangChain, LlamaIndex, Claude Code |
 | `dev-tools` | distrodeck tools, image-view, git-lantern, ai-runner |
-| `optional/*` | network / music / education (opt-in) |
+| `optional/*` | network / music / education / neovim / java / podman (opt-in) |
 
 ## First login
 
@@ -83,7 +83,7 @@ ansible-playbook site.yml -i inventory/local --ask-become-pass
 
 ## Offline / air-gapped installs
 
-Not supported in 0.1.0. The playbook downloads theme files, Ollama, and Miniforge at install time.
+Not supported in 0.3.0. The playbook downloads theme files, Ollama, and Miniforge at install time.
 
 ## Base OS choice
 
