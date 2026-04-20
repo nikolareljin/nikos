@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="512"
+   height="466"
+   viewBox="0 0 512 466"
+   version="1.1"
+   id="svg-plymouth-logo"
+   sodipodi:docname="plymouth-logo-source.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   inkscape:export-filename="plymouth-logo.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#0d0d14"
+     bordercolor="#444444"
+     borderopacity="1"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#1a1a2e"
+     showgrid="false"
+     inkscape:zoom="1.5"
+     inkscape:cx="256"
+     inkscape:cy="233"
+     inkscape:window-width="1920"
+     inkscape:window-height="1032"
+     inkscape:window-x="0"
+     inkscape:window-y="25"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer-logo" />
+
+  <!--
+    NikOS Plymouth boot logo — transparent background, Inkscape source.
+
+    Design:
+      - Transparent background (Plymouth script sets its own dark bg)
+      - Blue primary nodes: #2196f3 (Material Blue 500)
+      - Muted secondary nodes: #90a4ae (Blue Grey 300)
+      - Wordmark: #eceff4 (Nord Snow Storm 1)
+
+    Coordinate mapping (from logo.svg design, re-centered for 512×466):
+      Original element space: x 737–1174, y 304–692 (437×388 units)
+      Scale factor: 460/437 ≈ 1.053
+      Padding: 26 px left/right, 39 px top/bottom
+      Transform: translate(26,39) scale(1.053) translate(-737,-304)
+
+    To export production PNG:
+      inkscape plymouth-logo-source.svg
+        -o plymouth-logo.png
+        -w 512 -h 466
+  -->
+
+  <defs id="defs1" />
+
+  <g
+     id="layer-logo"
+     inkscape:label="Logo"
+     inkscape:groupmode="layer">
+
+    <g
+       id="g-logo"
+       inkscape:label="NikOS Logo"
+       transform="translate(26,39) scale(1.053) translate(-737,-304)">
+
+      <!-- ── Connection lines ─────────────────────────────────── -->
+      <!-- Upper-left node → Top-center node (primary blue) -->
+      <line
+         id="line-ul-top"
+         inkscape:label="Line upper-left to top"
+         x1="800" y1="409" x2="937" y2="342"
+         stroke="#2196f3" stroke-width="4.5" stroke-linecap="round"/>
+
+      <!-- Top-center node → Upper-right node (muted) -->
+      <line
+         id="line-top-ur"
+         inkscape:label="Line top to upper-right"
+         x1="983" y1="342" x2="1129" y2="409"
+         stroke="#90a4ae" stroke-width="3.5" stroke-linecap="round" opacity="0.85"/>
+
+      <!-- Lower-left node → Lower-center node (primary blue) -->
+      <line
+         id="line-ll-lc"
+         inkscape:label="Line lower-left to lower-center"
+         x1="801" y1="623" x2="937" y2="657"
+         stroke="#2196f3" stroke-width="4.5" stroke-linecap="round"/>
+
+      <!-- Lower-center node → Lower-right node (muted) -->
+      <line
+         id="line-lc-lr"
+         inkscape:label="Line lower-center to lower-right"
+         x1="991" y1="657" x2="1125" y2="623"
+         stroke="#90a4ae" stroke-width="3.5" stroke-linecap="round" opacity="0.85"/>
+
+      <!-- ── Nodes ───────────────────────────────────────────── -->
+      <!-- Top-center (circle) -->
+      <circle
+         id="node-top"
+         inkscape:label="Node top-center"
+         cx="960" cy="330" r="26" fill="#2196f3"/>
+
+      <!-- Upper-left (circle, largest — primary) -->
+      <circle
+         id="node-upper-left"
+         inkscape:label="Node upper-left"
+         cx="770" cy="424" r="33" fill="#2196f3"/>
+
+      <!-- Upper-right (circle, smaller — muted) -->
+      <circle
+         id="node-upper-right"
+         inkscape:label="Node upper-right"
+         cx="1150" cy="424" r="24" fill="#90a4ae"/>
+
+      <!-- Lower-left (rounded rect — primary) -->
+      <rect
+         id="node-lower-left"
+         inkscape:label="Node lower-left (rect)"
+         x="749" y="591" width="52" height="52" rx="14" ry="14" fill="#2196f3"/>
+
+      <!-- Lower-right (circle — muted) -->
+      <circle
+         id="node-lower-right"
+         inkscape:label="Node lower-right"
+         cx="1145" cy="617" r="21" fill="#90a4ae"/>
+
+      <!-- Lower-center (circle — primary) -->
+      <circle
+         id="node-lower-center"
+         inkscape:label="Node lower-center"
+         cx="964" cy="664" r="28" fill="#2196f3"/>
+
+      <!-- ── Wordmark ────────────────────────────────────────── -->
+      <text
+         id="text-nikos"
+         inkscape:label="NikOS wordmark"
+         x="960" y="570"
+         font-family="Arial, 'Helvetica Neue', sans-serif"
+         font-size="118px"
+         font-weight="800"
+         fill="#eceff4"
+         text-anchor="middle"
+         letter-spacing="-3">NikOS</text>
+
+    </g>
+  </g>
+
+</svg>
