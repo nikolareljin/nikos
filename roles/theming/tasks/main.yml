@@ -122,21 +122,6 @@
     dest: /usr/share/nikos/logo.svg
     mode: "0644"
 
-- name: Copy NikOS Plymouth logo SVG to system asset directory
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/assets/plymouth-logo.svg"
-    dest: /usr/share/nikos/plymouth-logo.svg
-    mode: "0644"
-
-- name: Export Plymouth logo SVG to PNG
-  ansible.builtin.command: >
-    inkscape /usr/share/nikos/plymouth-logo.svg
-    --export-filename=/usr/share/nikos/plymouth-logo.png
-    --export-width=512 --export-height=466
-  args:
-    creates: /usr/share/nikos/plymouth-logo.png
-  when: not ansible_check_mode
-
 - name: Create NikOS Plymouth theme directory
   ansible.builtin.file:
     path: /usr/share/plymouth/themes/nikos
@@ -159,12 +144,10 @@
 
 - name: Copy NikOS Plymouth logo into Plymouth theme directory
   ansible.builtin.copy:
-    src: /usr/share/nikos/plymouth-logo.png
+    src: "{{ playbook_dir }}/assets/plymouth-logo.png"
     dest: /usr/share/plymouth/themes/nikos/nikos-logo.png
-    remote_src: true
     mode: "0644"
   notify: Theming_update_initramfs
-  when: not ansible_check_mode
 
 - name: Set NikOS as default Plymouth theme
   community.general.ini_file:
