@@ -13,7 +13,7 @@ set -euo pipefail
 # NIKOS_SKIP_REPO_SYNC: Skip repository synchronization/update logic when set to 1
 #                       (default: 0)
 REPO_URL="${NIKOS_REPO_URL:-https://github.com/nikolareljin/nikos}"
-NIKOS_VERSION="0.2.1"
+NIKOS_VERSION="0.3.0"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 NIKOS_CONFIG_DIR="${HOME}/.config/nikos"
 SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
@@ -201,7 +201,7 @@ _detect_system_timezone() {
   local tz=""
   tz=$(timedatectl show --property=Timezone --value 2>/dev/null) || true
   if [[ -z "${tz}" ]]; then
-    tz=$(cat /etc/timezone 2>/dev/null | tr -d '[:space:]') || true
+    tz=$(tr -d '[:space:]' < /etc/timezone 2>/dev/null) || true
   fi
   printf '%s\n' "${tz:-Europe/London}"
 }

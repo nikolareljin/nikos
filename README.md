@@ -8,7 +8,7 @@
 A curated Xubuntu / Ubuntu 24.04 LTS setup for AI coding and development.  
 One command turns a fresh Ubuntu install into a fully configured AI workstation — Xfce desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
 
-**Version:** 0.2.1 · **License:** MIT · **Author:** Nikola Reljin
+**Version:** 0.3.0 · **License:** MIT · **Author:** Nikola Reljin
 
 <img src="./assets/logo.png" />
 
@@ -102,6 +102,9 @@ nikos update         # git pull --ff-only + submodule sync + playbook re-run
 nikos add network    # install optional: nmap, wireshark, OpenVPN
 nikos add music      # install optional: LMMS, Ardour, Audacity
 nikos add education  # install optional: LibreOffice, draw.io, Anki
+nikos add neovim     # install optional: Neovim + starter lazy.nvim config
+nikos add java       # install optional: OpenJDK 21
+nikos add podman     # install optional: Podman
 nikos status         # show version, Ollama models, conda envs
 nikos doctor         # check for broken configs and missing tools
 ```
