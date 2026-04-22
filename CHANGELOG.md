@@ -2,6 +2,20 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.3.1] — 2026-04-22
+
+### Fixed
+- **Plymouth boot splash overridden by xubuntu-plymouth-theme** — The NikOS splash
+  was replaced by the Xubuntu mouse/spinner on every apt operation because
+  `xubuntu-plymouth-theme`'s dpkg postinst calls `plymouth-set-default-theme
+  xubuntu-logo`, resetting `plymouthd.conf` and rebuilding initramfs. Fixed by:
+  (1) purging `xubuntu-plymouth-theme` during theming role execution;
+  (2) registering the NikOS theme with `update-alternatives --install` at
+  priority 200 (beats xubuntu's default ≤10) so Plymouth resolves the correct
+  theme in auto mode;
+  (3) restoring `notify: Theming_update_initramfs` on the `ini_file` task so
+  initramfs is rebuilt whenever `plymouthd.conf` changes.
+
 ## [0.3.0] — 2026-04-17
 
 ### Added
