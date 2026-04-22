@@ -201,7 +201,7 @@ _detect_system_timezone() {
   local tz=""
   tz=$(timedatectl show --property=Timezone --value 2>/dev/null) || true
   if [[ -z "${tz}" ]]; then
-    tz=$(cat /etc/timezone 2>/dev/null | tr -d '[:space:]') || true
+    tz=$(tr -d '[:space:]' < /etc/timezone 2>/dev/null) || true
   fi
   printf '%s\n' "${tz:-Europe/London}"
 }
