@@ -149,7 +149,14 @@
     mode: "0644"
   notify: Theming_update_initramfs
 
-- name: Set NikOS as default Plymouth theme
+- name: Remove xubuntu-plymouth-theme (prevents postinst from resetting default)
+  ansible.builtin.apt:
+    name: xubuntu-plymouth-theme
+    state: absent
+    purge: true
+  when: not ansible_check_mode
+
+- name: Set NikOS as default Plymouth theme in plymouthd.conf
   community.general.ini_file:
     path: /etc/plymouth/plymouthd.conf
     section: Daemon
@@ -157,6 +164,16 @@
     value: nikos
     mode: "0644"
   notify: Theming_update_initramfs
+
+- name: Register NikOS Plymouth theme with update-alternatives (priority 200)
+  ansible.builtin.command: >
+    update-alternatives --install
+    /usr/share/plymouth/themes/default.plymouth
+    default.plymouth
+    /usr/share/plymouth/themes/nikos/nikos.plymouth
+    200
+  changed_when: false
+  when: not ansible_check_mode
 
 - name: Ensure LightDM config directory exists
   ansible.builtin.file:
