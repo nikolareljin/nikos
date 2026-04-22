@@ -79,11 +79,11 @@
       tags: [education]
     - role: neovim
       become: false
-      tags: [neovim]
+      tags: [never, neovim]
     - role: java
-      tags: [java]
+      tags: [never, java]
     - role: podman
-      tags: [podman]
+      tags: [never, podman]
 
   post_tasks:
     - name: Initialize git submodules (script-helpers)  # noqa: command-instead-of-module
