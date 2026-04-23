@@ -1,5 +1,5 @@
 ---
-nikos_version: "0.3.0"  # NikOS playbook version
+nikos_version: "{{ lookup('file', playbook_dir + '/VERSION') | trim }}"
 
 # Timezone and locale
 # Fallback only — install.sh detects the system timezone via timedatectl and writes
