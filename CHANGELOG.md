@@ -11,10 +11,10 @@ All notable changes to NikOS are documented here.
   xubuntu-logo`, resetting `plymouthd.conf` and rebuilding initramfs. Fixed by:
   (1) purging `xubuntu-plymouth-theme` during theming role execution;
   (2) registering the NikOS theme with `update-alternatives --install` at
-  priority 200 (beats xubuntu's default ≤10) so Plymouth resolves the correct
-  theme in auto mode;
-  (3) restoring `notify: Theming_update_initramfs` on the `ini_file` task so
-  initramfs is rebuilt whenever `plymouthd.conf` changes.
+  priority 200 and explicitly selecting it with `update-alternatives --set`,
+  so Plymouth uses NikOS regardless of whether the group is in auto or manual mode;
+  (3) ensuring the `ini_file` task notifies `Theming_update_initramfs`, so
+  initramfs is rebuilt when `plymouthd.conf` changes.
 
 ## [0.3.0] — 2026-04-17
 

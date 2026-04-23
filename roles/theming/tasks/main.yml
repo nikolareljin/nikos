@@ -154,7 +154,6 @@
     name: xubuntu-plymouth-theme
     state: absent
     purge: true
-  when: not ansible_check_mode
 
 - name: Set NikOS as default Plymouth theme in plymouthd.conf
   community.general.ini_file:
@@ -174,6 +173,22 @@
     200
   changed_when: false
   when: not ansible_check_mode
+
+- name: Query current default Plymouth alternative
+  ansible.builtin.command: update-alternatives --query default.plymouth
+  register: theming_default_plymouth_alternative
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Set NikOS as active default Plymouth theme
+  ansible.builtin.command: >
+    update-alternatives --set
+    default.plymouth
+    /usr/share/plymouth/themes/nikos/nikos.plymouth
+  when:
+    - not ansible_check_mode
+    - "'Value: /usr/share/plymouth/themes/nikos/nikos.plymouth' not in theming_default_plymouth_alternative.stdout"
+  notify: Theming_update_initramfs
 
 - name: Ensure LightDM config directory exists
   ansible.builtin.file:
