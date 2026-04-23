@@ -28,6 +28,11 @@ LOCAL_VARS_REL="vars/local.yml"
 SKIP_REPO_SYNC="${NIKOS_SKIP_REPO_SYNC:-0}"
 ANSIBLE_REQUIREMENTS_REL="requirements.yml"
 
+# Returns 0 if dialog is enabled and the binary is present (usable before script-helpers is sourced)
+_can_use_dialog() {
+  [[ "${USE_DIALOG}" != "0" ]] && command -v dialog &>/dev/null
+}
+
 # Log file helpers (available before script-helpers is sourced)
 _logfile() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "${INSTALL_LOG}"
@@ -85,6 +90,26 @@ _install_summary() {
   else
     _logfile "[DONE] Install complete"
   fi
+
+  if [[ "${_USE_DIALOG:-false}" == "true" ]] && command -v dialog &>/dev/null; then
+    local _dlg_body
+    _dlg_body="NikOS ${NIKOS_VERSION} install summary
+
+  Tasks OK:      ${ok}
+  Tasks changed: ${changed}"
+    [[ "${failed}"      -gt 0 ]] && _dlg_body+="
+  Tasks FAILED:  ${failed}"
+    [[ "${unreachable}" -gt 0 ]] && _dlg_body+="
+  Unreachable:   ${unreachable}"
+    _dlg_body+="
+
+  Full log: ${INSTALL_LOG}"
+    if [[ "${rc}" -eq 0 ]]; then
+      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 14 72
+    else
+      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 14 72
+    fi
+  fi
 }
 
 mkdir -p "${NIKOS_LOG_DIR}"
@@ -92,12 +117,26 @@ ln -sf "${INSTALL_LOG}" "${NIKOS_LOG_DIR}/install-latest.log"
 _logfile "=== NikOS ${NIKOS_VERSION} install started ==="
 _logfile "User: $(id -un)   Host: $(hostname -s)"
 
-echo "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
-echo "Light system. Heavy thinking."
-echo ""
+if _can_use_dialog; then
+  dialog --title "NikOS ${NIKOS_VERSION}" \
+    --msgbox "Neural Innovation for Knowledge OS\n\nLight system. Heavy thinking.\n\nPress OK to begin installation." \
+    10 52
+else
+  echo "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
+  echo "Light system. Heavy thinking."
+  echo ""
+fi
 
 # Ensure apt-based system
+if _can_use_dialog; then
+  dialog --title "NikOS ${NIKOS_VERSION} — System Check" \
+    --infobox "Checking system requirements..." 5 52
+fi
 if ! command -v apt-get &>/dev/null; then
+  if _can_use_dialog; then
+    dialog --title "Error" \
+      --msgbox "NikOS requires an apt-based system (Ubuntu 24.04 LTS)." 7 52
+  fi
   echo "ERROR: NikOS requires an apt-based system (Ubuntu 24.04 LTS)." >&2
   exit 1
 fi
@@ -111,7 +150,12 @@ if [[ "${USE_DIALOG}" != "0" ]]; then
 fi
 
 if [[ ${#_need_packages[@]} -gt 0 ]]; then
-  echo "Installing bootstrap packages: ${_need_packages[*]}"
+  if _can_use_dialog; then
+    dialog --title "NikOS ${NIKOS_VERSION} — Bootstrap" \
+      --infobox "Installing bootstrap packages:\n  ${_need_packages[*]}" 7 60
+  else
+    echo "Installing bootstrap packages: ${_need_packages[*]}"
+  fi
   _logfile "Bootstrap packages: ${_need_packages[*]}"
   sudo apt-get update -qq
   sudo apt-get install -y "${_need_packages[@]}"
@@ -175,7 +219,12 @@ _ensure_ansible_collections() {
     exit 1
   fi
 
-  echo "Installing required Ansible collections..."
+  if [[ "${_USE_DIALOG:-false}" == "true" ]] && command -v dialog &>/dev/null; then
+    dialog --title "NikOS ${NIKOS_VERSION}" \
+      --infobox "Installing required Ansible collections..." 5 56
+  else
+    echo "Installing required Ansible collections..."
+  fi
   ansible-galaxy collection install -r "${requirements_path}"
 }
 
@@ -391,7 +440,12 @@ else
   fi
 
   if [[ -d "${NIKOS_HOME}/.git" ]]; then
-    echo "Updating NikOS repo at ${NIKOS_HOME}..."
+    if _can_use_dialog; then
+      dialog --title "NikOS ${NIKOS_VERSION}" \
+        --infobox "Updating NikOS repo at ${NIKOS_HOME}..." 5 72
+    else
+      echo "Updating NikOS repo at ${NIKOS_HOME}..."
+    fi
     _logfile "Updating repo at ${NIKOS_HOME}"
     if _source_repo_sync_helpers; then
       if _pull_repo_updates "nikos-install-autostash"; then
@@ -418,7 +472,12 @@ else
       _pull_repo_updates_bootstrap
     fi
   else
-    echo "Cloning NikOS repo to ${NIKOS_HOME}..."
+    if _can_use_dialog; then
+      dialog --title "NikOS ${NIKOS_VERSION}" \
+        --infobox "Cloning NikOS repo to ${NIKOS_HOME}..." 5 72
+    else
+      echo "Cloning NikOS repo to ${NIKOS_HOME}..."
+    fi
     _logfile "Cloning repo from ${REPO_URL} to ${NIKOS_HOME}"
     git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"
     _logfile "Repo cloned OK"
@@ -519,6 +578,20 @@ _select_ai_tools_plain() {
   echo "${_selected[*]}"
 }
 
+_collect_become_password_dialog() {
+  local pw
+  if ! pw=$(
+    dialog --stdout \
+      --title "NikOS ${NIKOS_VERSION} — Sudo Password" \
+      --insecure \
+      --passwordbox "Enter your sudo (become) password to run the Ansible playbook:" \
+      8 62
+  ); then
+    return $?
+  fi
+  printf '%s\n' "${pw}"
+}
+
 if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
   if ! _raw=$(_select_bundles_dialog); then
     echo "Installer canceled during optional bundle selection." >&2
@@ -577,31 +650,52 @@ _logfile "Selected AI tools: ${SELECTED_AI_TOOLS[*]:-none}"
 _logfile "Skip tags: ${SKIP_TAGS#,}"
 
 # Run the playbook from local clone ───────────────────────────────
-if [[ "${_USE_DIALOG}" == "true" ]]; then
-  print_info "Running NikOS ${NIKOS_VERSION} playbook..."
-else
-  echo "Running NikOS ${NIKOS_VERSION} playbook..."
-fi
-
-PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
-[[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
-
-_logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
-_logfile "--- ansible-playbook output start ---"
-
 _playbook_rc=0
 _ansible_rc=0
 _tee_rc=0
 _pipe_status=()
-set +e
-(
-  cd "${NIKOS_HOME}"
-  ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
-) 2>&1 | tee -a "${INSTALL_LOG}"
-_pipe_status=("${PIPESTATUS[@]}")
-set -e
-_ansible_rc=${_pipe_status[0]}
-_tee_rc=${_pipe_status[1]}
+
+if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
+  print_info "Running NikOS ${NIKOS_VERSION} playbook..."
+  if ! _become_pass=$(_collect_become_password_dialog); then
+    echo "Installer canceled at sudo password prompt." >&2
+    exit 130
+  fi
+  PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml")
+  [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
+  _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]} (become via env)"
+  _logfile "--- ansible-playbook output start ---"
+  set +e
+  (
+    cd "${NIKOS_HOME}"
+    ANSIBLE_BECOME_PASS="${_become_pass}" \
+      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" \
+      ansible-playbook "${PLAY_OPTS[@]}"
+  ) 2>&1 \
+    | tee -a "${INSTALL_LOG}" \
+    | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
+        --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
+  _pipe_status=("${PIPESTATUS[@]}")
+  set -e
+  unset _become_pass
+  _ansible_rc=${_pipe_status[0]}
+  _tee_rc=${_pipe_status[1]}
+else
+  echo "Running NikOS ${NIKOS_VERSION} playbook..."
+  PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
+  [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
+  _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
+  _logfile "--- ansible-playbook output start ---"
+  set +e
+  (
+    cd "${NIKOS_HOME}"
+    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
+  ) 2>&1 | tee -a "${INSTALL_LOG}"
+  _pipe_status=("${PIPESTATUS[@]}")
+  set -e
+  _ansible_rc=${_pipe_status[0]}
+  _tee_rc=${_pipe_status[1]}
+fi
 
 if [[ "${_ansible_rc}" -ne 0 ]]; then
   _playbook_rc="${_ansible_rc}"
