@@ -13,7 +13,8 @@ set -euo pipefail
 # NIKOS_SKIP_REPO_SYNC: Skip repository synchronization/update logic when set to 1
 #                       (default: 0)
 REPO_URL="${NIKOS_REPO_URL:-https://github.com/nikolareljin/nikos}"
-NIKOS_VERSION="$(cat "$(dirname "${BASH_SOURCE[0]}")/VERSION" 2>/dev/null || echo "0.3.1")"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+NIKOS_VERSION="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null || echo "unknown")"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 NIKOS_CONFIG_DIR="${HOME}/.config/nikos"
 SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
