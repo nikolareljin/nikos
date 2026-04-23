@@ -172,6 +172,7 @@
     priority: 200
     state: selected
   notify: Theming_update_initramfs
+  when: not ansible_check_mode
 
 - name: Ensure LightDM config directory exists
   ansible.builtin.file:
