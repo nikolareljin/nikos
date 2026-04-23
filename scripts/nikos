@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NIKOS_VERSION="0.3.0"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
+if [[ -r "${NIKOS_HOME}/VERSION" ]]; then
+  NIKOS_VERSION="$(cat "${NIKOS_HOME}/VERSION")"
+else
+  NIKOS_VERSION="unknown"
+fi
 NIKOS_CONFIG_DIR="${HOME}/.config/nikos"
 SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"

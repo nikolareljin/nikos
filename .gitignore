@@ -24,6 +24,10 @@ build/
 .vagrant/
 .molecule/
 
+# Claude Code session memory
+.remember/
+docs/superpowers/
+
 # Secrets and keys (NEVER commit these)
 *.pem
 *.key
