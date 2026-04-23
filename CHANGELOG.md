@@ -7,8 +7,7 @@ All notable changes to NikOS are documented here.
 ### Fixed
 - **Plymouth boot splash overridden by xubuntu-plymouth-theme** — The NikOS splash
   was replaced by the Xubuntu mouse/spinner on every apt operation because
-  `xubuntu-plymouth-theme`'s dpkg postinst calls `plymouth-set-default-theme
-  xubuntu-logo`, resetting `plymouthd.conf` and rebuilding initramfs. Fixed by:
+  `xubuntu-plymouth-theme`'s dpkg postinst calls `plymouth-set-default-theme xubuntu-logo`, resetting `plymouthd.conf` and rebuilding initramfs. Fixed by:
   (1) purging `xubuntu-plymouth-theme` during theming role execution;
   (2) registering the NikOS theme with `update-alternatives --install` at
   priority 200 and explicitly selecting it with `update-alternatives --set`,
