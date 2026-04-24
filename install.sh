@@ -28,9 +28,9 @@ LOCAL_VARS_REL="vars/local.yml"
 SKIP_REPO_SYNC="${NIKOS_SKIP_REPO_SYNC:-0}"
 ANSIBLE_REQUIREMENTS_REL="requirements.yml"
 
-# Returns 0 if dialog is enabled and the binary is present (usable before script-helpers is sourced)
+# Returns 0 if dialog is enabled, the binary is present, and stdin/stdout are connected to a TTY.
 _can_use_dialog() {
-  [[ "${USE_DIALOG}" != "0" ]] && command -v dialog &>/dev/null
+  [[ "${USE_DIALOG}" != "0" ]] && command -v dialog &>/dev/null && [[ -t 0 ]] && [[ -t 1 ]]
 }
 
 # Log file helpers (available before script-helpers is sourced)
@@ -219,7 +219,7 @@ _ensure_ansible_collections() {
     exit 1
   fi
 
-  if [[ "${_USE_DIALOG:-false}" == "true" ]] && command -v dialog &>/dev/null; then
+  if [[ "${_USE_DIALOG:-false}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
     dialog --title "NikOS ${NIKOS_VERSION}" \
       --infobox "Installing required Ansible collections..." 5 56
   else
@@ -583,7 +583,6 @@ _collect_become_password_dialog() {
   if ! pw=$(
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Sudo Password" \
-      --insecure \
       --passwordbox "Enter your sudo (become) password to run the Ansible playbook:" \
       8 62
   ); then
@@ -680,6 +679,7 @@ if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; th
   unset _become_pass
   _ansible_rc=${_pipe_status[0]}
   _tee_rc=${_pipe_status[1]}
+  _dialog_rc=${_pipe_status[2]:-0}
 else
   echo "Running NikOS ${NIKOS_VERSION} playbook..."
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
@@ -703,6 +703,9 @@ elif [[ "${_tee_rc}" -ne 0 ]]; then
   echo "ERROR: Failed to write installer log to ${INSTALL_LOG}." >&2
   _safe_logfile "[FAILED] tee could not write ${INSTALL_LOG} (rc=${_tee_rc})"
   _playbook_rc="${_tee_rc}"
+elif [[ -n "${_dialog_rc:-}" ]] && [[ "${_dialog_rc}" -ne 0 ]]; then
+  echo "WARNING: dialog UI exited with rc=${_dialog_rc}; playbook output may be incomplete." >&2
+  _safe_logfile "[WARNING] dialog exited with rc=${_dialog_rc}"
 fi
 
 _logfile "--- ansible-playbook output end ---"
