@@ -91,7 +91,7 @@ _install_summary() {
     _logfile "[DONE] Install complete"
   fi
 
-  if [[ "${_USE_DIALOG:-false}" == "true" ]] && command -v dialog &>/dev/null; then
+  if _can_use_dialog; then
     local _dlg_body
     _dlg_body="NikOS ${NIKOS_VERSION} install summary
 
@@ -105,9 +105,9 @@ _install_summary() {
 
   Full log: ${INSTALL_LOG}"
     if [[ "${rc}" -eq 0 ]]; then
-      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 14 72
+      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 14 72 || true
     else
-      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 14 72
+      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 14 72 || true
     fi
   fi
 }
@@ -118,9 +118,12 @@ _logfile "=== NikOS ${NIKOS_VERSION} install started ==="
 _logfile "User: $(id -un)   Host: $(hostname -s)"
 
 if _can_use_dialog; then
-  dialog --title "NikOS ${NIKOS_VERSION}" \
+  if ! dialog --title "NikOS ${NIKOS_VERSION}" \
     --msgbox "Neural Innovation for Knowledge OS\n\nLight system. Heavy thinking.\n\nPress OK to begin installation." \
-    10 52
+    10 52; then
+    echo "Installation canceled." >&2
+    exit 130
+  fi
 else
   echo "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
   echo "Light system. Heavy thinking."
@@ -667,6 +670,7 @@ if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; th
   set +e
   (
     cd "${NIKOS_HOME}"
+    # ANSIBLE_BECOME_PASS is visible in /proc/<pid>/environ for this user; avoid logging it.
     ANSIBLE_BECOME_PASS="${_become_pass}" \
       ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" \
       ansible-playbook "${PLAY_OPTS[@]}"

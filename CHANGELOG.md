@@ -9,7 +9,7 @@ All notable changes to NikOS are documented here.
   TUI when available, not just the interactive selections. Changes:
   - Welcome screen uses `dialog --msgbox` (user presses OK to proceed).
   - System requirements check uses `dialog --infobox`; failure shown in `dialog --msgbox`.
-  - Bootstrap package installation shows `dialog --infobox` before running `apt-get`.
+  - Bootstrap package installation shows `dialog --infobox` before running `apt-get` (only when `dialog` is already present; falls back to plain text when it is being installed as part of the bootstrap).
   - Repository clone and update steps show `dialog --infobox` status messages.
   - Ansible collections install shows `dialog --infobox` before running `ansible-galaxy`.
   - Ansible playbook execution: sudo password collected via `dialog --passwordbox`
