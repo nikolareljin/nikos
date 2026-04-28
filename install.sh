@@ -73,6 +73,32 @@ _show_logged_command_failure() {
   echo "ERROR: ${message} See log: ${INSTALL_LOG}" >&2
 }
 
+_collect_become_password_dialog() {
+  local pw
+  if ! pw=$(
+    dialog --stdout \
+      --title "NikOS ${NIKOS_VERSION} — Sudo Password" \
+      --passwordbox "Enter your sudo (become) password to run the Ansible playbook:" \
+      8 62
+  ); then
+    return $?
+  fi
+  printf '%s\n' "${pw}"
+}
+
+_write_become_password_file() {
+  local password="$1"
+  local password_file
+
+  if ! password_file="$(mktemp)"; then
+    echo "ERROR: Failed to create temporary become password file." >&2
+    return 1
+  fi
+  chmod 600 "${password_file}"
+  printf '%s\n' "${password}" > "${password_file}"
+  printf '%s\n' "${password_file}"
+}
+
 # Parse Ansible PLAY RECAP and print a summary to screen + log
 _install_summary() {
   local rc="${1:-0}"
@@ -257,7 +283,7 @@ _ensure_ansible_collections() {
     exit 1
   fi
 
-  if [[ "${_USE_DIALOG:-false}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
+  if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION}" \
       --infobox "Installing required Ansible collections..." 5 56
     if ansible-galaxy collection install -r "${requirements_path}" >> "${INSTALL_LOG}" 2>&1; then
@@ -502,25 +528,36 @@ else
       if [[ "${update_rc}" -eq 0 ]]; then
         :
       else
+        update_message=""
         case "${update_rc}" in
           1)
-            echo "ERROR: Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
+            update_message="Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'."
             ;;
           2)
-            echo "ERROR: Failed to pull updates for ${NIKOS_HOME}. Review the git output above, resolve the issue, then rerun the installer or 'nikos update'." >&2
+            update_message="Failed to pull updates for ${NIKOS_HOME}. Review the git output, resolve the issue, then rerun the installer or 'nikos update'."
             ;;
           3)
-            echo "ERROR: Failed to update NikOS submodules in ${NIKOS_HOME}. Review the git output above, resolve the issue, then rerun the installer or 'nikos update'." >&2
+            update_message="Failed to update NikOS submodules in ${NIKOS_HOME}. Review the git output, resolve the issue, then rerun the installer or 'nikos update'."
             ;;
           *)
-            echo "ERROR: Failed to update NikOS repo at ${NIKOS_HOME}. Review the git output above, then rerun the installer or 'nikos update'." >&2
+            update_message="Failed to update NikOS repo at ${NIKOS_HOME}. Review the git output, then rerun the installer or 'nikos update'."
             ;;
         esac
-        exit 1
+        if _can_use_dialog; then
+          _show_logged_command_failure "${update_message}" "${update_rc}"
+        else
+          echo "ERROR: ${update_message}" >&2
+        fi
+        exit "${update_rc}"
       fi
     else
       if _can_use_dialog; then
-        _pull_repo_updates_bootstrap >> "${INSTALL_LOG}" 2>&1
+        bootstrap_update_rc=0
+        _pull_repo_updates_bootstrap >> "${INSTALL_LOG}" 2>&1 || bootstrap_update_rc=$?
+        if [[ "${bootstrap_update_rc}" -ne 0 ]]; then
+          _show_logged_command_failure "Failed to update NikOS repository during bootstrap fallback." "${bootstrap_update_rc}"
+          exit "${bootstrap_update_rc}"
+        fi
       else
         _pull_repo_updates_bootstrap
       fi
@@ -710,9 +747,18 @@ _ansible_rc=0
 _tee_rc=0
 _pipe_status=()
 
-if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
+if _can_use_dialog; then
   print_info "Running NikOS ${NIKOS_VERSION} playbook..."
-  PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
+  if ! _become_pass=$(_collect_become_password_dialog); then
+    echo "Installer canceled at sudo password prompt." >&2
+    exit 130
+  fi
+  if ! _become_pass_file="$(_write_become_password_file "${_become_pass}")"; then
+    unset _become_pass
+    exit 1
+  fi
+  unset _become_pass
+  PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --become-password-file "${_become_pass_file}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"
@@ -727,6 +773,8 @@ if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; th
         --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
   _pipe_status=("${PIPESTATUS[@]}")
   set -e
+  rm -f "${_become_pass_file}"
+  unset _become_pass_file
   unset _script_cmd
   unset _play_opt
   _ansible_rc=${_pipe_status[0]}
