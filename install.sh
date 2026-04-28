@@ -189,7 +189,7 @@ fi
 # Ensure apt-based system
 if _can_use_dialog; then
   dialog --title "NikOS ${NIKOS_VERSION} — System Check" \
-    --infobox "Checking system requirements..." 5 52
+    --infobox "Checking system requirements..." 5 52 || true
 fi
 if ! command -v apt-get &>/dev/null; then
   if _can_use_dialog; then
@@ -211,7 +211,7 @@ fi
 if [[ ${#_need_packages[@]} -gt 0 ]]; then
   if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION} — Bootstrap" \
-      --infobox "Installing bootstrap packages:\n  ${_need_packages[*]}" 7 60
+      --infobox "Installing bootstrap packages:\n  ${_need_packages[*]}" 7 60 || true
   else
     echo "Installing bootstrap packages: ${_need_packages[*]}"
   fi
@@ -289,7 +289,7 @@ _ensure_ansible_collections() {
 
   if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION}" \
-      --infobox "Installing required Ansible collections..." 5 56
+      --infobox "Installing required Ansible collections..." 5 56 || true
     if ansible-galaxy collection install -r "${requirements_path}" >> "${INSTALL_LOG}" 2>&1; then
       :
     else
@@ -517,7 +517,7 @@ else
   if [[ -d "${NIKOS_HOME}/.git" ]]; then
     if _can_use_dialog; then
       dialog --title "NikOS ${NIKOS_VERSION}" \
-        --infobox "Updating NikOS repo at ${NIKOS_HOME}..." 5 72
+        --infobox "Updating NikOS repo at ${NIKOS_HOME}..." 5 72 || true
     else
       echo "Updating NikOS repo at ${NIKOS_HOME}..."
     fi
@@ -569,7 +569,7 @@ else
   else
     if _can_use_dialog; then
       dialog --title "NikOS ${NIKOS_VERSION}" \
-        --infobox "Cloning NikOS repo to ${NIKOS_HOME}..." 5 72
+        --infobox "Cloning NikOS repo to ${NIKOS_HOME}..." 5 72 || true
     else
       echo "Cloning NikOS repo to ${NIKOS_HOME}..."
     fi
@@ -753,6 +753,7 @@ _pipe_status=()
 
 if _can_use_dialog; then
   print_info "Running NikOS ${NIKOS_VERSION} playbook..."
+  dialog_init
   if ! _become_pass=$(_collect_become_password_dialog); then
     echo "Installer canceled at sudo password prompt." >&2
     exit 130
@@ -768,22 +769,33 @@ if _can_use_dialog; then
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"
-  printf -v _script_cmd 'cd %q && ANSIBLE_CONFIG=%q ansible-playbook' "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg"
-  for _play_opt in "${PLAY_OPTS[@]}"; do
-    printf -v _script_cmd '%s %q' "${_script_cmd}" "${_play_opt}"
-  done
   set +e
-  script -qefc "${_script_cmd}" /dev/null 2>&1 \
-    | tee -a "${INSTALL_LOG}" \
-    | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
-        --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
-  _pipe_status=("${PIPESTATUS[@]}")
+  if command -v script >/dev/null 2>&1; then
+    printf -v _script_cmd 'cd %q && ANSIBLE_CONFIG=%q ansible-playbook' "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg"
+    for _play_opt in "${PLAY_OPTS[@]}"; do
+      printf -v _script_cmd '%s %q' "${_script_cmd}" "${_play_opt}"
+    done
+    script -qefc "${_script_cmd}" /dev/null 2>&1 \
+      | tee -a "${INSTALL_LOG}" \
+      | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
+          --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
+    _pipe_status=("${PIPESTATUS[@]}")
+    unset _script_cmd
+    unset _play_opt
+  else
+    (
+      cd "${NIKOS_HOME}"
+      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
+    ) 2>&1 \
+      | tee -a "${INSTALL_LOG}" \
+      | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
+          --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
+    _pipe_status=("${PIPESTATUS[@]}")
+  fi
   set -e
   _cleanup_become_password_file
   unset _become_pass_file
   trap - EXIT INT TERM
-  unset _script_cmd
-  unset _play_opt
   _ansible_rc=${_pipe_status[0]}
   _tee_rc=${_pipe_status[1]}
   _dialog_rc=${_pipe_status[2]:-0}
