@@ -12,11 +12,10 @@ All notable changes to NikOS are documented here.
   - Bootstrap package installation shows `dialog --infobox` before running `apt-get` (only when `dialog` is already present; falls back to plain text when it is being installed as part of the bootstrap).
   - Repository clone and update steps show `dialog --infobox` status messages.
   - Ansible collections install shows `dialog --infobox` before running `ansible-galaxy`.
-  - Ansible playbook execution: sudo password collected via `dialog --passwordbox`
-    (passed to Ansible via `ANSIBLE_BECOME_PASS`), playbook output streamed inside
-    `dialog --progressbox`.
+  - Ansible playbook execution: output streamed inside `dialog --progressbox`;
+    become prompts are handled by Ansible instead of storing the password in the environment.
   - Install summary shown in `dialog --msgbox` after the plain-text summary.
-  - All changes are guarded by the existing `_USE_DIALOG` / `_can_use_dialog()` flag;
+  - All changes are guarded by `_USE_DIALOG` and `_can_use_dialog()` checks;
     plain-text fallbacks remain unchanged.
 - Version bumped `0.3.1` → `0.3.2`.
 
