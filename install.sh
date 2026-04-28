@@ -52,6 +52,27 @@ _install_bootstrap_packages() {
   sudo apt-get install -y "$@"
 }
 
+_install_log_tail() {
+  tail -n 10 "${INSTALL_LOG}" 2>/dev/null || true
+}
+
+_show_logged_command_failure() {
+  local message="$1"
+  local rc="$2"
+  local recent_output
+
+  recent_output="$(_install_log_tail)"
+  _safe_logfile "[FAILED] ${message} (rc=${rc})"
+
+  if _can_use_dialog; then
+    dialog --title "NikOS ${NIKOS_VERSION} — Error" \
+      --msgbox "${message}\n\nSee log: ${INSTALL_LOG}\n\nRecent output:\n${recent_output:-No additional details captured.}" \
+      18 76 || true
+  fi
+
+  echo "ERROR: ${message} See log: ${INSTALL_LOG}" >&2
+}
+
 # Parse Ansible PLAY RECAP and print a summary to screen + log
 _install_summary() {
   local rc="${1:-0}"
@@ -166,7 +187,13 @@ if [[ ${#_need_packages[@]} -gt 0 ]]; then
   fi
   _logfile "Bootstrap packages: ${_need_packages[*]}"
   if _can_use_dialog; then
-    _install_bootstrap_packages "${_need_packages[@]}" >> "${INSTALL_LOG}" 2>&1
+    if _install_bootstrap_packages "${_need_packages[@]}" >> "${INSTALL_LOG}" 2>&1; then
+      :
+    else
+      install_rc=$?
+      _show_logged_command_failure "Failed to install bootstrap packages." "${install_rc}"
+      exit "${install_rc}"
+    fi
   else
     _install_bootstrap_packages "${_need_packages[@]}"
   fi
@@ -233,7 +260,13 @@ _ensure_ansible_collections() {
   if [[ "${_USE_DIALOG:-false}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
     dialog --title "NikOS ${NIKOS_VERSION}" \
       --infobox "Installing required Ansible collections..." 5 56
-    ansible-galaxy collection install -r "${requirements_path}" >> "${INSTALL_LOG}" 2>&1
+    if ansible-galaxy collection install -r "${requirements_path}" >> "${INSTALL_LOG}" 2>&1; then
+      :
+    else
+      collection_rc=$?
+      _show_logged_command_failure "Failed to install required Ansible collections." "${collection_rc}"
+      exit "${collection_rc}"
+    fi
   else
     echo "Installing required Ansible collections..."
     ansible-galaxy collection install -r "${requirements_path}"
@@ -501,11 +534,22 @@ else
     fi
     _logfile "Cloning repo from ${REPO_URL} to ${NIKOS_HOME}"
     if _can_use_dialog; then
-      git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}" >> "${INSTALL_LOG}" 2>&1
+      if git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}" >> "${INSTALL_LOG}" 2>&1; then
+        _logfile "Repo cloned OK"
+      else
+        clone_rc=$?
+        _show_logged_command_failure "Failed to clone NikOS repository." "${clone_rc}"
+        exit "${clone_rc}"
+      fi
     else
-      git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"
+      if git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"; then
+        _logfile "Repo cloned OK"
+      else
+        clone_rc=$?
+        echo "ERROR: Failed to clone NikOS repository. See log: ${INSTALL_LOG}" >&2
+        exit "${clone_rc}"
+      fi
     fi
-    _logfile "Repo cloned OK"
   fi
 fi
 
@@ -603,19 +647,6 @@ _select_ai_tools_plain() {
   echo "${_selected[*]}"
 }
 
-_collect_become_password_dialog() {
-  local pw
-  if ! pw=$(
-    dialog --stdout \
-      --title "NikOS ${NIKOS_VERSION} — Sudo Password" \
-      --passwordbox "Enter your sudo (become) password to run the Ansible playbook:" \
-      8 62
-  ); then
-    return $?
-  fi
-  printf '%s\n' "${pw}"
-}
-
 if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
   if ! _raw=$(_select_bundles_dialog); then
     echo "Installer canceled during optional bundle selection." >&2
@@ -681,28 +712,23 @@ _pipe_status=()
 
 if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
   print_info "Running NikOS ${NIKOS_VERSION} playbook..."
-  if ! _become_pass=$(_collect_become_password_dialog); then
-    echo "Installer canceled at sudo password prompt." >&2
-    exit 130
-  fi
-  PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml")
+  PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
-  _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]} (become via env)"
+  _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"
+  printf -v _script_cmd 'cd %q && ANSIBLE_CONFIG=%q ansible-playbook' "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg"
+  for _play_opt in "${PLAY_OPTS[@]}"; do
+    printf -v _script_cmd '%s %q' "${_script_cmd}" "${_play_opt}"
+  done
   set +e
-  (
-    cd "${NIKOS_HOME}"
-    # ANSIBLE_BECOME_PASS is visible in /proc/<pid>/environ for this user; avoid logging it.
-    ANSIBLE_BECOME_PASS="${_become_pass}" \
-      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" \
-      ansible-playbook "${PLAY_OPTS[@]}"
-  ) 2>&1 \
+  script -qefc "${_script_cmd}" /dev/null 2>&1 \
     | tee -a "${INSTALL_LOG}" \
     | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
         --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
   _pipe_status=("${PIPESTATUS[@]}")
   set -e
-  unset _become_pass
+  unset _script_cmd
+  unset _play_opt
   _ansible_rc=${_pipe_status[0]}
   _tee_rc=${_pipe_status[1]}
   _dialog_rc=${_pipe_status[2]:-0}
