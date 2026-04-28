@@ -47,6 +47,11 @@ _strip_ansi_from_log() {
   sed -i 's/\x1b\[[0-9;:]*[a-zA-Z]//g' "${INSTALL_LOG}" 2>/dev/null || true
 }
 
+_install_bootstrap_packages() {
+  sudo apt-get update -qq
+  sudo apt-get install -y "$@"
+}
+
 # Parse Ansible PLAY RECAP and print a summary to screen + log
 _install_summary() {
   local rc="${1:-0}"
@@ -160,8 +165,11 @@ if [[ ${#_need_packages[@]} -gt 0 ]]; then
     echo "Installing bootstrap packages: ${_need_packages[*]}"
   fi
   _logfile "Bootstrap packages: ${_need_packages[*]}"
-  sudo apt-get update -qq
-  sudo apt-get install -y "${_need_packages[@]}"
+  if _can_use_dialog; then
+    _install_bootstrap_packages "${_need_packages[@]}" >> "${INSTALL_LOG}" 2>&1
+  else
+    _install_bootstrap_packages "${_need_packages[@]}"
+  fi
   _logfile "Bootstrap packages installed OK"
 else
   _logfile "Bootstrap packages: none needed"
@@ -225,10 +233,11 @@ _ensure_ansible_collections() {
   if [[ "${_USE_DIALOG:-false}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
     dialog --title "NikOS ${NIKOS_VERSION}" \
       --infobox "Installing required Ansible collections..." 5 56
+    ansible-galaxy collection install -r "${requirements_path}" >> "${INSTALL_LOG}" 2>&1
   else
     echo "Installing required Ansible collections..."
+    ansible-galaxy collection install -r "${requirements_path}"
   fi
-  ansible-galaxy collection install -r "${requirements_path}"
 }
 
 _print_bootstrap_stash_recovery() {
@@ -451,10 +460,15 @@ else
     fi
     _logfile "Updating repo at ${NIKOS_HOME}"
     if _source_repo_sync_helpers; then
-      if _pull_repo_updates "nikos-install-autostash"; then
+      update_rc=0
+      if _can_use_dialog; then
+        _pull_repo_updates "nikos-install-autostash" >> "${INSTALL_LOG}" 2>&1 || update_rc=$?
+      else
+        _pull_repo_updates "nikos-install-autostash" || update_rc=$?
+      fi
+      if [[ "${update_rc}" -eq 0 ]]; then
         :
       else
-        update_rc=$?
         case "${update_rc}" in
           1)
             echo "ERROR: Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
@@ -472,7 +486,11 @@ else
         exit 1
       fi
     else
-      _pull_repo_updates_bootstrap
+      if _can_use_dialog; then
+        _pull_repo_updates_bootstrap >> "${INSTALL_LOG}" 2>&1
+      else
+        _pull_repo_updates_bootstrap
+      fi
     fi
   else
     if _can_use_dialog; then
@@ -482,7 +500,11 @@ else
       echo "Cloning NikOS repo to ${NIKOS_HOME}..."
     fi
     _logfile "Cloning repo from ${REPO_URL} to ${NIKOS_HOME}"
-    git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"
+    if _can_use_dialog; then
+      git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}" >> "${INSTALL_LOG}" 2>&1
+    else
+      git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"
+    fi
     _logfile "Repo cloned OK"
   fi
 fi
