@@ -99,6 +99,10 @@ _write_become_password_file() {
   printf '%s\n' "${password_file}"
 }
 
+_cleanup_become_password_file() {
+  [[ -n "${_become_pass_file:-}" ]] && rm -f "${_become_pass_file}"
+}
+
 # Parse Ansible PLAY RECAP and print a summary to screen + log
 _install_summary() {
   local rc="${1:-0}"
@@ -757,6 +761,8 @@ if _can_use_dialog; then
     unset _become_pass
     exit 1
   fi
+  trap '_cleanup_become_password_file' EXIT
+  trap '_cleanup_become_password_file; exit 130' INT TERM
   unset _become_pass
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --become-password-file "${_become_pass_file}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
@@ -773,8 +779,9 @@ if _can_use_dialog; then
         --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
   _pipe_status=("${PIPESTATUS[@]}")
   set -e
-  rm -f "${_become_pass_file}"
+  _cleanup_become_password_file
   unset _become_pass_file
+  trap - EXIT INT TERM
   unset _script_cmd
   unset _play_opt
   _ansible_rc=${_pipe_status[0]}
