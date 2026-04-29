@@ -2,6 +2,24 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.3.2] — 2026-04-23
+
+### Changed
+- **Full dialog UI for `install.sh`** — every installation step now uses the `dialog`
+  TUI when available, not just the interactive selections. Changes:
+  - Welcome screen uses `dialog --msgbox` (user presses OK to proceed).
+  - System requirements check uses `dialog --infobox`; failure shown in `dialog --msgbox`.
+  - Bootstrap package installation shows `dialog --infobox` before running `apt-get` (only when `dialog` is already present; falls back to plain text when it is being installed as part of the bootstrap).
+  - Repository clone and update steps show `dialog --infobox` status messages.
+  - Ansible collections install shows `dialog --infobox` before running `ansible-galaxy`.
+  - Ansible playbook execution: output streamed inside `dialog --progressbox`;
+    `dialog --passwordbox` collects the sudo password and passes it to Ansible via
+    a temporary `--become-password-file` instead of storing the password in the environment.
+  - Install summary shown in `dialog --msgbox` after the plain-text summary.
+  - All changes are guarded by `_USE_DIALOG` and `_can_use_dialog()` checks;
+    plain-text fallbacks remain unchanged.
+- Version bumped `0.3.1` → `0.3.2`.
+
 ## [0.3.1] — 2026-04-22
 
 ### Fixed
