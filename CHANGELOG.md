@@ -13,7 +13,8 @@ All notable changes to NikOS are documented here.
   - Repository clone and update steps show `dialog --infobox` status messages.
   - Ansible collections install shows `dialog --infobox` before running `ansible-galaxy`.
   - Ansible playbook execution: output streamed inside `dialog --progressbox`;
-    become prompts are handled by Ansible instead of storing the password in the environment.
+    `dialog --passwordbox` collects the sudo password and passes it to Ansible via
+    a temporary `--become-password-file` instead of storing the password in the environment.
   - Install summary shown in `dialog --msgbox` after the plain-text summary.
   - All changes are guarded by `_USE_DIALOG` and `_can_use_dialog()` checks;
     plain-text fallbacks remain unchanged.
