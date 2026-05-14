@@ -16,7 +16,12 @@ nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/..."
 
 # ── Ollama ────────────────────────────────────────────
 ollama_default_model: "qwen2.5-coder:7b"
+ollama_optional_models:
+  - "phi4:14b"
+  - "codellama:7b"
+  - "deepseek-coder:6.7b"
 # Other good choices: llama3.2, mistral, codellama, phi3
+llama_cpp_version: "b9151"
 
 # ── Python ────────────────────────────────────────────
 miniforge_version: "24.11.3-0"
@@ -67,6 +72,19 @@ nikos add education  # LibreOffice, draw.io (Flatpak), Anki
 nikos add neovim     # Neovim plus a minimal lazy.nvim bootstrap config
 nikos add java       # OpenJDK 21
 nikos add podman     # Podman container runtime
+nikos add bun        # Bun JavaScript runtime
+nikos add redis      # Redis server and Python client
+nikos add postgres   # PostgreSQL with pgvector and psycopg2
+nikos add qdrant     # Qdrant vector database via Docker user service
+nikos add zsh        # Zsh plus Starship prompt
+nikos add act        # Run GitHub Actions locally
+nikos add fabric     # Fabric AI pattern CLI
+nikos add k8s-tools  # kubectl and Helm
+nikos add bitnet     # BitNet.cpp 1-bit LLM inference
+nikos add mistral-rs # mistral.rs Rust LLM server
+nikos add monitoring # Netdata monitoring dashboard
+nikos add openclaw   # OpenClaw LLM gateway CLI
+nikos add ollama-models # Pull optional Ollama models; about 26 GB
 ```
 
 ## Changing the wallpaper

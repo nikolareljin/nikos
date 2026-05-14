@@ -1,0 +1,22 @@
+---
+- name: Install Redis server
+  ansible.builtin.apt:
+    name: redis-server
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Enable Redis service
+  ansible.builtin.systemd:
+    name: redis-server
+    enabled: true
+    state: started
+  become: true
+  when: not ansible_check_mode
+
+- name: Install Redis Python client in nikos-ai env
+  ansible.builtin.command: >
+    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install redis
+  changed_when: false
+  when: not ansible_check_mode

@@ -1,0 +1,13 @@
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH"
+
+if [ -x /usr/local/bin/nikos-welcome ]; then
+  /usr/local/bin/nikos-welcome
+fi
+
+if [ -f "$HOME/miniforge3/etc/profile.d/conda.sh" ]; then
+  . "$HOME/miniforge3/etc/profile.d/conda.sh"
+fi
+
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init zsh)"
+fi

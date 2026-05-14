@@ -27,7 +27,19 @@ nikos/
 │       ├── education/              # LibreOffice, draw.io, Anki
 │       ├── neovim/                 # Neovim + starter lazy.nvim config
 │       ├── java/                   # OpenJDK 21
-│       └── podman/                 # Podman container runtime
+│       ├── podman/                 # Podman container runtime
+│       ├── bun/                    # Bun JavaScript runtime
+│       ├── redis/                  # Redis server
+│       ├── postgres/               # PostgreSQL + pgvector
+│       ├── qdrant/                 # Qdrant vector database
+│       ├── zsh/                    # Zsh + Starship
+│       ├── act/                    # Local GitHub Actions runner
+│       ├── fabric/                 # Fabric AI pattern CLI
+│       ├── k8s-tools/              # kubectl + Helm
+│       ├── bitnet/                 # BitNet.cpp
+│       ├── mistral-rs/             # mistral.rs server
+│       ├── monitoring/             # Netdata
+│       └── openclaw/               # OpenClaw CLI
 ├── tests/
 │   └── test_github_wizard.py       # pytest tests for the first-login wizard
 └── .github/workflows/
@@ -47,7 +59,7 @@ shellcheck install.sh scripts/nikos
 python3 -m pytest tests/ -v
 
 # Dry-run (needs ansible installed)
-ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education,neovim,java,podman
+ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education
 ```
 
 ## Writing a new role
@@ -105,18 +117,15 @@ PRs go to `dev`. `dev` merges to `main` when stable. Tag `main` to release.
 ## Releasing
 
 ```bash
-# Bump version in vars/main.yml, install.sh, and scripts/nikos
-# Commit: "chore: bump version to X.Y.Z"
-git tag X.Y.Z
-git push origin main --tags
+# Create release/X.Y.Z, bump VERSION, update changelog/docs, then merge to main.
+# The auto-tag workflow tags main when the merge commit references release/X.Y.Z.
 ```
 
 The `release.yml` workflow creates a GitHub Release automatically with a changelog and `install.sh` as a release asset.
 
 ## Versioning
 
-Strict semver `X.Y.Z` — no `v` prefix. Keep the shipped version in sync across `vars/main.yml`,
-`install.sh`, and `scripts/nikos`.
+Strict semver `X.Y.Z` with no `v` prefix. Keep `VERSION`, README, and CHANGELOG in sync.
 
 ## CI overview
 

@@ -1,0 +1,37 @@
+---
+- name: Install zsh
+  ansible.builtin.apt:
+    name: zsh
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Ensure local bin directory exists
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.local/bin"
+    state: directory
+    mode: "0755"
+
+- name: Download Starship archive
+  ansible.builtin.get_url:
+    url: https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-gnu.tar.gz
+    dest: /tmp/starship-x86_64-unknown-linux-gnu.tar.gz
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: Install Starship prompt
+  ansible.builtin.unarchive:
+    src: /tmp/starship-x86_64-unknown-linux-gnu.tar.gz
+    dest: "{{ nikos_home }}/.local/bin"
+    remote_src: true
+    creates: "{{ nikos_home }}/.local/bin/starship"
+    mode: "0755"
+  when: not ansible_check_mode
+
+- name: Deploy default zsh config
+  ansible.builtin.copy:
+    src: zshrc
+    dest: "{{ nikos_home }}/.zshrc"
+    mode: "0644"
+    force: false

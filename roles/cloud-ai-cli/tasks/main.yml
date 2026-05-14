@@ -1,7 +1,7 @@
 ---
 - name: Download NodeSource setup script
   ansible.builtin.get_url:
-    url: https://deb.nodesource.com/setup_20.x
+    url: https://deb.nodesource.com/setup_22.x
     dest: /tmp/nodesource_setup.sh
     mode: "0755"
   become: true
@@ -60,6 +60,24 @@
     - cloud_ai_cli_gh_installed.rc == 0
     - cloud_ai_cli_gh_auth.rc == 0
   tags: [ai-copilot-cli]
+
+- name: Install shell-gpt via pipx
+  ansible.builtin.command: pipx install shell-gpt
+  args:
+    creates: "{{ nikos_home }}/.local/bin/sgpt"
+  environment:
+    PIPX_HOME: "{{ nikos_home }}/.local/pipx"
+    PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
+  when: not ansible_check_mode
+
+- name: Install glances via pipx
+  ansible.builtin.command: pipx install glances
+  args:
+    creates: "{{ nikos_home }}/.local/bin/glances"
+  environment:
+    PIPX_HOME: "{{ nikos_home }}/.local/pipx"
+    PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
+  when: not ansible_check_mode
 
 - name: Skip GitHub Copilot CLI extension because gh is not installed
   ansible.builtin.debug:

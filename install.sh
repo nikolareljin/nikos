@@ -620,10 +620,26 @@ _select_bundles_dialog() {
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
       --checklist "Space to toggle, Enter to confirm:" \
-      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 3 \
-      "network"   "Network tools (nmap, wireshark, OpenVPN)"         off \
-      "music"     "Music tools (LMMS, Ardour, Audacity)"             off \
-      "education" "Education tools (LibreOffice, draw.io, Anki)"     off
+      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 19 \
+      "network"       "Network tools (nmap, wireshark, OpenVPN)"     off \
+      "music"         "Music tools (LMMS, Ardour, Audacity)"         off \
+      "education"     "Education tools (LibreOffice, draw.io, Anki)" off \
+      "neovim"        "Neovim with lazy.nvim starter config"         off \
+      "zsh"           "Zsh with Starship prompt"                     off \
+      "java"          "OpenJDK 21"                                   off \
+      "bun"           "Bun JavaScript runtime"                       off \
+      "openclaw"      "OpenClaw LLM gateway CLI"                     off \
+      "ollama-models" "Optional Ollama models, about 26 GB"          off \
+      "postgres"      "PostgreSQL with pgvector"                     off \
+      "redis"         "Redis server and Python client"               off \
+      "qdrant"        "Qdrant vector database container"             off \
+      "k8s-tools"     "kubectl and Helm"                             off \
+      "podman"        "Podman container runtime"                     off \
+      "act"           "Run GitHub Actions locally"                   off \
+      "fabric"        "Fabric AI pattern CLI"                        off \
+      "bitnet"        "BitNet.cpp 1-bit LLM inference"               off \
+      "mistral-rs"    "mistral.rs Rust LLM server"                   off \
+      "monitoring"    "Netdata monitoring dashboard"                 off
   ); then
     echo "${result}"
     return 0
@@ -664,9 +680,51 @@ _select_bundles_plain() {
   read -r -p "  Install network tools? (nmap, wireshark, OpenVPN) [y/N] " opt_network </dev/tty
   read -r -p "  Install music tools? (LMMS, Ardour, Audacity) [y/N] " opt_music </dev/tty
   read -r -p "  Install education tools? (LibreOffice, draw.io, Anki) [y/N] " opt_education </dev/tty
+  echo ""
+  echo "Dev environment:"
+  read -r -p "  Install Neovim? [y/N] " opt_neovim </dev/tty
+  read -r -p "  Install Zsh + Starship? [y/N] " opt_zsh </dev/tty
+  read -r -p "  Install Java 21? [y/N] " opt_java </dev/tty
+  read -r -p "  Install Bun? [y/N] " opt_bun </dev/tty
+  echo ""
+  echo "LLM tools:"
+  read -r -p "  Install OpenClaw? [y/N] " opt_openclaw </dev/tty
+  read -r -p "  Pre-pull optional Ollama models? (~26 GB) [y/N] " opt_ollama_models </dev/tty
+  read -r -p "  Install BitNet.cpp? [y/N] " opt_bitnet </dev/tty
+  read -r -p "  Install mistral.rs? [y/N] " opt_mistral_rs </dev/tty
+  echo ""
+  echo "Databases:"
+  read -r -p "  Install PostgreSQL + pgvector? [y/N] " opt_postgres </dev/tty
+  read -r -p "  Install Redis? [y/N] " opt_redis </dev/tty
+  read -r -p "  Install Qdrant? [y/N] " opt_qdrant </dev/tty
+  echo ""
+  echo "Containers / Kubernetes:"
+  read -r -p "  Install kubectl + Helm? [y/N] " opt_k8s_tools </dev/tty
+  read -r -p "  Install Podman? [y/N] " opt_podman </dev/tty
+  read -r -p "  Install act? [y/N] " opt_act </dev/tty
+  echo ""
+  echo "Monitoring:"
+  read -r -p "  Install Netdata? [y/N] " opt_monitoring </dev/tty
+  read -r -p "  Install Fabric AI pattern CLI? [y/N] " opt_fabric </dev/tty
   [[ "${opt_network,,}"   == "y" ]] && _selected+=("network")
   [[ "${opt_music,,}"     == "y" ]] && _selected+=("music")
   [[ "${opt_education,,}" == "y" ]] && _selected+=("education")
+  [[ "${opt_neovim,,}" == "y" ]] && _selected+=("neovim")
+  [[ "${opt_zsh,,}" == "y" ]] && _selected+=("zsh")
+  [[ "${opt_java,,}" == "y" ]] && _selected+=("java")
+  [[ "${opt_bun,,}" == "y" ]] && _selected+=("bun")
+  [[ "${opt_openclaw,,}" == "y" ]] && _selected+=("openclaw")
+  [[ "${opt_ollama_models,,}" == "y" ]] && _selected+=("ollama-models")
+  [[ "${opt_bitnet,,}" == "y" ]] && _selected+=("bitnet")
+  [[ "${opt_mistral_rs,,}" == "y" ]] && _selected+=("mistral-rs")
+  [[ "${opt_postgres,,}" == "y" ]] && _selected+=("postgres")
+  [[ "${opt_redis,,}" == "y" ]] && _selected+=("redis")
+  [[ "${opt_qdrant,,}" == "y" ]] && _selected+=("qdrant")
+  [[ "${opt_k8s_tools,,}" == "y" ]] && _selected+=("k8s-tools")
+  [[ "${opt_podman,,}" == "y" ]] && _selected+=("podman")
+  [[ "${opt_act,,}" == "y" ]] && _selected+=("act")
+  [[ "${opt_monitoring,,}" == "y" ]] && _selected+=("monitoring")
+  [[ "${opt_fabric,,}" == "y" ]] && _selected+=("fabric")
   echo "${_selected[*]}"
 }
 
@@ -730,6 +788,13 @@ for _bundle in network music education; do
     SKIP_TAGS="${SKIP_TAGS},${_bundle}"
   fi
 done
+
+EXPLICIT_OPTIONAL_TAGS=""
+for _bundle in neovim java bun redis postgres qdrant k8s-tools podman zsh act fabric bitnet mistral-rs monitoring ollama-models openclaw; do
+  if printf '%s\n' "${SELECTED_BUNDLES[@]}" | grep -qx "${_bundle}"; then
+    EXPLICIT_OPTIONAL_TAGS="${EXPLICIT_OPTIONAL_TAGS},${_bundle}"
+  fi
+done
 for _tool in ai-local ai-gemini ai-claude ai-copilot-cli ai-runner ai-vscode; do
   if ! printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -qx "${_tool}"; then
     SKIP_TAGS="${SKIP_TAGS},${_tool}"
@@ -744,6 +809,7 @@ _persist_skip_tags "${SKIP_TAGS#,}"
 _logfile "Selected bundles: ${SELECTED_BUNDLES[*]:-none}"
 _logfile "Selected AI tools: ${SELECTED_AI_TOOLS[*]:-none}"
 _logfile "Skip tags: ${SKIP_TAGS#,}"
+_logfile "Explicit optional tags: ${EXPLICIT_OPTIONAL_TAGS#,}"
 
 # Run the playbook from local clone ───────────────────────────────
 _playbook_rc=0
@@ -793,9 +859,6 @@ if _can_use_dialog; then
     _pipe_status=("${PIPESTATUS[@]}")
   fi
   set -e
-  _cleanup_become_password_file
-  unset _become_pass_file
-  trap - EXIT INT TERM
   _ansible_rc=${_pipe_status[0]}
   _tee_rc=${_pipe_status[1]}
   _dialog_rc=${_pipe_status[2]:-0}
@@ -814,6 +877,60 @@ else
   set -e
   _ansible_rc=${_pipe_status[0]}
   _tee_rc=${_pipe_status[1]}
+fi
+
+if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
+  print_info "Installing selected optional bundles: ${EXPLICIT_OPTIONAL_TAGS#,}"
+  OPTIONAL_PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --tags "${EXPLICIT_OPTIONAL_TAGS#,}")
+  if [[ -n "${_become_pass_file:-}" ]]; then
+    OPTIONAL_PLAY_OPTS+=(--become-password-file "${_become_pass_file}")
+  else
+    OPTIONAL_PLAY_OPTS+=(--ask-become-pass)
+  fi
+  _logfile "Optional playbook: ansible-playbook ${OPTIONAL_PLAY_OPTS[*]}"
+  _logfile "--- optional playbook output start ---"
+  set +e
+  if _can_use_dialog; then
+    if command -v script >/dev/null 2>&1; then
+      printf -v _script_cmd 'cd %q && ANSIBLE_CONFIG=%q ansible-playbook' "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg"
+      for _play_opt in "${OPTIONAL_PLAY_OPTS[@]}"; do
+        printf -v _script_cmd '%s %q' "${_script_cmd}" "${_play_opt}"
+      done
+      script -qefc "${_script_cmd}" /dev/null 2>&1 \
+        | tee -a "${INSTALL_LOG}" \
+        | dialog --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
+            --progressbox "Installing selected optional bundles..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
+      _pipe_status=("${PIPESTATUS[@]}")
+      unset _script_cmd
+      unset _play_opt
+    else
+      (
+        cd "${NIKOS_HOME}"
+        ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
+      ) 2>&1 \
+        | tee -a "${INSTALL_LOG}" \
+        | dialog --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
+            --progressbox "Installing selected optional bundles..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
+      _pipe_status=("${PIPESTATUS[@]}")
+    fi
+    _dialog_rc=${_pipe_status[2]:-0}
+  else
+    (
+      cd "${NIKOS_HOME}"
+      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
+    ) 2>&1 | tee -a "${INSTALL_LOG}"
+    _pipe_status=("${PIPESTATUS[@]}")
+  fi
+  set -e
+  _ansible_rc=${_pipe_status[0]}
+  _tee_rc=${_pipe_status[1]}
+  _logfile "--- optional playbook output end ---"
+fi
+
+if [[ -n "${_become_pass_file:-}" ]]; then
+  _cleanup_become_password_file
+  unset _become_pass_file
+  trap - EXIT INT TERM
 fi
 
 if [[ "${_ansible_rc}" -ne 0 ]]; then
