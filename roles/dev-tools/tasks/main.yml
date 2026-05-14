@@ -125,6 +125,13 @@
     creates: /usr/local/bin/lantern
   when: not ansible_check_mode
 
+- name: Install mkcert
+  ansible.builtin.get_url:
+    url: https://github.com/FiloSottile/mkcert/releases/latest/download/mkcert-linux-amd64
+    dest: "{{ nikos_home }}/.local/bin/mkcert"
+    mode: "0755"
+  when: not ansible_check_mode
+
 # ── ai-runner (local Ollama model runner with simple UI) ──
 
 - name: Clone ai-runner

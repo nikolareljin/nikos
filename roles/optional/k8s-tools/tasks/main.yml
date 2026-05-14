@@ -1,0 +1,54 @@
+---
+- name: Ensure apt keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Download Kubernetes apt key
+  ansible.builtin.get_url:
+    url: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_apt_version }}/deb/Release.key"
+    dest: /tmp/kubernetes-apt-release.key
+    mode: "0644"
+  become: true
+
+- name: Dearmor Kubernetes apt key
+  ansible.builtin.command: >
+    gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    /tmp/kubernetes-apt-release.key
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  become: true
+  when: not ansible_check_mode
+
+- name: Add Kubernetes apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg]
+      https://pkgs.k8s.io/core:/stable:/{{ kubernetes_apt_version }}/deb/ /
+    filename: kubernetes
+    state: present
+  become: true
+  when: not ansible_check_mode
+- name: Install kubectl
+  ansible.builtin.apt:
+    name: kubectl
+    state: present
+    update_cache: true
+  become: true
+  when: not ansible_check_mode
+
+- name: Download Helm installer
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    dest: /tmp/get-helm-3
+    mode: "0755"
+  when: not ansible_check_mode
+
+- name: Install Helm
+  ansible.builtin.command: bash /tmp/get-helm-3
+  args:
+    creates: /usr/local/bin/helm
+  become: true
+  when: not ansible_check_mode

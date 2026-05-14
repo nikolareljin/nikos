@@ -14,6 +14,14 @@ nordic_grub_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/
 
 # Ollama
 ollama_default_model: "qwen2.5-coder:7b"
+ollama_optional_models:
+  - "phi4:14b"
+  - "codellama:7b"
+  - "deepseek-coder:6.7b"
+  - "gemma2:9b"
+  - "llava:7b"
+llama_cpp_version: "b9151"
+kubernetes_apt_version: "v1.35"
 
 # Python / conda
 miniforge_version: "24.11.3-0"

@@ -1,0 +1,7 @@
+---
+- name: Install OpenClaw globally via npm
+  ansible.builtin.command: npm install -g openclaw@latest
+  become: true
+  args:
+    creates: /usr/bin/openclaw
+  when: not ansible_check_mode

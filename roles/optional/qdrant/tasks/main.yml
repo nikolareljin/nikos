@@ -1,0 +1,34 @@
+---
+- name: Ensure user systemd directory exists
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.config/systemd/user"
+    state: directory
+    mode: "0755"
+
+- name: Deploy Qdrant user service
+  ansible.builtin.copy:
+    dest: "{{ nikos_home }}/.config/systemd/user/qdrant.service"
+    mode: "0644"
+    force: false
+    content: |
+      [Unit]
+      Description=Qdrant vector database
+      After=docker.service
+
+      [Service]
+      ExecStartPre=-/usr/bin/docker rm qdrant
+      ExecStart=/usr/bin/docker run --rm --name qdrant -p 6333:6333 -v qdrant-storage:/qdrant/storage qdrant/qdrant:latest
+      ExecStop=/usr/bin/docker stop qdrant
+      Restart=on-failure
+
+      [Install]
+      WantedBy=default.target
+
+- name: Enable Qdrant user service
+  ansible.builtin.systemd:
+    name: qdrant.service
+    scope: user
+    enabled: true
+    daemon_reload: true
+  failed_when: false
+  when: not ansible_check_mode

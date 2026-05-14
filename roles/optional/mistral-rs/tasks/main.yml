@@ -1,0 +1,9 @@
+---
+- name: Install mistral.rs server
+  ansible.builtin.command: cargo install mistralrs-server
+  args:
+    creates: "{{ nikos_home }}/.cargo/bin/mistralrs-server"
+  environment:
+    HOME: "{{ nikos_home }}"
+    CARGO_HOME: "{{ nikos_home }}/.cargo"
+  when: not ansible_check_mode

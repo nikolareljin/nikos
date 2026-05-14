@@ -8,7 +8,7 @@
 A curated Xubuntu / Ubuntu 24.04 LTS setup for AI coding and development.  
 One command turns a fresh Ubuntu install into a fully configured AI workstation — Xfce desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
 
-**Version:** 0.3.2 · **License:** MIT · **Author:** Nikola Reljin
+**Version:** 0.4.0 · **License:** MIT · **Author:** Nikola Reljin
 
 <img src="./assets/logo.png" />
 
@@ -105,6 +105,16 @@ nikos add education  # install optional: LibreOffice, draw.io, Anki
 nikos add neovim     # install optional: Neovim + starter lazy.nvim config
 nikos add java       # install optional: OpenJDK 21
 nikos add podman     # install optional: Podman
+nikos add bun        # install optional: Bun JavaScript runtime
+nikos add postgres   # install optional: PostgreSQL + pgvector
+nikos add redis      # install optional: Redis
+nikos add qdrant     # install optional: Qdrant vector database
+nikos add zsh        # install optional: Zsh + Starship
+nikos add k8s-tools  # install optional: kubectl + Helm
+nikos add act        # install optional: local GitHub Actions runner
+nikos add fabric     # install optional: Fabric AI pattern CLI
+nikos add openclaw   # install optional: OpenClaw LLM gateway CLI
+nikos add monitoring # install optional: Netdata
 nikos status         # show version, Ollama models, conda envs
 nikos doctor         # check for broken configs and missing tools
 ```
@@ -130,6 +140,8 @@ To add optional bundles after install:
 nikos add network
 nikos add music
 nikos add education
+nikos add postgres
+nikos add ollama-models
 ```
 
 See [docs/customization.md](docs/customization.md) for full details.

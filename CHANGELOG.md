@@ -2,6 +2,31 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.4.0] — 2026-05-14
+
+### Added
+- **Core developer additions** — base installs now include `tmux`, `pipx`,
+  `sqlite3`, and `unzip`, plus a Nord-compatible default `~/.tmux.conf` that is
+  deployed with `force: false`.
+- **Expanded AI workstation tooling** — `llama.cpp` CPU binaries are installed
+  as `llama-cli` and `llama-server`, optional Ollama model pulls are available
+  through the `ollama-models` tag, and the `nikos-ai` environment now includes
+  additional ML/data packages for embeddings, RAG, datasets, evaluation, and CLI
+  database work.
+- **Cloud and local CLI tools** — Node.js moves to NodeSource 22.x, and
+  `shell-gpt`, `glances`, and `mkcert` are installed as core utilities.
+- **New optional bundles** — `bun`, `redis`, `postgres`, `qdrant`, `zsh`, `act`,
+  `fabric`, `k8s-tools`, `bitnet`, `mistral-rs`, `monitoring`, and `openclaw`.
+
+### Changed
+- **Installer optional bundle selection** now exposes the expanded bundle set and
+  runs an explicit tagged pass for opt-in roles that are guarded with `never`.
+- **`nikos add`** now supports every optional bundle tag, and `nikos doctor`
+  checks for the new core tools.
+- **First terminal session** now shows a short one-time NikOS welcome with the
+  core commands to start, check, and update the system.
+- Version bumped `0.3.2` → `0.4.0`.
+
 ## [0.3.2] — 2026-04-23
 
 ### Changed

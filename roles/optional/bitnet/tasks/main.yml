@@ -1,0 +1,41 @@
+---
+- name: Install BitNet.cpp build dependencies
+  ansible.builtin.apt:
+    name:
+      - cmake
+      - python3-dev
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Clone BitNet.cpp
+  ansible.builtin.git:
+    repo: https://github.com/microsoft/BitNet.git
+    dest: "{{ nikos_home }}/Projects/bitnet.cpp"
+    version: main
+    update: false
+  when: not ansible_check_mode
+
+- name: Configure BitNet.cpp build
+  ansible.builtin.command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+  args:
+    chdir: "{{ nikos_home }}/Projects/bitnet.cpp"
+    creates: "{{ nikos_home }}/Projects/bitnet.cpp/build/CMakeCache.txt"
+  when: not ansible_check_mode
+
+- name: Build BitNet.cpp
+  ansible.builtin.command: cmake --build build --config Release -j
+  args:
+    chdir: "{{ nikos_home }}/Projects/bitnet.cpp"
+    creates: "{{ nikos_home }}/Projects/bitnet.cpp/build/bin/llama-cli"
+  when: not ansible_check_mode
+
+- name: Install BitNet.cpp CLI
+  ansible.builtin.copy:
+    src: "{{ nikos_home }}/Projects/bitnet.cpp/build/bin/llama-cli"
+    dest: "{{ nikos_home }}/.local/bin/bitnet-cli"
+    remote_src: true
+    mode: "0755"
+    force: false
+  when: not ansible_check_mode
