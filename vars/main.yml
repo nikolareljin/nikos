@@ -21,6 +21,7 @@ ollama_optional_models:
   - "gemma2:9b"
   - "llava:7b"
 llama_cpp_version: "b9151"
+mkcert_version: "v1.4.4"
 kubernetes_apt_version: "v1.35"
 
 # Python / conda

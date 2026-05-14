@@ -87,6 +87,23 @@ source ~/.bashrc
 image-view --help
 ```
 
+If the playbook reports that Cargo is too old for `image-view`, update Rust via
+distrodeck and rerun `nikos update`. The package dependencies require Cargo 1.85+
+for Rust 2024 edition support.
+
+### NikOS boot splash logo missing
+
+The Plymouth logo is embedded into initramfs. If the install was interrupted or a
+later task failed before handlers ran, rerun:
+
+```bash
+nikos update
+sudo plymouth-set-default-theme nikos
+sudo update-initramfs -u -k all
+```
+
+Then reboot and check the early boot splash again.
+
 ### git-lantern / lantern not found
 
 ```bash
