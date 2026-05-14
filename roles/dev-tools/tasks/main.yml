@@ -55,6 +55,26 @@
   changed_when: false
   failed_when: false
 
+- name: Check cargo version for image-view build
+  ansible.builtin.command: "{{ dev_tools_cargo_path.stdout }} --version"
+  register: dev_tools_cargo_version
+  changed_when: false
+  failed_when: false
+  when:
+    - dev_tools_cargo_path.stdout | default('') | length > 0
+
+- name: Set cargo version fact for image-view build
+  ansible.builtin.set_fact:
+    dev_tools_cargo_version_number: >-
+      {{
+        dev_tools_cargo_version.stdout
+        | default('')
+        | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+')
+        | default('0.0.0')
+      }}
+  when:
+    - dev_tools_cargo_path.stdout | default('') | length > 0
+
 - name: Check whether image-view binary is already installed
   ansible.builtin.stat:
     path: "{{ nikos_home }}/.local/bin/image-view"
@@ -69,6 +89,7 @@
   when:
     - not ansible_check_mode
     - dev_tools_cargo_path.stdout | default('') | length > 0
+    - dev_tools_cargo_version_number is version('1.85.0', '>=')
     - not dev_tools_image_view_bin.stat.exists
 
 - name: Build and install image-view
@@ -85,6 +106,7 @@
   when:
     - not ansible_check_mode
     - dev_tools_cargo_path.stdout | default('') | length > 0
+    - dev_tools_cargo_version_number is version('1.85.0', '>=')
 
 - name: Warn when image-view build failed
   ansible.builtin.debug:
@@ -97,6 +119,18 @@
     - not ansible_check_mode
     - dev_tools_image_view_result is defined
     - dev_tools_image_view_result.failed | default(false)
+
+- name: Warn when cargo is too old for image-view
+  ansible.builtin.debug:
+    msg: >-
+      image-view skipped: Cargo {{ dev_tools_cargo_version_number }} is too old.
+      image-view dependencies require Cargo 1.85+ for edition2024 support.
+      Install/update Rust via distrodeck, then rerun nikos update.
+  when:
+    - not ansible_check_mode
+    - dev_tools_cargo_path.stdout | default('') | length > 0
+    - dev_tools_cargo_version_number is version('1.85.0', '<')
+    - not dev_tools_image_view_bin.stat.exists
 
 - name: Warn when cargo was not found for image-view
   ansible.builtin.debug:
@@ -127,7 +161,7 @@
 
 - name: Install mkcert
   ansible.builtin.get_url:
-    url: https://github.com/FiloSottile/mkcert/releases/latest/download/mkcert-linux-amd64
+    url: "https://github.com/FiloSottile/mkcert/releases/download/{{ mkcert_version }}/mkcert-{{ mkcert_version }}-linux-amd64"
     dest: "{{ nikos_home }}/.local/bin/mkcert"
     mode: "0755"
   when: not ansible_check_mode

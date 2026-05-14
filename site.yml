@@ -2,6 +2,7 @@
 - name: NikOS Setup
   hosts: local  # inventory group defined in inventory/local
   become: true
+  force_handlers: true
   vars_files:
     - vars/main.yml
   vars:

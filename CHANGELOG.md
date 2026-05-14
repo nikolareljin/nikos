@@ -2,6 +2,20 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.4.1] — 2026-05-14
+
+### Fixed
+- **NikOS Plymouth logo missing after install** — the playbook now forces
+  handlers to run even if a later non-critical task fails, selects the `nikos`
+  Plymouth theme through `plymouth-set-default-theme`, and rebuilds initramfs
+  for all installed kernels so the boot splash assets are embedded reliably.
+- **mkcert install failure** — fixed the GitHub release asset URL by pinning
+  `mkcert_version` and using the actual upstream asset name.
+- **image-view optional build noise** — the role now checks Cargo version first
+  and skips cleanly with a warning when Cargo is older than 1.85, avoiding an
+  ignored failure caused by `edition2024` dependencies.
+- Version bumped `0.4.0` → `0.4.1`.
+
 ## [0.4.0] — 2026-05-14
 
 ### Added
