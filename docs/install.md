@@ -85,7 +85,7 @@ ansible-playbook site.yml -i inventory/local --ask-become-pass
 
 ## Offline / air-gapped installs
 
-Not supported in 0.4.0. The playbook downloads theme files, Ollama, Miniforge, and selected tool binaries at install time.
+Not supported in 0.4.1. The playbook downloads theme files, Ollama, Miniforge, and selected tool binaries at install time.
 
 ## Base OS choice
 
