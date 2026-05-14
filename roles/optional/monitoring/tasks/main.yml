@@ -1,0 +1,8 @@
+---
+- name: Install Netdata
+  ansible.builtin.shell: curl -fsSL https://get.netdata.cloud/kickstart.sh | sh -s -- --dont-wait  # noqa: command-instead-of-module risky-shell-pipe
+  args:
+    creates: /usr/sbin/netdata
+    executable: /bin/bash
+  become: true
+  when: not ansible_check_mode

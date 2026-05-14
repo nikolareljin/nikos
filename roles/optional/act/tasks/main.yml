@@ -1,0 +1,22 @@
+---
+- name: Ensure local bin directory exists
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.local/bin"
+    state: directory
+    mode: "0755"
+
+- name: Download act archive
+  ansible.builtin.get_url:
+    url: https://github.com/nektos/act/releases/latest/download/act_Linux_x86_64.tar.gz
+    dest: /tmp/act_Linux_x86_64.tar.gz
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: Install act
+  ansible.builtin.unarchive:
+    src: /tmp/act_Linux_x86_64.tar.gz
+    dest: "{{ nikos_home }}/.local/bin"
+    remote_src: true
+    creates: "{{ nikos_home }}/.local/bin/act"
+    mode: "0755"
+  when: not ansible_check_mode

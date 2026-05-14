@@ -1,0 +1,25 @@
+---
+- name: Install PostgreSQL and pgvector
+  ansible.builtin.apt:
+    name:
+      - postgresql
+      - postgresql-contrib
+      - postgresql-16-pgvector
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Enable PostgreSQL service
+  ansible.builtin.systemd:
+    name: postgresql
+    enabled: true
+    state: started
+  become: true
+  when: not ansible_check_mode
+
+- name: Install PostgreSQL Python client in nikos-ai env
+  ansible.builtin.command: >
+    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install psycopg2-binary
+  changed_when: false
+  when: not ansible_check_mode

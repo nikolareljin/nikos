@@ -5,7 +5,8 @@
 - **OS:** Xubuntu 24.04 LTS (recommended) or Ubuntu 24.04 LTS
 - **User:** a non-root user with `sudo` access
 - **Internet:** required during install (packages, theme files, models)
-- **Disk:** ~20 GB free (Ollama model + conda env + VS Code + tools)
+- **Disk:** ~20 GB free (Ollama model + conda env + VS Code + tools); add
+  about 26 GB if selecting the optional Ollama model bundle
 - **RAM:** 4 GB minimum; 8 GB recommended for running `qwen2.5-coder:7b`
 
 ## Quick install
@@ -33,22 +34,23 @@ The script will:
 
 | Role | What it installs |
 |---|---|
-| `base` | apt update, nala, core build deps, flatpak, locale, timezone, NTP sync |
+| `base` | apt update, nala, core build deps, flatpak, tmux, pipx, sqlite3, locale, timezone, NTP sync |
 | `desktop` | Xfce 4, LightDM, xfce4-terminal |
 | `theming` | Nordic GTK theme, Papirus-Dark icons, GRUB theme, LightDM greeter, wallpaper |
 | `github-setup` | gh CLI, first-login wizard (SSH key, git identity) |
-| `ai-stack` | Ollama + qwen2.5-coder:7b, Miniforge, nikos-ai conda env, aider, uv |
+| `ai-stack` | Ollama + qwen2.5-coder:7b, llama.cpp, Miniforge, nikos-ai conda env, aider, uv |
 | `editors` | VS Code + AI extensions + Nord theme + JetBrains Mono |
-| `cloud-ai-cli` | Node.js, Gemini CLI, GitHub Copilot CLI extension |
-| `agent-dev` | LangChain, LlamaIndex, Claude Code |
-| `dev-tools` | distrodeck tools, image-view, git-lantern, ai-runner |
-| `optional/*` | network / music / education / neovim / java / podman (opt-in) |
+| `cloud-ai-cli` | Node.js 22, Gemini CLI, GitHub Copilot CLI extension, shell-gpt, glances |
+| `agent-dev` | LangChain, LlamaIndex, ML/data libraries, Claude Code |
+| `dev-tools` | distrodeck tools, image-view, git-lantern, mkcert, ai-runner |
+| `optional/*` | network / music / education / neovim / java / podman / bun / databases / LLM tools / monitoring (opt-in) |
 
 ## First login
 
 After install, log out and back in. Xfce starts automatically via LightDM.
 
-On the first terminal session, the GitHub setup wizard runs:
+On the first terminal session, NikOS shows a short one-time command hint, then the
+GitHub setup wizard runs:
 1. `gh auth login` — authenticate with GitHub
 2. SSH key generation and upload
 3. Git name/email configuration
@@ -83,7 +85,7 @@ ansible-playbook site.yml -i inventory/local --ask-become-pass
 
 ## Offline / air-gapped installs
 
-Not supported in 0.3.0. The playbook downloads theme files, Ollama, and Miniforge at install time.
+Not supported in 0.4.0. The playbook downloads theme files, Ollama, Miniforge, and selected tool binaries at install time.
 
 ## Base OS choice
 

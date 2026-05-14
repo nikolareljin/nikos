@@ -9,7 +9,8 @@ nikos doctor
 ```
 
 It checks:
-- ansible, gh, Ollama, VS Code, distrodeck, conda, Claude Code, Gemini CLI
+- ansible, dialog, gh, tmux, Ollama, VS Code, distrodeck, conda, Claude Code, Gemini CLI
+- llama.cpp, shell-gpt, glances, and mkcert when present
 - Nordic GTK theme files
 - Papirus icon files
 - GitHub wizard completion flag

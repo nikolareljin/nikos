@@ -84,6 +84,42 @@
       tags: [never, java]
     - role: podman
       tags: [never, podman]
+    - role: openclaw
+      become: false
+      tags: [never, openclaw]
+    - role: bun
+      become: false
+      tags: [never, bun]
+    - role: redis
+      become: false
+      tags: [never, redis]
+    - role: postgres
+      become: false
+      tags: [never, postgres]
+    - role: zsh
+      become: false
+      tags: [never, zsh]
+    - role: act
+      become: false
+      tags: [never, act]
+    - role: fabric
+      become: false
+      tags: [never, fabric]
+    - role: k8s-tools
+      become: false
+      tags: [never, k8s-tools]
+    - role: qdrant
+      become: false
+      tags: [never, qdrant]
+    - role: bitnet
+      become: false
+      tags: [never, bitnet]
+    - role: mistral-rs
+      become: false
+      tags: [never, mistral-rs]
+    - role: monitoring
+      become: false
+      tags: [never, monitoring]
 
   post_tasks:
     - name: Initialize git submodules (script-helpers)  # noqa: command-instead-of-module

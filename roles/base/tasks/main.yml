@@ -30,7 +30,20 @@
       - xfconf
       - inkscape  # required by theming role to export wallpaper SVG to PNG
       - openssh-server  # enables remote access and SSH-based management
+      - tmux
+      - pipx
+      - sqlite3
+      - unzip
     state: present
+
+- name: Deploy default tmux config
+  ansible.builtin.copy:
+    src: tmux.conf
+    dest: "{{ nikos_home }}/.tmux.conf"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_gid }}"
+    mode: "0644"
+    force: false
 
 - name: Set timezone
   community.general.timezone:

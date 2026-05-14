@@ -30,6 +30,24 @@
     mode: "0755"
   become: true
 
+- name: Copy NikOS welcome helper
+  ansible.builtin.copy:
+    src: nikos-welcome
+    dest: /usr/local/bin/nikos-welcome
+    mode: "0755"
+  become: true
+
+- name: Register first-terminal welcome hook in .bashrc
+  ansible.builtin.blockinfile:
+    path: "{{ nikos_home }}/.bashrc"
+    marker: "# {mark} NikOS welcome"
+    block: |
+      if [[ -x /usr/local/bin/nikos-welcome ]]; then
+        /usr/local/bin/nikos-welcome
+      fi
+    create: true
+    mode: "0644"
+
 - name: Register first-login wizard hook in .bashrc
   ansible.builtin.lineinfile:
     path: "{{ nikos_home }}/.bashrc"
