@@ -29,6 +29,58 @@
   delay: 10
   ignore_errors: true
 
+- name: Pull optional Ollama models when requested - about 26 GB total
+  ansible.builtin.command: ollama pull {{ item }}
+  loop: "{{ ollama_optional_models }}"
+  register: ai_stack_optional_ollama_pull
+  changed_when: >-
+    'pulling' in ai_stack_optional_ollama_pull.stdout or
+    'success' in ai_stack_optional_ollama_pull.stdout
+  until: ai_stack_optional_ollama_pull.rc == 0
+  retries: 3
+  delay: 10
+  ignore_errors: true
+  tags: [never, ollama-models]
+
+- name: Ensure local bin directory exists
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.local/bin"
+    state: directory
+    mode: "0755"
+
+- name: Download llama.cpp CPU binary archive
+  ansible.builtin.get_url:
+    url: "https://github.com/ggml-org/llama.cpp/releases/download/{{ llama_cpp_version }}/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
+    dest: "/tmp/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: Extract llama.cpp CPU binaries
+  ansible.builtin.unarchive:
+    src: "/tmp/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
+    dest: "/tmp/llama-{{ llama_cpp_version }}"
+    remote_src: true
+    creates: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-server"
+  when: not ansible_check_mode
+
+- name: Install llama.cpp CLI
+  ansible.builtin.copy:
+    src: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-cli"
+    dest: "{{ nikos_home }}/.local/bin/llama-cli"
+    mode: "0755"
+    remote_src: true
+    force: false
+  when: not ansible_check_mode
+
+- name: Install llama.cpp server
+  ansible.builtin.copy:
+    src: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-server"
+    dest: "{{ nikos_home }}/.local/bin/llama-server"
+    mode: "0755"
+    remote_src: true
+    force: false
+  when: not ansible_check_mode
+
 - name: Check if Miniforge is already installed
   ansible.builtin.stat:
     path: "{{ nikos_home }}/miniforge3/bin/conda"

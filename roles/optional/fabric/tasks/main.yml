@@ -1,0 +1,9 @@
+---
+- name: Install Fabric AI pattern CLI
+  ansible.builtin.command: go install github.com/danielmiessler/fabric/...@latest
+  args:
+    creates: "{{ nikos_home }}/go/bin/fabric"
+  environment:
+    HOME: "{{ nikos_home }}"
+    GOPATH: "{{ nikos_home }}/go"
+  when: not ansible_check_mode

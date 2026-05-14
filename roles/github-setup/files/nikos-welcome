@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+flag="${HOME}/.config/nikos/welcome-shown"
+if [[ ! -t 1 || -f "${flag}" ]]; then
+  exit 0
+fi
+
+mkdir -p "$(dirname "${flag}")"
+cat <<'EOF'
+ _   _ _ _     ___  ____
+| \ | (_) | __/ _ \/ ___|
+|  \| | | |/ / | | \___ \
+| |\  | |   <| |_| |___) |
+|_| \_|_|_|\_\\___/|____/
+NikOS - AI workstation ready.
+Start: nikos status | nikos doctor | nikos add <bundle>
+Update anytime: nikos update
+EOF
+touch "${flag}"
