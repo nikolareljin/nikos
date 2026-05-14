@@ -74,6 +74,7 @@ At the end, you should end up with something like:
 | Continue | AI code completion |
 | GitLens | Git history in editor |
 | GitHub Copilot | AI suggestions |
+| [Leak Lock](https://marketplace.visualstudio.com/items?itemName=nikolareljin.leak-lock) | Secret detection and leak prevention in VS Code |
 | Nord theme | `arcticicestudio.nord-visual-studio-code` |
 | Python + Jupyter | Official MS extensions |
 
