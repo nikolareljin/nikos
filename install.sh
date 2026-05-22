@@ -45,7 +45,7 @@ _safe_logfile() {
 
 _restore_terminal_cursor() {
   if [[ -t 1 ]]; then
-    tput cnorm > /dev/tty 2>/dev/null || printf '\033[?25h' > /dev/tty 2>/dev/null || true
+    tput cnorm 2>/dev/null || printf '\033[?25h' || true
   fi
 }
 
@@ -70,6 +70,39 @@ _version_at_least() {
   [[ "$(printf '%s\n%s\n' "${required}" "${current}" | sort -V | head -n 1)" == "${required}" ]]
 }
 
+_offer_ansible_upgrade() {
+  local ansible_version="$1"
+  local message=""
+  local answer=""
+
+  message="NikOS requires ansible-playbook ${MIN_ANSIBLE_VERSION} or newer; found ${ansible_version:-an unknown version}.
+
+Upgrade Ansible from the Ansible Ubuntu PPA now?"
+  if _can_use_dialog; then
+    dialog --title "NikOS ${NIKOS_VERSION} - Ansible Upgrade Required" \
+      --yesno "${message}" 11 72
+    return $?
+  fi
+
+  echo "${message}"
+  printf 'Upgrade Ansible now? [y/N] ' >&2
+  if read -r answer 2>/dev/null </dev/tty; then
+    :
+  elif [[ -t 0 ]] && read -r answer; then
+    :
+  else
+    return 1
+  fi
+  [[ "${answer,,}" == "y" || "${answer,,}" == "yes" ]]
+}
+
+_upgrade_ansible() {
+  sudo apt-get update -qq
+  sudo apt-get install -y software-properties-common
+  sudo apt-add-repository --yes --update ppa:ansible/ansible
+  sudo apt-get install -y ansible
+}
+
 _require_supported_ansible() {
   local ansible_version=""
   local message=""
@@ -79,7 +112,36 @@ _require_supported_ansible() {
     return 0
   fi
 
-  message="NikOS requires ansible-playbook ${MIN_ANSIBLE_VERSION} or newer; found ${ansible_version:-an unknown version}. Upgrade Ansible, then rerun the installer."
+  if ! _offer_ansible_upgrade "${ansible_version}"; then
+    message="NikOS requires ansible-playbook ${MIN_ANSIBLE_VERSION} or newer; found ${ansible_version:-an unknown version}. Upgrade Ansible, then rerun the installer."
+    _safe_logfile "[FAILED] ${message}"
+    echo "ERROR: ${message}" >&2
+    exit 1
+  fi
+
+  _logfile "Upgrading Ansible from unsupported version: ${ansible_version:-unknown}"
+  if _can_use_dialog; then
+    dialog --title "NikOS ${NIKOS_VERSION} - Ansible Upgrade" \
+      --infobox "Upgrading Ansible from the Ansible Ubuntu PPA..." 5 64 || true
+    if _upgrade_ansible >> "${INSTALL_LOG}" 2>&1; then
+      :
+    else
+      upgrade_rc=$?
+      _show_logged_command_failure "Failed to upgrade Ansible from the Ansible Ubuntu PPA." "${upgrade_rc}"
+      exit "${upgrade_rc}"
+    fi
+  else
+    echo "Upgrading Ansible from the Ansible Ubuntu PPA..."
+    _upgrade_ansible
+  fi
+
+  ansible_version="$(_ansible_playbook_version)"
+  if [[ -n "${ansible_version}" ]] && _version_at_least "${ansible_version}" "${MIN_ANSIBLE_VERSION}"; then
+    _logfile "Ansible upgraded OK: ${ansible_version}"
+    return 0
+  fi
+
+  message="Ansible upgrade finished, but ansible-playbook ${ansible_version:-unknown} is still older than ${MIN_ANSIBLE_VERSION}. Upgrade Ansible, then rerun the installer."
   _safe_logfile "[FAILED] ${message}"
   if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION} - Ansible Upgrade Required" \
