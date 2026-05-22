@@ -3,7 +3,8 @@
 ## Requirements
 
 - **OS:** Xubuntu 24.04 LTS (recommended) or Ubuntu 24.04 LTS
-- **Ansible:** `ansible-playbook` 2.15 or newer
+- **Ansible:** `ansible-playbook` 2.15 or newer; the installer can offer to
+  upgrade older Ubuntu packages from the Ansible PPA
 - **User:** a non-root user with `sudo` access
 - **Internet:** required during install (packages, theme files, models)
 - **Disk:** ~20 GB free (Ollama model + conda env + VS Code + tools); add
@@ -20,16 +21,17 @@ The script will:
 1. Check you are not running as root
 2. Check you are on an apt-based system
 3. Install bootstrap packages: `git`, `ansible`, and `dialog` unless `NIKOS_USE_DIALOG=0`
-4. Clone the repo (with submodules) to `~/.local/share/nikos`
-5. Present a `dialog` TUI checklist to select optional bundles
-6. Present a `dialog` TUI checklist to select AI tools
-7. Ask for the timezone to use — detects the system timezone via `timedatectl` and offers:
+4. Offer to upgrade unsupported Ansible versions from the Ansible Ubuntu PPA
+5. Clone the repo (with submodules) to `~/.local/share/nikos`
+6. Present a `dialog` TUI checklist to select optional bundles
+7. Present a `dialog` TUI checklist to select AI tools
+8. Ask for the timezone to use — detects the system timezone via `timedatectl` and offers:
    - **Auto** — use the detected system timezone (NTP-synchronized)
    - **Keep existing** — if `vars/local.yml` already has `nikos_timezone` set (shown only
      when the configured value differs from the detected one)
    - **Custom** — enter any IANA timezone string (e.g. `America/New_York`, `Asia/Tokyo`)
    The chosen timezone is written to `vars/local.yml` before the playbook runs.
-8. Run `ansible-playbook` from the local clone
+9. Run `ansible-playbook` from the local clone
 
 ## What the playbook does (in order)
 
