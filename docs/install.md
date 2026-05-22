@@ -3,6 +3,7 @@
 ## Requirements
 
 - **OS:** Xubuntu 24.04 LTS (recommended) or Ubuntu 24.04 LTS
+- **Ansible:** `ansible-playbook` 2.15 or newer
 - **User:** a non-root user with `sudo` access
 - **Internet:** required during install (packages, theme files, models)
 - **Disk:** ~20 GB free (Ollama model + conda env + VS Code + tools); add
@@ -85,7 +86,7 @@ ansible-playbook site.yml -i inventory/local --ask-become-pass
 
 ## Offline / air-gapped installs
 
-Not supported in 0.4.1. The playbook downloads theme files, Ollama, Miniforge, and selected tool binaries at install time.
+Not supported in 0.4.2. The playbook downloads theme files, Ollama, Miniforge, and selected tool binaries at install time.
 
 ## Base OS choice
 
