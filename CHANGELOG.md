@@ -13,6 +13,9 @@ All notable changes to NikOS are documented here.
   that minimum.
 - **Dialog cursor cleanup** - the installer restores the terminal cursor on
   normal exit and when interrupted.
+- **Plymouth helper availability** - theming no longer fails when
+  `plymouth-set-default-theme` is unavailable; NikOS still configures Plymouth
+  through `plymouthd.conf` and the `default.plymouth` alternative.
 - Version bumped `0.4.1` -> `0.4.2`.
 
 ## [0.4.1] — 2026-05-14
