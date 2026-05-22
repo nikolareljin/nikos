@@ -2,7 +2,7 @@
 
 All notable changes to NikOS are documented here.
 
-## [0.4.2] - 2026-05-22
+## [0.4.2] — 2026-05-22
 
 ### Fixed
 - **Installer Ansible compatibility failure** - dialog installs now pass the
