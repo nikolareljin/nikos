@@ -5,9 +5,8 @@ All notable changes to NikOS are documented here.
 ## [0.4.2] — 2026-05-22
 
 ### Fixed
-- **Installer Ansible compatibility failure** - dialog installs now pass the
-  sudo password through Ansible's shared `ANSIBLE_BECOME_PASS` path instead of
-  the newer `--become-password-file` CLI option, offer to upgrade
+- **Installer Ansible compatibility failure** - dialog installs now use a
+  version-compatible `--become-password-file`, offer to upgrade
   `ansible-playbook` versions older than the role minimum before the playbook
   starts, and pin `community.general` to a collection release compatible with
   that minimum.

@@ -135,6 +135,8 @@ _infer_repo_ref() {
       printf '%s\n' "${tag}"
     fi
   fi
+
+  return 0
 }
 
 _checkout_repo_ref() {
