@@ -1,0 +1,10 @@
+name: Release Tag Gate
+
+on:
+  pull_request:
+
+jobs:
+  gate:
+    uses: nikolareljin/ci-helpers/.github/workflows/release-tag-gate.yml@production
+    with:
+      runner: ubuntu-24.04

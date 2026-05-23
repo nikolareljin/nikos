@@ -2,6 +2,42 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.4.2] — 2026-05-22
+
+### Fixed
+- **Installer Ansible compatibility failure** - dialog installs now use a
+  version-compatible `--become-password-file`, offer to upgrade
+  `ansible-playbook` versions older than the role minimum before the playbook
+  starts, and pin `community.general` to a collection release compatible with
+  that minimum.
+- **Dialog sudo password handling** - dialog installs now pass the sudo password
+  through a `0600` temporary become-password file after the Ansible version gate,
+  reducing plaintext exposure in process environments.
+- **Dialog cursor cleanup** - the installer restores the terminal cursor through
+  the controlling terminal after progress dialogs, on normal exit, and when
+  interrupted.
+- **Supported OS guard** - the installer now verifies it is running on Ubuntu
+  24.04 before installing bootstrap packages, instead of accepting any
+  apt-based distribution.
+- **Release checkout inference** - the installer now follows exact tag checkouts
+  when launched from a detached HEAD, unless `NIKOS_REPO_REF` is set.
+- **GRUB splash determinism** - theming replaces an existing `nosplash` kernel
+  command-line token with `splash` before enforcing Plymouth splash support.
+- **CI helper alignment** - release tag checks and auto-tagging now use the
+  current reusable `ci-helpers` workflows from `@production`, and the dry-run
+  playbook check runs through the reusable workflow's test phase.
+- **Plymouth helper availability** - theming no longer fails when
+  `plymouth-set-default-theme` is unavailable; NikOS still configures Plymouth
+  through `plymouthd.conf` and the `default.plymouth` alternative.
+- **NikOS Plymouth logo embedding** - theming now enables Plymouth framebuffer
+  hooks for initramfs generation and installs `plymouth-label`, ensuring the
+  custom NikOS logo theme is included in rebuilt boot images instead of the
+  default Xubuntu mouse splash.
+- **Release branch installer testing** - installer runs now keep the persistent
+  `NIKOS_HOME` checkout on the same non-main branch as the installer source, or
+  on `NIKOS_REPO_REF` when explicitly set.
+- Version bumped `0.4.1` -> `0.4.2`.
+
 ## [0.4.1] — 2026-05-14
 
 ### Fixed

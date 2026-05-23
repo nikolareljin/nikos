@@ -335,6 +335,7 @@ checks=(
   "test -f /usr/share/plymouth/themes/nikos/nikos.plymouth"
   "test -f /usr/share/plymouth/themes/nikos/nikos-logo.png"
   "grep -q 'Theme=nikos' /etc/plymouth/plymouthd.conf"
+  "grep -Eq '^GRUB_CMDLINE_LINUX_DEFAULT=\"([^\"]*[[:space:]])?splash([[:space:]][^\"]*)?\"' /etc/default/grub"
   "test -f /etc/X11/default-display-manager && grep -qx '/usr/sbin/lightdm' /etc/X11/default-display-manager"
 )
 
