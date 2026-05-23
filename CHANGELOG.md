@@ -20,6 +20,9 @@ All notable changes to NikOS are documented here.
   hooks for initramfs generation and installs `plymouth-label`, ensuring the
   custom NikOS logo theme is included in rebuilt boot images instead of the
   default Xubuntu mouse splash.
+- **Release branch installer testing** - installer runs now keep the persistent
+  `NIKOS_HOME` checkout on the same non-main branch as the installer source, or
+  on `NIKOS_REPO_REF` when explicitly set.
 - Version bumped `0.4.1` -> `0.4.2`.
 
 ## [0.4.1] — 2026-05-14
