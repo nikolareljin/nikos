@@ -14,6 +14,9 @@ All notable changes to NikOS are documented here.
 - **Dialog cursor cleanup** - the installer restores the terminal cursor through
   the controlling terminal after progress dialogs, on normal exit, and when
   interrupted.
+- **Supported OS guard** - the installer now verifies it is running on Ubuntu
+  24.04 before installing bootstrap packages, instead of accepting any
+  apt-based distribution.
 - **Plymouth helper availability** - theming no longer fails when
   `plymouth-set-default-theme` is unavailable; NikOS still configures Plymouth
   through `plymouthd.conf` and the `default.plymouth` alternative.
