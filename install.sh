@@ -6,6 +6,8 @@ set -euo pipefail
 # Environment variables:
 # NIKOS_REPO_URL: Custom Git repository URL to clone NikOS from
 #                  (default: https://github.com/nikolareljin/nikos)
+# NIKOS_REPO_REF: Branch/tag to check out in NIKOS_HOME before running the playbook
+#                 (default: inferred from the installer checkout when possible)
 # NIKOS_HOME: Base installation directory for NikOS
 #             (default: ${HOME}/.local/share/nikos)
 # NIKOS_USE_DIALOG: Use dialog-based prompts when available; set to 0 for plain mode
@@ -15,6 +17,7 @@ set -euo pipefail
 REPO_URL="${NIKOS_REPO_URL:-https://github.com/nikolareljin/nikos}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 NIKOS_VERSION="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null || echo "unknown")"
+REPO_REF="${NIKOS_REPO_REF:-}"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 NIKOS_CONFIG_DIR="${HOME}/.config/nikos"
 SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
@@ -27,6 +30,8 @@ MAIN_VARS_REL="vars/main.yml"
 LOCAL_VARS_REL="vars/local.yml"
 SKIP_REPO_SYNC="${NIKOS_SKIP_REPO_SYNC:-0}"
 ANSIBLE_REQUIREMENTS_REL="requirements.yml"
+MIN_ANSIBLE_VERSION="2.15.0"
+BECOME_PASSWORD_FILE=""
 
 # Returns 0 if dialog is enabled, the binary is present, and stdin/stdout are connected to a TTY.
 _can_use_dialog() {
@@ -42,6 +47,26 @@ _safe_logfile() {
   _logfile "$@" 2>/dev/null || true
 }
 
+_restore_terminal_cursor() {
+  if [[ -e /dev/tty ]] && { printf '' >/dev/tty; } 2>/dev/null; then
+    { tput cnorm 2>/dev/null || printf '\033[?25h'; } >/dev/tty 2>/dev/null || true
+  elif [[ -t 1 ]]; then
+    tput cnorm 2>/dev/null || printf '\033[?25h' || true
+  fi
+}
+
+_cleanup_become_password_file() {
+  if [[ -n "${BECOME_PASSWORD_FILE:-}" && -f "${BECOME_PASSWORD_FILE}" ]]; then
+    rm -f -- "${BECOME_PASSWORD_FILE}"
+  fi
+  BECOME_PASSWORD_FILE=""
+}
+
+_cleanup_install() {
+  _cleanup_become_password_file
+  _restore_terminal_cursor
+}
+
 # Strip ANSI escape codes from the log after a tee'd run
 _strip_ansi_from_log() {
   sed -i 's/\x1b\[[0-9;:]*[a-zA-Z]//g' "${INSTALL_LOG}" 2>/dev/null || true
@@ -50,6 +75,191 @@ _strip_ansi_from_log() {
 _install_bootstrap_packages() {
   sudo apt-get update -qq
   sudo apt-get install -y "$@"
+}
+
+_create_become_password_file() {
+  local password="$1"
+
+  _cleanup_become_password_file
+  BECOME_PASSWORD_FILE="$(mktemp "${TMPDIR:-/tmp}/nikos-become.XXXXXX")"
+  chmod 600 "${BECOME_PASSWORD_FILE}"
+  printf '%s\n' "${password}" > "${BECOME_PASSWORD_FILE}"
+}
+
+_os_release_value() {
+  local key="$1"
+  local line value
+
+  [[ -r /etc/os-release ]] || return 1
+  while IFS='=' read -r line value; do
+    [[ "${line}" == "${key}" ]] || continue
+    value="${value%\"}"
+    value="${value#\"}"
+    printf '%s\n' "${value}"
+    return 0
+  done < /etc/os-release
+
+  return 1
+}
+
+_is_supported_ubuntu_system() {
+  local os_id version_id
+
+  os_id="$(_os_release_value ID || true)"
+  version_id="$(_os_release_value VERSION_ID || true)"
+
+  [[ "${os_id}" == "ubuntu" && "${version_id}" == "24.04" ]]
+}
+
+_infer_repo_ref() {
+  local branch=""
+  local tag=""
+
+  if [[ -n "${REPO_REF}" ]]; then
+    printf '%s\n' "${REPO_REF}"
+    return 0
+  fi
+
+  if git -C "${SCRIPT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    branch="$(git -C "${SCRIPT_DIR}" branch --show-current 2>/dev/null || true)"
+    case "${branch}" in
+      ""|main|master)
+        ;;
+      *)
+        printf '%s\n' "${branch}"
+        return 0
+        ;;
+    esac
+    tag="$(git -C "${SCRIPT_DIR}" describe --tags --exact-match 2>/dev/null || true)"
+    if [[ -n "${tag}" ]]; then
+      printf '%s\n' "${tag}"
+    fi
+  fi
+
+  return 0
+}
+
+_checkout_repo_ref() {
+  local target_ref="$1"
+  local current_ref=""
+
+  [[ -z "${target_ref}" ]] && return 0
+
+  current_ref="$(git -C "${NIKOS_HOME}" branch --show-current 2>/dev/null || true)"
+  if [[ "${current_ref}" == "${target_ref}" ]]; then
+    return 0
+  fi
+
+  echo "Switching NikOS repo to ${target_ref}..."
+  _logfile "Switching repo at ${NIKOS_HOME} to ${target_ref}"
+  if git -C "${NIKOS_HOME}" show-ref --verify --quiet "refs/heads/${target_ref}"; then
+    git -C "${NIKOS_HOME}" switch "${target_ref}"
+  elif git -C "${NIKOS_HOME}" show-ref --verify --quiet "refs/remotes/origin/${target_ref}"; then
+    git -C "${NIKOS_HOME}" switch --track "origin/${target_ref}"
+  elif git -C "${NIKOS_HOME}" show-ref --verify --quiet "refs/tags/${target_ref}"; then
+    git -C "${NIKOS_HOME}" switch --detach "${target_ref}"
+  else
+    echo "ERROR: Requested NikOS ref '${target_ref}' was not found in ${NIKOS_HOME}." >&2
+    echo "Set NIKOS_REPO_REF to an existing branch/tag, or unset it to use the checkout's current branch." >&2
+    return 2
+  fi
+
+  if [[ "$(git -C "${NIKOS_HOME}" branch --show-current 2>/dev/null || true)" ]]; then
+    git -C "${NIKOS_HOME}" pull --ff-only
+  fi
+  git -C "${NIKOS_HOME}" submodule update --init --recursive
+}
+
+_ansible_playbook_version() {
+  ansible-playbook --version 2>/dev/null | sed -n '1s/.* \([0-9][0-9.]*\).*/\1/p'
+}
+
+_version_at_least() {
+  local current="$1"
+  local required="$2"
+
+  [[ "$(printf '%s\n%s\n' "${required}" "${current}" | sort -V | head -n 1)" == "${required}" ]]
+}
+
+_offer_ansible_upgrade() {
+  local ansible_version="$1"
+  local message=""
+  local answer=""
+
+  message="NikOS requires ansible-playbook ${MIN_ANSIBLE_VERSION} or newer; found ${ansible_version:-an unknown version}.
+
+Upgrade Ansible from the Ansible Ubuntu PPA now?"
+  if _can_use_dialog; then
+    dialog --title "NikOS ${NIKOS_VERSION} - Ansible Upgrade Required" \
+      --yesno "${message}" 11 72
+    return $?
+  fi
+
+  echo "${message}"
+  printf 'Upgrade Ansible now? [y/N] ' >&2
+  if read -r answer 2>/dev/null </dev/tty; then
+    :
+  elif [[ -t 0 ]] && read -r answer; then
+    :
+  else
+    return 1
+  fi
+  [[ "${answer,,}" == "y" || "${answer,,}" == "yes" ]]
+}
+
+_upgrade_ansible() {
+  sudo apt-get update -qq
+  sudo apt-get install -y software-properties-common
+  sudo apt-add-repository --yes --update ppa:ansible/ansible
+  sudo apt-get install -y ansible
+}
+
+_require_supported_ansible() {
+  local ansible_version=""
+  local message=""
+
+  ansible_version="$(_ansible_playbook_version)"
+  if [[ -n "${ansible_version}" ]] && _version_at_least "${ansible_version}" "${MIN_ANSIBLE_VERSION}"; then
+    return 0
+  fi
+
+  if ! _offer_ansible_upgrade "${ansible_version}"; then
+    message="NikOS requires ansible-playbook ${MIN_ANSIBLE_VERSION} or newer; found ${ansible_version:-an unknown version}. Upgrade Ansible, then rerun the installer."
+    _safe_logfile "[FAILED] ${message}"
+    echo "ERROR: ${message}" >&2
+    exit 1
+  fi
+
+  _logfile "Upgrading Ansible from unsupported version: ${ansible_version:-unknown}"
+  if _can_use_dialog; then
+    dialog --title "NikOS ${NIKOS_VERSION} - Ansible Upgrade" \
+      --infobox "Upgrading Ansible from the Ansible Ubuntu PPA..." 5 64 || true
+    if _upgrade_ansible >> "${INSTALL_LOG}" 2>&1; then
+      :
+    else
+      upgrade_rc=$?
+      _show_logged_command_failure "Failed to upgrade Ansible from the Ansible Ubuntu PPA." "${upgrade_rc}"
+      exit "${upgrade_rc}"
+    fi
+  else
+    echo "Upgrading Ansible from the Ansible Ubuntu PPA..."
+    _upgrade_ansible
+  fi
+
+  ansible_version="$(_ansible_playbook_version)"
+  if [[ -n "${ansible_version}" ]] && _version_at_least "${ansible_version}" "${MIN_ANSIBLE_VERSION}"; then
+    _logfile "Ansible upgraded OK: ${ansible_version}"
+    return 0
+  fi
+
+  message="Ansible upgrade finished, but ansible-playbook ${ansible_version:-unknown} is still older than ${MIN_ANSIBLE_VERSION}. Upgrade Ansible, then rerun the installer."
+  _safe_logfile "[FAILED] ${message}"
+  if _can_use_dialog; then
+    dialog --title "NikOS ${NIKOS_VERSION} - Ansible Upgrade Required" \
+      --msgbox "${message}" 9 72 || true
+  fi
+  echo "ERROR: ${message}" >&2
+  exit 1
 }
 
 _install_log_tail() {
@@ -84,23 +294,6 @@ _collect_become_password_dialog() {
     return $?
   fi
   printf '%s\n' "${pw}"
-}
-
-_write_become_password_file() {
-  local password="$1"
-  local password_file
-
-  if ! password_file="$(mktemp)"; then
-    echo "ERROR: Failed to create temporary become password file." >&2
-    return 1
-  fi
-  chmod 600 "${password_file}"
-  printf '%s\n' "${password}" > "${password_file}"
-  printf '%s\n' "${password_file}"
-}
-
-_cleanup_become_password_file() {
-  [[ -n "${_become_pass_file:-}" ]] && rm -f "${_become_pass_file}"
 }
 
 # Parse Ansible PLAY RECAP and print a summary to screen + log
@@ -170,8 +363,13 @@ _install_summary() {
 
 mkdir -p "${NIKOS_LOG_DIR}"
 ln -sf "${INSTALL_LOG}" "${NIKOS_LOG_DIR}/install-latest.log"
+trap '_cleanup_install' EXIT
+trap '_cleanup_install; exit 130' INT
+trap '_cleanup_install; exit 143' TERM
+TARGET_REPO_REF="$(_infer_repo_ref)"
 _logfile "=== NikOS ${NIKOS_VERSION} install started ==="
 _logfile "User: $(id -un)   Host: $(hostname -s)"
+[[ -n "${TARGET_REPO_REF}" ]] && _logfile "Target repo ref: ${TARGET_REPO_REF}"
 
 if _can_use_dialog; then
   if ! dialog --title "NikOS ${NIKOS_VERSION}" \
@@ -186,17 +384,17 @@ else
   echo ""
 fi
 
-# Ensure apt-based system
+# Ensure the installer is running on supported Ubuntu-family media.
 if _can_use_dialog; then
   dialog --title "NikOS ${NIKOS_VERSION} — System Check" \
     --infobox "Checking system requirements..." 5 52 || true
 fi
-if ! command -v apt-get &>/dev/null; then
+if ! _is_supported_ubuntu_system || ! command -v apt-get &>/dev/null; then
   if _can_use_dialog; then
     dialog --title "Error" \
-      --msgbox "NikOS requires an apt-based system (Ubuntu 24.04 LTS)." 7 52
+      --msgbox "NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." 7 56
   fi
-  echo "ERROR: NikOS requires an apt-based system (Ubuntu 24.04 LTS)." >&2
+  echo "ERROR: NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." >&2
   exit 1
 fi
 
@@ -231,6 +429,8 @@ if [[ ${#_need_packages[@]} -gt 0 ]]; then
 else
   _logfile "Bootstrap packages: none needed"
 fi
+
+_require_supported_ansible
 
 # Source repo sync helpers if available, to reuse the git stash/pop logic for smoother updates if the installer is re-run
 _source_repo_sync_helpers() {
@@ -566,6 +766,16 @@ else
         _pull_repo_updates_bootstrap
       fi
     fi
+    checkout_rc=0
+    if _can_use_dialog; then
+      _checkout_repo_ref "${TARGET_REPO_REF}" >> "${INSTALL_LOG}" 2>&1 || checkout_rc=$?
+      if [[ "${checkout_rc}" -ne 0 ]]; then
+        _show_logged_command_failure "Failed to switch NikOS repository to ${TARGET_REPO_REF}." "${checkout_rc}"
+        exit "${checkout_rc}"
+      fi
+    else
+      _checkout_repo_ref "${TARGET_REPO_REF}"
+    fi
   else
     if _can_use_dialog; then
       dialog --title "NikOS ${NIKOS_VERSION}" \
@@ -574,8 +784,10 @@ else
       echo "Cloning NikOS repo to ${NIKOS_HOME}..."
     fi
     _logfile "Cloning repo from ${REPO_URL} to ${NIKOS_HOME}"
+    CLONE_ARGS=(--recurse-submodules)
+    [[ -n "${TARGET_REPO_REF}" ]] && CLONE_ARGS+=(--branch "${TARGET_REPO_REF}")
     if _can_use_dialog; then
-      if git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}" >> "${INSTALL_LOG}" 2>&1; then
+      if git clone "${CLONE_ARGS[@]}" "${REPO_URL}" "${NIKOS_HOME}" >> "${INSTALL_LOG}" 2>&1; then
         _logfile "Repo cloned OK"
       else
         clone_rc=$?
@@ -583,7 +795,7 @@ else
         exit "${clone_rc}"
       fi
     else
-      if git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"; then
+      if git clone "${CLONE_ARGS[@]}" "${REPO_URL}" "${NIKOS_HOME}"; then
         _logfile "Repo cloned OK"
       else
         clone_rc=$?
@@ -591,6 +803,7 @@ else
         exit "${clone_rc}"
       fi
     fi
+    unset CLONE_ARGS
   fi
 fi
 
@@ -824,14 +1037,10 @@ if _can_use_dialog; then
     echo "Installer canceled at sudo password prompt." >&2
     exit 130
   fi
-  if ! _become_pass_file="$(_write_become_password_file "${_become_pass}")"; then
-    unset _become_pass
-    exit 1
-  fi
-  trap '_cleanup_become_password_file' EXIT
-  trap '_cleanup_become_password_file; exit 130' INT TERM
+  _create_become_password_file "${_become_pass}"
   unset _become_pass
-  PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --become-password-file "${_become_pass_file}")
+  PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml")
+  PLAY_OPTS+=(--become-password-file "${BECOME_PASSWORD_FILE}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"
@@ -859,6 +1068,7 @@ if _can_use_dialog; then
     _pipe_status=("${PIPESTATUS[@]}")
   fi
   set -e
+  _restore_terminal_cursor
   _ansible_rc=${_pipe_status[0]}
   _tee_rc=${_pipe_status[1]}
   _dialog_rc=${_pipe_status[2]:-0}
@@ -882,8 +1092,8 @@ fi
 if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
   print_info "Installing selected optional bundles: ${EXPLICIT_OPTIONAL_TAGS#,}"
   OPTIONAL_PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --tags "${EXPLICIT_OPTIONAL_TAGS#,}")
-  if [[ -n "${_become_pass_file:-}" ]]; then
-    OPTIONAL_PLAY_OPTS+=(--become-password-file "${_become_pass_file}")
+  if [[ -n "${BECOME_PASSWORD_FILE:-}" ]]; then
+    OPTIONAL_PLAY_OPTS+=(--become-password-file "${BECOME_PASSWORD_FILE}")
   else
     OPTIONAL_PLAY_OPTS+=(--ask-become-pass)
   fi
@@ -913,6 +1123,7 @@ if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
             --progressbox "Installing selected optional bundles..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
       _pipe_status=("${PIPESTATUS[@]}")
     fi
+    _restore_terminal_cursor
     _dialog_rc=${_pipe_status[2]:-0}
   else
     (
@@ -927,11 +1138,7 @@ if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
   _logfile "--- optional playbook output end ---"
 fi
 
-if [[ -n "${_become_pass_file:-}" ]]; then
-  _cleanup_become_password_file
-  unset _become_pass_file
-  trap - EXIT INT TERM
-fi
+_cleanup_become_password_file
 
 if [[ "${_ansible_rc}" -ne 0 ]]; then
   _playbook_rc="${_ansible_rc}"

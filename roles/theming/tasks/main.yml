@@ -96,6 +96,27 @@
     - ansible_check_mode or theming_nordic_grub_theme_dir is defined
   notify: Theming_update_grub
 
+- name: Ensure Plymouth splash is enabled in empty GRUB defaults
+  ansible.builtin.replace:
+    path: /etc/default/grub
+    regexp: '^GRUB_CMDLINE_LINUX_DEFAULT=""$'
+    replace: 'GRUB_CMDLINE_LINUX_DEFAULT="splash"'
+  notify: Theming_update_grub
+
+- name: Replace disabled Plymouth token in GRUB defaults
+  ansible.builtin.replace:
+    path: /etc/default/grub
+    regexp: '^(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*)\bnosplash\b([^"]*")$'
+    replace: '\1splash\2'
+  notify: Theming_update_grub
+
+- name: Ensure Plymouth splash is enabled in GRUB defaults
+  ansible.builtin.replace:
+    path: /etc/default/grub
+    regexp: '^(GRUB_CMDLINE_LINUX_DEFAULT=")(?![^"]*\bsplash\b)([^"]*\S)(")$'
+    replace: '\1\2 splash\3'
+  notify: Theming_update_grub
+
 - name: Warn when Nordic GRUB theme is unavailable
   ansible.builtin.debug:
     msg: "Nordic GRUB theme was not found in the cloned repo; skipping GRUB theme installation."
@@ -107,8 +128,17 @@
   ansible.builtin.apt:
     name:
       - plymouth
+      - plymouth-label
       - plymouth-themes
     state: present
+
+- name: Enable Plymouth framebuffer scripts in initramfs
+  ansible.builtin.copy:
+    dest: /etc/initramfs-tools/conf.d/nikos-plymouth
+    content: |
+      FRAMEBUFFER=y
+    mode: "0644"
+  notify: Theming_update_initramfs
 
 - name: Copy NikOS logo PNG to system asset directory
   ansible.builtin.copy:
@@ -174,19 +204,46 @@
   notify: Theming_update_initramfs
   when: not ansible_check_mode
 
+- name: Locate Plymouth theme helper
+  ansible.builtin.find:
+    paths:
+      - /usr/sbin
+      - /usr/bin
+    patterns: plymouth-set-default-theme
+    file_type: file
+  register: theming_plymouth_theme_helper
+  when: not ansible_check_mode
+
+- name: Set Plymouth theme helper path
+  ansible.builtin.set_fact:
+    theming_plymouth_theme_helper_path: "{{ theming_plymouth_theme_helper.files[0].path }}"
+  when:
+    - not ansible_check_mode
+    - (theming_plymouth_theme_helper.matched | default(0)) | int > 0
+
+- name: Warn when Plymouth theme helper is unavailable
+  ansible.builtin.debug:
+    msg: "plymouth-set-default-theme is unavailable; using plymouthd.conf and default.plymouth alternatives only."
+  when:
+    - not ansible_check_mode
+    - (theming_plymouth_theme_helper.matched | default(0)) | int == 0
+
 - name: Check selected Plymouth theme
-  ansible.builtin.command: plymouth-set-default-theme
+  ansible.builtin.command: "{{ theming_plymouth_theme_helper_path }}"
   register: theming_plymouth_current_theme
   changed_when: false
   failed_when: false
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - theming_plymouth_theme_helper_path is defined
 
 - name: Select NikOS Plymouth theme with Plymouth tool
-  ansible.builtin.command: plymouth-set-default-theme nikos
+  ansible.builtin.command: "{{ theming_plymouth_theme_helper_path }} nikos"
   changed_when: true
   notify: Theming_update_initramfs
   when:
     - not ansible_check_mode
+    - theming_plymouth_theme_helper_path is defined
     - (theming_plymouth_current_theme.stdout | default('') | trim) != 'nikos'
 
 - name: Ensure LightDM config directory exists
