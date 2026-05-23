@@ -99,8 +99,8 @@
 - name: Ensure Plymouth splash is enabled in empty GRUB defaults
   ansible.builtin.replace:
     path: /etc/default/grub
-    regexp: '^(GRUB_CMDLINE_LINUX_DEFAULT=")"$'
-    replace: '\1splash"'
+    regexp: '^GRUB_CMDLINE_LINUX_DEFAULT=""$'
+    replace: 'GRUB_CMDLINE_LINUX_DEFAULT="splash"'
   notify: Theming_update_grub
 
 - name: Replace disabled Plymouth token in GRUB defaults
