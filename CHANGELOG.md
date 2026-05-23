@@ -16,6 +16,10 @@ All notable changes to NikOS are documented here.
 - **Plymouth helper availability** - theming no longer fails when
   `plymouth-set-default-theme` is unavailable; NikOS still configures Plymouth
   through `plymouthd.conf` and the `default.plymouth` alternative.
+- **NikOS Plymouth logo embedding** - theming now enables Plymouth framebuffer
+  hooks for initramfs generation and installs `plymouth-label`, ensuring the
+  custom NikOS logo theme is included in rebuilt boot images instead of the
+  default Xubuntu mouse splash.
 - Version bumped `0.4.1` -> `0.4.2`.
 
 ## [0.4.1] — 2026-05-14
