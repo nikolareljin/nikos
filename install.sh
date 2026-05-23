@@ -47,7 +47,9 @@ _safe_logfile() {
 }
 
 _restore_terminal_cursor() {
-  if [[ -t 1 ]]; then
+  if [[ -e /dev/tty ]] && { printf '' >/dev/tty; } 2>/dev/null; then
+    { tput cnorm 2>/dev/null || printf '\033[?25h'; } >/dev/tty 2>/dev/null || true
+  elif [[ -t 1 ]]; then
     tput cnorm 2>/dev/null || printf '\033[?25h' || true
   fi
 }
@@ -1008,6 +1010,7 @@ if _can_use_dialog; then
     _pipe_status=("${PIPESTATUS[@]}")
   fi
   set -e
+  _restore_terminal_cursor
   _ansible_rc=${_pipe_status[0]}
   _tee_rc=${_pipe_status[1]}
   _dialog_rc=${_pipe_status[2]:-0}
@@ -1060,6 +1063,7 @@ if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
             --progressbox "Installing selected optional bundles..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
       _pipe_status=("${PIPESTATUS[@]}")
     fi
+    _restore_terminal_cursor
     _dialog_rc=${_pipe_status[2]:-0}
   else
     (
