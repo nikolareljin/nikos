@@ -31,6 +31,7 @@ LOCAL_VARS_REL="vars/local.yml"
 SKIP_REPO_SYNC="${NIKOS_SKIP_REPO_SYNC:-0}"
 ANSIBLE_REQUIREMENTS_REL="requirements.yml"
 MIN_ANSIBLE_VERSION="2.15.0"
+BECOME_PASSWORD_FILE=""
 
 # Returns 0 if dialog is enabled, the binary is present, and stdin/stdout are connected to a TTY.
 _can_use_dialog() {
@@ -54,6 +55,18 @@ _restore_terminal_cursor() {
   fi
 }
 
+_cleanup_become_password_file() {
+  if [[ -n "${BECOME_PASSWORD_FILE:-}" && -f "${BECOME_PASSWORD_FILE}" ]]; then
+    rm -f -- "${BECOME_PASSWORD_FILE}"
+  fi
+  BECOME_PASSWORD_FILE=""
+}
+
+_cleanup_install() {
+  _cleanup_become_password_file
+  _restore_terminal_cursor
+}
+
 # Strip ANSI escape codes from the log after a tee'd run
 _strip_ansi_from_log() {
   sed -i 's/\x1b\[[0-9;:]*[a-zA-Z]//g' "${INSTALL_LOG}" 2>/dev/null || true
@@ -62,6 +75,15 @@ _strip_ansi_from_log() {
 _install_bootstrap_packages() {
   sudo apt-get update -qq
   sudo apt-get install -y "$@"
+}
+
+_create_become_password_file() {
+  local password="$1"
+
+  _cleanup_become_password_file
+  BECOME_PASSWORD_FILE="$(mktemp "${TMPDIR:-/tmp}/nikos-become.XXXXXX")"
+  chmod 600 "${BECOME_PASSWORD_FILE}"
+  printf '%s\n' "${password}" > "${BECOME_PASSWORD_FILE}"
 }
 
 _os_release_value() {
@@ -91,6 +113,7 @@ _is_supported_ubuntu_system() {
 
 _infer_repo_ref() {
   local branch=""
+  local tag=""
 
   if [[ -n "${REPO_REF}" ]]; then
     printf '%s\n' "${REPO_REF}"
@@ -104,8 +127,13 @@ _infer_repo_ref() {
         ;;
       *)
         printf '%s\n' "${branch}"
+        return 0
         ;;
     esac
+    tag="$(git -C "${SCRIPT_DIR}" describe --tags --exact-match 2>/dev/null || true)"
+    if [[ -n "${tag}" ]]; then
+      printf '%s\n' "${tag}"
+    fi
   fi
 }
 
@@ -333,9 +361,9 @@ _install_summary() {
 
 mkdir -p "${NIKOS_LOG_DIR}"
 ln -sf "${INSTALL_LOG}" "${NIKOS_LOG_DIR}/install-latest.log"
-trap '_restore_terminal_cursor' EXIT
-trap '_restore_terminal_cursor; exit 130' INT
-trap '_restore_terminal_cursor; exit 143' TERM
+trap '_cleanup_install' EXIT
+trap '_cleanup_install; exit 130' INT
+trap '_cleanup_install; exit 143' TERM
 TARGET_REPO_REF="$(_infer_repo_ref)"
 _logfile "=== NikOS ${NIKOS_VERSION} install started ==="
 _logfile "User: $(id -un)   Host: $(hostname -s)"
@@ -1007,7 +1035,10 @@ if _can_use_dialog; then
     echo "Installer canceled at sudo password prompt." >&2
     exit 130
   fi
+  _create_become_password_file "${_become_pass}"
+  unset _become_pass
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml")
+  PLAY_OPTS+=(--become-password-file "${BECOME_PASSWORD_FILE}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"
@@ -1017,7 +1048,7 @@ if _can_use_dialog; then
     for _play_opt in "${PLAY_OPTS[@]}"; do
       printf -v _script_cmd '%s %q' "${_script_cmd}" "${_play_opt}"
     done
-    ANSIBLE_BECOME_PASS="${_become_pass}" script -qefc "${_script_cmd}" /dev/null 2>&1 \
+    script -qefc "${_script_cmd}" /dev/null 2>&1 \
       | tee -a "${INSTALL_LOG}" \
       | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
           --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
@@ -1027,7 +1058,7 @@ if _can_use_dialog; then
   else
     (
       cd "${NIKOS_HOME}"
-      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_BECOME_PASS="${_become_pass}" ansible-playbook "${PLAY_OPTS[@]}"
+      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
     ) 2>&1 \
       | tee -a "${INSTALL_LOG}" \
       | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
@@ -1059,7 +1090,9 @@ fi
 if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
   print_info "Installing selected optional bundles: ${EXPLICIT_OPTIONAL_TAGS#,}"
   OPTIONAL_PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --tags "${EXPLICIT_OPTIONAL_TAGS#,}")
-  if [[ -z "${_become_pass:-}" ]]; then
+  if [[ -n "${BECOME_PASSWORD_FILE:-}" ]]; then
+    OPTIONAL_PLAY_OPTS+=(--become-password-file "${BECOME_PASSWORD_FILE}")
+  else
     OPTIONAL_PLAY_OPTS+=(--ask-become-pass)
   fi
   _logfile "Optional playbook: ansible-playbook ${OPTIONAL_PLAY_OPTS[*]}"
@@ -1071,7 +1104,7 @@ if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
       for _play_opt in "${OPTIONAL_PLAY_OPTS[@]}"; do
         printf -v _script_cmd '%s %q' "${_script_cmd}" "${_play_opt}"
       done
-      ANSIBLE_BECOME_PASS="${_become_pass}" script -qefc "${_script_cmd}" /dev/null 2>&1 \
+      script -qefc "${_script_cmd}" /dev/null 2>&1 \
         | tee -a "${INSTALL_LOG}" \
         | dialog --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
             --progressbox "Installing selected optional bundles..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
@@ -1081,7 +1114,7 @@ if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
     else
       (
         cd "${NIKOS_HOME}"
-        ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_BECOME_PASS="${_become_pass}" ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
+        ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
       ) 2>&1 \
         | tee -a "${INSTALL_LOG}" \
         | dialog --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
@@ -1103,7 +1136,7 @@ if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
   _logfile "--- optional playbook output end ---"
 fi
 
-unset _become_pass
+_cleanup_become_password_file
 
 if [[ "${_ansible_rc}" -ne 0 ]]; then
   _playbook_rc="${_ansible_rc}"
