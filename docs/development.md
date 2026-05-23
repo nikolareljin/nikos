@@ -118,7 +118,8 @@ PRs go to `dev`. `dev` merges to `main` when stable. Tag `main` to release.
 
 ```bash
 # Create release/X.Y.Z, bump VERSION, update changelog/docs, then merge to main.
-# The auto-tag workflow tags main when the merge commit references release/X.Y.Z.
+# The ci-helpers @production release tag gate blocks duplicate release tags on PRs to main.
+# The ci-helpers @production auto-tag workflow tags main when a release/X.Y.Z PR is merged.
 ```
 
 The `release.yml` workflow creates a GitHub Release automatically with a changelog and `install.sh` as a release asset.
@@ -133,4 +134,5 @@ Strict semver `X.Y.Z` with no `v` prefix. Keep `VERSION`, README, and CHANGELOG 
 |---|---|---|
 | `lint.yml` | Every PR + push to main/dev | ansible-lint, shellcheck, pytest |
 | `test.yml` | Every PR + push to main | ansible-playbook --check on Ubuntu 24.04 |
+| `release-tag-gate.yml` | Every PR | Blocks duplicate release tags for release PRs to main |
 | `release.yml` | Tag push (`X.Y.Z`) | Creates GitHub Release with changelog |
