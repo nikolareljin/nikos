@@ -64,6 +64,31 @@ _install_bootstrap_packages() {
   sudo apt-get install -y "$@"
 }
 
+_os_release_value() {
+  local key="$1"
+  local line value
+
+  [[ -r /etc/os-release ]] || return 1
+  while IFS='=' read -r line value; do
+    [[ "${line}" == "${key}" ]] || continue
+    value="${value%\"}"
+    value="${value#\"}"
+    printf '%s\n' "${value}"
+    return 0
+  done < /etc/os-release
+
+  return 1
+}
+
+_is_supported_ubuntu_system() {
+  local os_id version_id
+
+  os_id="$(_os_release_value ID || true)"
+  version_id="$(_os_release_value VERSION_ID || true)"
+
+  [[ "${os_id}" == "ubuntu" && "${version_id}" == "24.04" ]]
+}
+
 _infer_repo_ref() {
   local branch=""
 
@@ -329,17 +354,17 @@ else
   echo ""
 fi
 
-# Ensure apt-based system
+# Ensure the installer is running on supported Ubuntu-family media.
 if _can_use_dialog; then
   dialog --title "NikOS ${NIKOS_VERSION} — System Check" \
     --infobox "Checking system requirements..." 5 52 || true
 fi
-if ! command -v apt-get &>/dev/null; then
+if ! _is_supported_ubuntu_system || ! command -v apt-get &>/dev/null; then
   if _can_use_dialog; then
     dialog --title "Error" \
-      --msgbox "NikOS requires an apt-based system (Ubuntu 24.04 LTS)." 7 52
+      --msgbox "NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." 7 56
   fi
-  echo "ERROR: NikOS requires an apt-based system (Ubuntu 24.04 LTS)." >&2
+  echo "ERROR: NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." >&2
   exit 1
 fi
 

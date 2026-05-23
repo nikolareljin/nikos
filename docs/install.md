@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos/main/install.sh 
 
 The script will:
 1. Check you are not running as root
-2. Check you are on an apt-based system
+2. Check you are on Xubuntu 24.04 LTS or Ubuntu 24.04 LTS
 3. Install bootstrap packages: `git`, `ansible`, and `dialog` unless `NIKOS_USE_DIALOG=0`
 4. Offer to upgrade unsupported Ansible versions from the Ansible Ubuntu PPA
 5. Clone the repo (with submodules) to `~/.local/share/nikos`; when launched
