@@ -6,6 +6,8 @@ set -euo pipefail
 # Environment variables:
 # NIKOS_REPO_URL: Custom Git repository URL to clone NikOS from
 #                  (default: https://github.com/nikolareljin/nikos)
+# NIKOS_REPO_REF: Branch/tag to check out in NIKOS_HOME before running the playbook
+#                 (default: inferred from the installer checkout when possible)
 # NIKOS_HOME: Base installation directory for NikOS
 #             (default: ${HOME}/.local/share/nikos)
 # NIKOS_USE_DIALOG: Use dialog-based prompts when available; set to 0 for plain mode
@@ -15,6 +17,7 @@ set -euo pipefail
 REPO_URL="${NIKOS_REPO_URL:-https://github.com/nikolareljin/nikos}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 NIKOS_VERSION="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null || echo "unknown")"
+REPO_REF="${NIKOS_REPO_REF:-}"
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 NIKOS_CONFIG_DIR="${HOME}/.config/nikos"
 SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
@@ -57,6 +60,57 @@ _strip_ansi_from_log() {
 _install_bootstrap_packages() {
   sudo apt-get update -qq
   sudo apt-get install -y "$@"
+}
+
+_infer_repo_ref() {
+  local branch=""
+
+  if [[ -n "${REPO_REF}" ]]; then
+    printf '%s\n' "${REPO_REF}"
+    return 0
+  fi
+
+  if git -C "${SCRIPT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    branch="$(git -C "${SCRIPT_DIR}" branch --show-current 2>/dev/null || true)"
+    case "${branch}" in
+      ""|main|master)
+        ;;
+      *)
+        printf '%s\n' "${branch}"
+        ;;
+    esac
+  fi
+}
+
+_checkout_repo_ref() {
+  local target_ref="$1"
+  local current_ref=""
+
+  [[ -z "${target_ref}" ]] && return 0
+
+  current_ref="$(git -C "${NIKOS_HOME}" branch --show-current 2>/dev/null || true)"
+  if [[ "${current_ref}" == "${target_ref}" ]]; then
+    return 0
+  fi
+
+  echo "Switching NikOS repo to ${target_ref}..."
+  _logfile "Switching repo at ${NIKOS_HOME} to ${target_ref}"
+  if git -C "${NIKOS_HOME}" show-ref --verify --quiet "refs/heads/${target_ref}"; then
+    git -C "${NIKOS_HOME}" switch "${target_ref}"
+  elif git -C "${NIKOS_HOME}" show-ref --verify --quiet "refs/remotes/origin/${target_ref}"; then
+    git -C "${NIKOS_HOME}" switch --track "origin/${target_ref}"
+  elif git -C "${NIKOS_HOME}" show-ref --verify --quiet "refs/tags/${target_ref}"; then
+    git -C "${NIKOS_HOME}" switch --detach "${target_ref}"
+  else
+    echo "ERROR: Requested NikOS ref '${target_ref}' was not found in ${NIKOS_HOME}." >&2
+    echo "Set NIKOS_REPO_REF to an existing branch/tag, or unset it to use the checkout's current branch." >&2
+    return 2
+  fi
+
+  if [[ "$(git -C "${NIKOS_HOME}" branch --show-current 2>/dev/null || true)" ]]; then
+    git -C "${NIKOS_HOME}" pull --ff-only
+  fi
+  git -C "${NIKOS_HOME}" submodule update --init --recursive
 }
 
 _ansible_playbook_version() {
@@ -255,8 +309,10 @@ ln -sf "${INSTALL_LOG}" "${NIKOS_LOG_DIR}/install-latest.log"
 trap '_restore_terminal_cursor' EXIT
 trap '_restore_terminal_cursor; exit 130' INT
 trap '_restore_terminal_cursor; exit 143' TERM
+TARGET_REPO_REF="$(_infer_repo_ref)"
 _logfile "=== NikOS ${NIKOS_VERSION} install started ==="
 _logfile "User: $(id -un)   Host: $(hostname -s)"
+[[ -n "${TARGET_REPO_REF}" ]] && _logfile "Target repo ref: ${TARGET_REPO_REF}"
 
 if _can_use_dialog; then
   if ! dialog --title "NikOS ${NIKOS_VERSION}" \
@@ -653,6 +709,16 @@ else
         _pull_repo_updates_bootstrap
       fi
     fi
+    checkout_rc=0
+    if _can_use_dialog; then
+      _checkout_repo_ref "${TARGET_REPO_REF}" >> "${INSTALL_LOG}" 2>&1 || checkout_rc=$?
+      if [[ "${checkout_rc}" -ne 0 ]]; then
+        _show_logged_command_failure "Failed to switch NikOS repository to ${TARGET_REPO_REF}." "${checkout_rc}"
+        exit "${checkout_rc}"
+      fi
+    else
+      _checkout_repo_ref "${TARGET_REPO_REF}"
+    fi
   else
     if _can_use_dialog; then
       dialog --title "NikOS ${NIKOS_VERSION}" \
@@ -661,8 +727,10 @@ else
       echo "Cloning NikOS repo to ${NIKOS_HOME}..."
     fi
     _logfile "Cloning repo from ${REPO_URL} to ${NIKOS_HOME}"
+    CLONE_ARGS=(--recurse-submodules)
+    [[ -n "${TARGET_REPO_REF}" ]] && CLONE_ARGS+=(--branch "${TARGET_REPO_REF}")
     if _can_use_dialog; then
-      if git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}" >> "${INSTALL_LOG}" 2>&1; then
+      if git clone "${CLONE_ARGS[@]}" "${REPO_URL}" "${NIKOS_HOME}" >> "${INSTALL_LOG}" 2>&1; then
         _logfile "Repo cloned OK"
       else
         clone_rc=$?
@@ -670,7 +738,7 @@ else
         exit "${clone_rc}"
       fi
     else
-      if git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"; then
+      if git clone "${CLONE_ARGS[@]}" "${REPO_URL}" "${NIKOS_HOME}"; then
         _logfile "Repo cloned OK"
       else
         clone_rc=$?
@@ -678,6 +746,7 @@ else
         exit "${clone_rc}"
       fi
     fi
+    unset CLONE_ARGS
   fi
 fi
 

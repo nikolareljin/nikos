@@ -22,7 +22,8 @@ The script will:
 2. Check you are on an apt-based system
 3. Install bootstrap packages: `git`, `ansible`, and `dialog` unless `NIKOS_USE_DIALOG=0`
 4. Offer to upgrade unsupported Ansible versions from the Ansible Ubuntu PPA
-5. Clone the repo (with submodules) to `~/.local/share/nikos`
+5. Clone the repo (with submodules) to `~/.local/share/nikos`; when launched
+   from a non-main checkout, the persistent repo follows that same branch
 6. Present a `dialog` TUI checklist to select optional bundles
 7. Present a `dialog` TUI checklist to select AI tools
 8. Ask for the timezone to use — detects the system timezone via `timedatectl` and offers:
@@ -75,6 +76,13 @@ To force the plain-prompt installer path instead of the `dialog` UI:
 
 ```bash
 NIKOS_USE_DIALOG=0 bash install.sh
+```
+
+To force the persistent checkout to a specific branch or tag before the
+playbook runs:
+
+```bash
+NIKOS_REPO_REF=release/0.4.2 bash install.sh
 ```
 
 ## Manual run (without curl | bash)
