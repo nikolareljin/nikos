@@ -11,8 +11,9 @@ All notable changes to NikOS are documented here.
   `ansible-playbook` versions older than the role minimum before the playbook
   starts, and pin `community.general` to a collection release compatible with
   that minimum.
-- **Dialog cursor cleanup** - the installer restores the terminal cursor on
-  normal exit and when interrupted.
+- **Dialog cursor cleanup** - the installer restores the terminal cursor through
+  the controlling terminal after progress dialogs, on normal exit, and when
+  interrupted.
 - **Plymouth helper availability** - theming no longer fails when
   `plymouth-set-default-theme` is unavailable; NikOS still configures Plymouth
   through `plymouthd.conf` and the `default.plymouth` alternative.
