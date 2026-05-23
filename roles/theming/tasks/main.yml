@@ -107,8 +107,17 @@
   ansible.builtin.apt:
     name:
       - plymouth
+      - plymouth-label
       - plymouth-themes
     state: present
+
+- name: Enable Plymouth framebuffer scripts in initramfs
+  ansible.builtin.copy:
+    dest: /etc/initramfs-tools/conf.d/nikos-plymouth
+    content: |
+      FRAMEBUFFER=y
+    mode: "0644"
+  notify: Theming_update_initramfs
 
 - name: Copy NikOS logo PNG to system asset directory
   ansible.builtin.copy:
