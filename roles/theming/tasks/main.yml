@@ -96,6 +96,20 @@
     - ansible_check_mode or theming_nordic_grub_theme_dir is defined
   notify: Theming_update_grub
 
+- name: Ensure Plymouth splash is enabled in empty GRUB defaults
+  ansible.builtin.replace:
+    path: /etc/default/grub
+    regexp: '^(GRUB_CMDLINE_LINUX_DEFAULT=")"$'
+    replace: '\1splash"'
+  notify: Theming_update_grub
+
+- name: Ensure Plymouth splash is enabled in GRUB defaults
+  ansible.builtin.replace:
+    path: /etc/default/grub
+    regexp: '^(GRUB_CMDLINE_LINUX_DEFAULT=")(?![^"]*\bsplash\b)([^"]*\S)(")$'
+    replace: '\1\2 splash\3'
+  notify: Theming_update_grub
+
 - name: Warn when Nordic GRUB theme is unavailable
   ansible.builtin.debug:
     msg: "Nordic GRUB theme was not found in the cloned repo; skipping GRUB theme installation."
