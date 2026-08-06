@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   tag:
-    uses: nikolareljin/ci-helpers/.github/workflows/auto-tag-release.yml@production
+    uses: nikolareljin/ci-helpers/.github/workflows/auto-tag.yml@production
     with:
       runner: ubuntu-24.04
       update_production_tag: false
