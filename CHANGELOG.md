@@ -33,17 +33,21 @@ All notable changes to NikOS are documented here.
   recap, so they stay integers however many times the playbook ran.
 - **`bitnet-cli` resolved its libraries through the build tree it was compiled
   in** - the CLI was installed by copying `llama-cli` into `~/.local/bin`, but
-  that binary links against the shared libraries in BitNet's build output and
-  carries a `RUNPATH` with that directory's absolute path baked in. The copy
-  worked only while the build tree stayed where it was built, under the home it
-  was built with, and `ldd` on the installed file pointed back into
-  `Projects/bitnet.cpp/build/bin` rather than anywhere it had been installed. A
-  machine with more than one `Projects` tree resolves the wrong one. It is now a
-  wrapper that sets `LD_LIBRARY_PATH` and execs the built binary, the same shape
-  as the `distrodeck` wrapper, and it reports a missing build tree with an
-  actionable message instead of a loader error. The previous task carried
-  `force: false`, so the wrapper is written unconditionally to replace the bare
-  binary already installed on existing machines.
+  that binary links against shared libraries produced by BitNet's build and
+  carries a `RUNPATH` with that directory's absolute path baked in. `ldd` on the
+  installed file pointed back into `Projects/bitnet.cpp/build/bin`, so the
+  command worked only while the build tree stayed where it was built, under the
+  home it was built with; a machine with more than one `Projects` tree resolved
+  the wrong one. The binary and every `*.so*` beside it are now copied into
+  `/usr/local/lib/nikos/bitnet`, with `/usr/local/bin/bitnet-cli` as the entry
+  point, so the command is self-contained and the build tree is only needed to
+  rebuild. Every library travels rather than just the ones `ldd` reports,
+  because ggml loads its backends with `dlopen` and a dependency-only copy
+  passes `ldd` and then fails when a backend is loaded. `cp -a` preserves the
+  symlink chains, which a copy loop would dereference and triple in size. The
+  earlier per-user `~/.local/bin/bitnet-cli` is removed, since that directory
+  precedes `/usr/local/bin` on a default `PATH` and would otherwise keep
+  shadowing the new entry point.
 - **BitNet.cpp built no CLI, and the install step failed on the missing file** -
   the role built only shared libraries, then failed with `Source
   .../build/bin/llama-cli not found`. BitNet adds llama.cpp with

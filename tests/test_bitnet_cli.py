@@ -1,15 +1,16 @@
 """Guards on how the BitNet CLI is installed.
 
-llama-cli links against the shared libraries in BitNet's build tree and is
-built with a RUNPATH holding that tree's absolute path. Copying the binary
-into ~/.local/bin therefore produced something that only resolved its
-libraries while the build directory stayed exactly where it was built, under
-the home it was built with:
+llama-cli links against shared libraries produced by BitNet's build and is
+built with a RUNPATH holding that build directory's absolute path. Installing
+it by copying the binary alone, or by wrapping it in a way that points back at
+the build tree, gives a command that works only while that tree stays where it
+was built, under the home it was built with:
 
     $ ldd ~/.local/bin/bitnet-cli
     libllama.so.0 => <build tree>/build/bin/libllama.so.0
 
-A wrapper that sets LD_LIBRARY_PATH resolves the path at run time instead.
+The binary and its libraries are copied into a prefix of their own instead, so
+the build tree is only needed to rebuild.
 """
 
 from __future__ import annotations
@@ -20,9 +21,12 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TASKS = REPO_ROOT / "roles/optional/bitnet/tasks/main.yml"
+ROLE = REPO_ROOT / "roles/optional/bitnet"
+TASKS = ROLE / "tasks/main.yml"
+DEFAULTS = ROLE / "defaults/main.yml"
 
-CLI_DEST = "{{ nikos_home }}/.local/bin/bitnet-cli"
+ENTRY_POINT = "/usr/local/bin/bitnet-cli"
+BUILD_TREE = "Projects/bitnet.cpp"
 
 
 @pytest.fixture(scope="module")
@@ -31,52 +35,78 @@ def tasks() -> list[dict]:
 
 
 @pytest.fixture(scope="module")
-def install_task(tasks: list[dict]) -> dict:
+def defaults() -> dict:
+    return yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def entry_point(tasks: list[dict]) -> dict:
     for task in tasks:
         copy = task.get("ansible.builtin.copy") or {}
-        if copy.get("dest") == CLI_DEST:
-            return task
-    pytest.fail(f"no task installs {CLI_DEST}")
+        if copy.get("dest") == ENTRY_POINT:
+            return copy
+    pytest.fail(f"no task installs {ENTRY_POINT}")
 
 
-def test_the_cli_is_a_wrapper_not_a_copy_of_the_binary(install_task: dict) -> None:
-    copy = install_task["ansible.builtin.copy"]
-    assert "content" in copy, (
-        "bitnet-cli is installed by copying a file. The built llama-cli carries "
-        "an absolute RUNPATH into the build tree, so a copy breaks as soon as "
-        "that tree moves or the home differs. Install a wrapper instead."
+def test_the_prefix_is_outside_the_build_tree(defaults: dict) -> None:
+    prefix = defaults["bitnet_prefix"]
+    assert BUILD_TREE not in prefix, (
+        f"the install prefix {prefix} is inside the build tree, which is the "
+        "dependency this was meant to remove"
     )
-    assert "src" not in copy, "the wrapper should be generated content, not a copied file"
-    assert "remote_src" not in copy
+    assert prefix.startswith("/usr/"), "the prefix should be a system location"
 
 
-def test_the_wrapper_points_the_loader_at_the_build_output(install_task: dict) -> None:
-    content = install_task["ansible.builtin.copy"]["content"]
-    assert "LD_LIBRARY_PATH" in content, (
-        "without LD_LIBRARY_PATH the binary falls back to the RUNPATH baked in "
-        "at build time, which is the defect this replaced"
+def test_the_libraries_are_installed_next_to_the_binary(tasks: list[dict]) -> None:
+    """ggml dlopens its backends, so every .so has to travel, not just ldd's list."""
+    installs = [str(t.get("ansible.builtin.shell", "")) for t in tasks]
+    copy_step = next((c for c in installs if "cp -a" in c), None)
+    assert copy_step, "nothing copies the build output into the prefix"
+    assert "*.so*" in copy_step, (
+        "only some libraries are copied; ggml loads its backend libraries with "
+        "dlopen, so a dependency-only copy passes ldd and fails at run time"
     )
+    assert "llama-cli" in copy_step
+
+
+def test_the_entry_point_does_not_reach_back_into_the_build_tree(entry_point: dict) -> None:
+    content = entry_point["content"]
+    assert BUILD_TREE not in content, (
+        "the entry point references the build tree; deleting or cleaning it "
+        "would break the command"
+    )
+    assert "LD_LIBRARY_PATH" in content
     assert "exec" in content and "llama-cli" in content
 
 
-def test_the_wrapper_reports_a_missing_build_tree_clearly(install_task: dict) -> None:
-    """Otherwise the user gets a loader error naming a path they never chose."""
-    content = install_task["ansible.builtin.copy"]["content"]
+def test_the_entry_point_reports_a_missing_install_clearly(entry_point: dict) -> None:
+    content = entry_point["content"]
     assert "-x" in content and "exit 127" in content
 
 
-def test_the_wrapper_replaces_an_existing_bitnet_cli(install_task: dict) -> None:
-    """Earlier versions installed the bare binary; it has to be overwritten."""
-    copy = install_task["ansible.builtin.copy"]
-    assert copy.get("force", True) is not False, (
-        "force: false would keep the old bare binary on every machine that "
-        "already has one, so the fix would never reach them"
+def test_the_entry_point_is_installed_for_every_user(entry_point: dict) -> None:
+    assert entry_point.get("mode") == "0755"
+    assert entry_point.get("force", True) is not False, (
+        "force: false would keep whatever an earlier version installed"
     )
-    assert copy.get("mode") == "0755"
+
+
+def test_the_superseded_per_user_copy_is_removed(tasks: list[dict]) -> None:
+    """~/.local/bin precedes /usr/local/bin on a default PATH.
+
+    A copy left there by an earlier version would shadow the entry point and
+    keep resolving libraries out of the build tree.
+    """
+    removals = [
+        t.get("ansible.builtin.file") or {} for t in tasks
+    ]
+    assert any(
+        r.get("state") == "absent" and str(r.get("path", "")).endswith(".local/bin/bitnet-cli")
+        for r in removals
+    ), "the old ~/.local/bin/bitnet-cli is never removed, so it keeps shadowing"
 
 
 def test_the_build_still_produces_the_cli(tasks: list[dict]) -> None:
-    """The wrapper is only useful if the tools are actually built."""
     configure = [
         t for t in tasks
         if "cmake -S . -B build" in str(t.get("ansible.builtin.command", ""))
