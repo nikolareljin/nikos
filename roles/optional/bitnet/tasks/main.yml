@@ -17,12 +17,35 @@
     update: false
   when: not ansible_check_mode
 
+# BitNet adds llama.cpp with add_subdirectory, which leaves LLAMA_STANDALONE
+# off, and llama.cpp defaults LLAMA_BUILD_COMMON and LLAMA_BUILD_TOOLS to that
+# value. Its CMakeLists then guards `add_subdirectory(tools)` on both, so the
+# build produced only the shared libraries and no llama-cli, and the install
+# step below failed with "Source .../build/bin/llama-cli not found". BitNet
+# forces LLAMA_BUILD_SERVER on for the same reason but does not cover tools.
+- name: Check whether the BitNet.cpp build is configured to build the CLI
+  ansible.builtin.command: >
+    grep -q '^LLAMA_BUILD_TOOLS:BOOL=ON'
+    {{ nikos_home }}/Projects/bitnet.cpp/build/CMakeCache.txt
+  register: bitnet_tools_configured
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+# Re-configures an existing build tree as well as a fresh one. A `creates:`
+# guard on CMakeCache.txt would leave any machine that already ran the old
+# command with a cache that never builds the CLI, so the failure would survive
+# every reinstall.
 - name: Configure BitNet.cpp build
-  ansible.builtin.command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+  ansible.builtin.command: >
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    -DLLAMA_BUILD_COMMON=ON -DLLAMA_BUILD_TOOLS=ON
   args:
     chdir: "{{ nikos_home }}/Projects/bitnet.cpp"
-    creates: "{{ nikos_home }}/Projects/bitnet.cpp/build/CMakeCache.txt"
-  when: not ansible_check_mode
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - bitnet_tools_configured.rc | default(1) != 0
 
 - name: Build BitNet.cpp
   ansible.builtin.command: cmake --build build --config Release -j

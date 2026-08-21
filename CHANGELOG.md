@@ -5,6 +5,24 @@ All notable changes to NikOS are documented here.
 ## [0.6.0] — 2026-08-21
 
 ### Fixed
+- **The install summary printed broken numbers and hid a real failure** - an
+  install runs the playbook twice, once for the main run and once for the
+  optional bundles, and each prints its own `PLAY RECAP`. The summary read them
+  with a bare `grep`, which returns one line per recap, so `ok` became `177` and
+  `10` on separate lines and the dialog box wrapped the remainder onto its own
+  row. The same values fed `[[ "${failed}" -gt 0 ]]`, and bash raises a syntax
+  error on a multi-line operand and evaluates it false, so a bundle that failed
+  was reported as a clean install. The counts are now totalled across every
+  recap, so they stay integers however many times the playbook ran.
+- **BitNet.cpp built no CLI, and the install step failed on the missing file** -
+  the role built only shared libraries, then failed with `Source
+  .../build/bin/llama-cli not found`. BitNet adds llama.cpp with
+  `add_subdirectory`, which leaves `LLAMA_STANDALONE` off, and llama.cpp
+  defaults `LLAMA_BUILD_COMMON` and `LLAMA_BUILD_TOOLS` to that value while
+  guarding `add_subdirectory(tools)` on both. The configure step now sets them
+  explicitly, and re-runs on an existing build tree rather than being skipped by
+  a `creates:` guard, so a machine that already has the old cache is repaired
+  instead of failing forever.
 - **The menu's "Help" entry opened a file that was never installed** - Xubuntu's
   `xfhelp4.desktop` runs `exo-open` on `/usr/share/xubuntu-docs/index.html`, which
   comes from the `xubuntu-docs` package. The full `xubuntu-desktop` metapackage
