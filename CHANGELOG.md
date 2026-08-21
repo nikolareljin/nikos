@@ -17,6 +17,21 @@ All notable changes to NikOS are documented here.
   was inferred from whatever git checkout the script happened to sit in, so
   `curl | bash` in a project directory could pick up an unrelated repository's
   branch name. Version selection is now explicit.
+- **image-view was never built, silently** - the cargo version was read with
+  `regex_search('[0-9]+\\.[0-9]+\\.[0-9]+')`, and inside a folded YAML scalar
+  that backslash does not survive to the regex. The pattern never matched, the
+  version fell back to `0.0.0`, and `0.0.0` is below the 1.85 gate the build
+  requires - so the build was skipped on every run and reported as "cargo too
+  old" no matter which cargo was installed. Matching the dot with `[.]` needs
+  no escaping and cannot regress the same way.
+- **The cargo resolver returned three lines** - it used `command -v rustup
+  &>/dev/null`, and `ansible.builtin.shell` runs `/bin/sh`, which is dash on
+  Ubuntu. There `&>` means "run in the background, then redirect nothing", so
+  the probe printed the path it was meant to suppress. The multi-line result
+  was then passed to `command` as if it were one path, producing
+  `error: unexpected argument` where a version string was expected, an empty
+  version fact, and a hard failure from the `version` test. Now POSIX
+  redirection, and only the last line is used.
 - **The AI CLIs ran under the wrong Node** - the role added the NodeSource
   repository and then installed `nodejs` with `state: present`, which does
   nothing when a `nodejs` package is already there. Ubuntu 24.04 ships Node 18,
