@@ -5,6 +5,27 @@ All notable changes to NikOS are documented here.
 ## [0.5.0] — 2026-08-20
 
 ### Fixed
+- **Wallpaper stayed on the Xubuntu default** - the Xubuntu session puts
+  `/etc/xdg/xdg-xubuntu` ahead of `/etc/xdg` in `XDG_CONFIG_DIRS`, so
+  `xubuntu-default-settings`' `xfce4-desktop.xml` shadowed the NikOS copy, and
+  xfdesktop seeded every connector-named backdrop
+  (`monitorHDMI-A-0`, `monitorDisplayPort-2`, ...) from its `image-path` values
+  at first login. The role's own fixups could not counter that: they edited a
+  user file that does not exist until a session has run, and called
+  `xfconf-query` at install time when no `xfconfd` is listening. NikOS now
+  repoints the Xubuntu defaults as well, and ships
+  `/usr/local/bin/nikos-apply-wallpaper` plus an `/etc/xdg/autostart` entry that
+  sets every backdrop once, inside the session, after xfdesktop has registered
+  the real monitors.
+
+### Added
+- **Portrait wallpaper** - `assets/wallpaper-vertical.svg`, exported to
+  `/usr/share/nikos/wallpaper-vertical.png`. Monitors in vertical orientation
+  get the portrait cut; every other monitor gets the landscape one.
+- **Backdrop colour matches the artwork** - backdrops are Scaled rather than
+  Zoomed, so nothing is cropped, and `color-style`/`rgba1` are set to `#2e3440`,
+  the flat base colour of both wallpapers, so the area an aspect ratio does not
+  cover reads as part of the image.
 - **Ubuntu hosts never switched to Xubuntu** - the desktop role probed a single
   `gnome-session` package to decide whether it was migrating an Ubuntu install.
   Ubuntu 24.04 ships `ubuntu-session`, `gnome-session-bin` and
