@@ -328,6 +328,7 @@ checks=(
   "command -v ollama"
   "command -v lantern"
   "command -v mugshot"
+  "command -v menulibre"
   "grep -q nikolareljin.github.io/nikos /usr/share/xfce4/applications/xfhelp4.desktop"
   "test -d /usr/share/themes/Nordic"
   "test -d /usr/share/icons/Papirus-Dark"

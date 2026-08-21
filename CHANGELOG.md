@@ -5,6 +5,58 @@ All notable changes to NikOS are documented here.
 ## [0.6.0] — 2026-08-21
 
 ### Fixed
+- **The menu editor entry pointed at software that was never installed** - both
+  the Xubuntu whiskermenu defaults and the NikOS ones set
+  `command-menueditor=menulibre` with the button shown, and menulibre is a
+  Recommends of the full `xubuntu-desktop` only. On `xubuntu-desktop-minimal` it
+  is absent, so the entry failed the same way "Edit Profile" did. menulibre is
+  now installed with the other desktop packages. Found by auditing every menu
+  command after the mugshot report, rather than by another click.
+- **A menu favourite silently never appeared** - the favourites list named
+  `xfce4-settings-manager.desktop`, but the file `xfce4-settings` ships is
+  `xfce-settings-manager.desktop`, with no `4` after `xfce`. The binary *is*
+  `xfce4-settings-manager`, which is what makes the wrong id easy to write and
+  hard to notice: nothing errors, the favourite is just missing.
+- **Tests now cover the whole class** - `tests/test_desktop_menu.py` checks that
+  every displayed menu command has something installing its binary, that no
+  shown button lacks a command, and that favourites are well-formed desktop ids.
+  Verified against both defects above: removing menulibre from the package list
+  or restoring the wrong desktop id fails the suite.
+- **The install summary printed broken numbers and hid a real failure** - an
+  install runs the playbook twice, once for the main run and once for the
+  optional bundles, and each prints its own `PLAY RECAP`. The summary read them
+  with a bare `grep`, which returns one line per recap, so `ok` became `177` and
+  `10` on separate lines and the dialog box wrapped the remainder onto its own
+  row. The same values fed `[[ "${failed}" -gt 0 ]]`, and bash raises a syntax
+  error on a multi-line operand and evaluates it false, so a bundle that failed
+  was reported as a clean install. The counts are now totalled across every
+  recap, so they stay integers however many times the playbook ran.
+- **`bitnet-cli` resolved its libraries through the build tree it was compiled
+  in** - the CLI was installed by copying `llama-cli` into `~/.local/bin`, but
+  that binary links against shared libraries produced by BitNet's build and
+  carries a `RUNPATH` with that directory's absolute path baked in. `ldd` on the
+  installed file pointed back into `Projects/bitnet.cpp/build/bin`, so the
+  command worked only while the build tree stayed where it was built, under the
+  home it was built with; a machine with more than one `Projects` tree resolved
+  the wrong one. The binary and every `*.so*` beside it are now copied into
+  `/usr/local/lib/nikos/bitnet`, with `/usr/local/bin/bitnet-cli` as the entry
+  point, so the command is self-contained and the build tree is only needed to
+  rebuild. Every library travels rather than just the ones `ldd` reports,
+  because ggml loads its backends with `dlopen` and a dependency-only copy
+  passes `ldd` and then fails when a backend is loaded. `cp -a` preserves the
+  symlink chains, which a copy loop would dereference and triple in size. The
+  earlier per-user `~/.local/bin/bitnet-cli` is removed, since that directory
+  precedes `/usr/local/bin` on a default `PATH` and would otherwise keep
+  shadowing the new entry point.
+- **BitNet.cpp built no CLI, and the install step failed on the missing file** -
+  the role built only shared libraries, then failed with `Source
+  .../build/bin/llama-cli not found`. BitNet adds llama.cpp with
+  `add_subdirectory`, which leaves `LLAMA_STANDALONE` off, and llama.cpp
+  defaults `LLAMA_BUILD_COMMON` and `LLAMA_BUILD_TOOLS` to that value while
+  guarding `add_subdirectory(tools)` on both. The configure step now sets them
+  explicitly, and re-runs on an existing build tree rather than being skipped by
+  a `creates:` guard, so a machine that already has the old cache is repaired
+  instead of failing forever.
 - **The menu's "Help" entry opened a file that was never installed** - Xubuntu's
   `xfhelp4.desktop` runs `exo-open` on `/usr/share/xubuntu-docs/index.html`, which
   comes from the `xubuntu-docs` package. The full `xubuntu-desktop` metapackage
