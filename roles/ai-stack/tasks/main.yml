@@ -217,10 +217,14 @@
   when: not ai_stack_miniforge_stat.stat.exists
   changed_when: true
 
+# nikos_python_version carries its own comparison operator, so it is
+# concatenated rather than joined with "=" - "python=>=3.11" is not a spec
+# conda accepts. This is ansible.builtin.command, not shell, so the < and > in
+# the range are literal argv and never reach a shell.
 - name: Create nikos-ai conda environment
   ansible.builtin.command: >
     {{ nikos_home }}/miniforge3/bin/conda create -n {{ nikos_conda_env }}
-    python={{ nikos_python_version }} -y
+    python{{ nikos_python_version }} -y
   args:
     creates: "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}"
 
