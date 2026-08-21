@@ -20,6 +20,7 @@ Requires PyGObject with the librsvg pixbuf loader (`gir1.2-rsvg-2.0`,
 
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 import sys
@@ -280,6 +281,32 @@ def build_bullet() -> str:
     return svg_document(BULLET_SIZE, BULLET_SIZE, body)
 
 
+# Everything under assets/plymouth is committed, and the playbook copies it to
+# the target without running this script, so an edit to a source or to this
+# file that is not followed by a regeneration would ship stale boot artwork.
+# The manifest records what the committed output was built from;
+# tests/test_plymouth_theme.py recomputes it and fails when they diverge.
+#
+# Input hashes rather than a re-render on purpose: PNG bytes depend on the
+# installed librsvg and cairo, so comparing rendered output would tie CI to one
+# library version and break on an unrelated upgrade, which is not staleness.
+MANIFEST_INPUTS = [
+    Path("scripts/render-plymouth-assets.py"),
+    Path("assets/menu-icon.svg"),
+    Path("assets/plymouth-logo.svg"),
+]
+
+MANIFEST = OUT / "SOURCES.sha256"
+
+
+def manifest_body() -> str:
+    lines = []
+    for relative in MANIFEST_INPUTS:
+        digest = hashlib.sha256((REPO_ROOT / relative).read_bytes()).hexdigest()
+        lines.append(f"{digest}  {relative.as_posix()}")
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
 
@@ -306,6 +333,8 @@ def main() -> int:
     render(build_password_dialog(), OUT / "passw-dialog.png",
            DIALOG_WIDTH, DIALOG_HEIGHT)
     render(build_bullet(), OUT / "bullet.png", BULLET_SIZE, BULLET_SIZE)
+
+    MANIFEST.write_text(manifest_body(), encoding="utf-8")
 
     written = sorted(p.name for p in OUT.iterdir())
     print(f"wrote {len(written)} files to {OUT.relative_to(REPO_ROOT)}")

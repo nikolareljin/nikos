@@ -2,7 +2,7 @@
 
 The menu icon is installed system-wide, but GTK resolves user-level icon
 directories first. A reinstall that only rewrites /usr/share therefore fixes
-nothing on a machine that has a copy in either of them, which is exactly how a
+nothing on a machine that has a copy in either of them, which is exactly how an
 already-fixed icon kept coming up as a missing-image placeholder.
 """
 
