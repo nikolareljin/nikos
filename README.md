@@ -71,12 +71,33 @@ At the end, you should end up with something like:
 | [Ollama](https://ollama.ai) | Local LLM runtime — `qwen2.5-coder:7b` pre-pulled |
 | [aider](https://aider.chat) | AI pair programmer in the terminal |
 | [Miniforge](https://github.com/conda-forge/miniforge) | Python distribution (conda) |
-| `nikos-ai` conda env | Python 3.11 + PyTorch CPU + Jupyter + transformers + pandas |
+| `nikos-ai` conda env | Python 3.11-3.13 + PyTorch CPU + Jupyter + transformers + pandas |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) | Prebuilt binaries — `llama-server`, `llama-cli` |
+| Retrieval stack | Chroma, Qdrant client, sentence-transformers |
+| Image analysis | OpenCV, Pillow, scikit-image, timm, Tesseract OCR |
 | [Claude Code](https://github.com/anthropics/claude-code) | Anthropic's AI coding CLI |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google Gemini in the terminal |
 | GitHub Copilot CLI | `gh copilot` extension |
 | LangChain + LlamaIndex | Agent framework libraries |
 | [ai-runner](https://github.com/nikolareljin/ai-runner) | Simple UI for local Ollama models |
+
+### Local models
+
+One model is pulled by default: `qwen2.5-coder:7b` (4.7 GB). The rest are
+grouped by what they are for, each with its own tag, so a laptop can take one
+group without the others:
+
+```bash
+nikos add ollama-reasoning   # ~23 GB  deepseek-r1, qwen3, phi4
+nikos add ollama-coding      # ~34 GB  deepseek-coder-v2, qwen2.5-coder, qwen3-coder
+nikos add ollama-text        # ~22 GB  granite4, llama3.1, gemma3, mistral
+nikos add ollama-vision      # ~13 GB  granite3.2-vision, minicpm-v, qwen2.5vl
+nikos add ollama-embedding   # ~1.3 GB embeddinggemma, qwen3-embedding
+nikos add ollama-models      # ~93 GB  every group
+```
+
+Nothing is pulled unless you ask for the tag. Models load on demand, so this is
+disk and bandwidth rather than idle memory.
 
 ### IDE
 | Tool | Detail |
@@ -110,7 +131,8 @@ Additional tools installed directly:
 
 ```
 nikos setup          # run full playbook (first install)
-nikos update         # git pull --ff-only + submodule sync + playbook re-run
+nikos update         # move to the newest release, then re-run the playbook
+nikos update --ref X # update to a specific branch or tag instead
 nikos add network    # install optional: nmap, wireshark, OpenVPN
 nikos add music      # install optional: LMMS, Ardour, Audacity
 nikos add education  # install optional: LibreOffice, draw.io, Anki
@@ -127,9 +149,17 @@ nikos add act        # install optional: local GitHub Actions runner
 nikos add fabric     # install optional: Fabric AI pattern CLI
 nikos add openclaw   # install optional: OpenClaw LLM gateway CLI
 nikos add monitoring # install optional: Netdata
+nikos add bitnet     # install optional: BitNet.cpp 1-bit inference
+nikos add mistral-rs # install optional: mistral.rs Rust LLM server
+nikos add ollama-*   # install optional: a model group (see Local models above)
 nikos status         # show version, Ollama models, conda envs
 nikos doctor         # check for broken configs and missing tools
+nikos log [N]        # tail the latest playbook log
 ```
+
+`nikos update` reads its target from what is checked out: a release install
+advances to the newest release only when that release is genuinely newer, and a
+branch install stays on its branch. An update never downgrades.
 
 ---
 
@@ -141,6 +171,8 @@ editing tracked files:
 ```yaml
 nikos_timezone: "Europe/London"     # override this for your timezone
 ollama_default_model: "qwen2.5-coder:7b"  # model to pre-pull
+nikos_desktop_flavor: "xubuntu-minimal"   # or xubuntu-full / xfce
+nikos_remove_gnome: false           # true purges GNOME instead of keeping it selectable
 nikos_vscode_extensions:            # add/remove VS Code extensions
   - "Continue.continue"
   - ...
@@ -192,6 +224,8 @@ aider / Claude Code / Continue  →  use in code
 ---
 
 ## Documentation
+
+**[nikolareljin.github.io/nikos](https://nikolareljin.github.io/nikos/)** — overview, install guide and the full inventory.
 
 - [Installation guide](docs/install.md) — detailed install, requirements, troubleshooting
 - [Customization](docs/customization.md) — vars, roles, optional bundles
