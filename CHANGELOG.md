@@ -37,6 +37,18 @@ All notable changes to NikOS are documented here.
   one behind. The theming role now removes the user-level copies and rebuilds
   the icon cache that listed them, so the system icon is the only one left.
 
+### Licensing
+- **The Plymouth boot splash is GPL-3.0-or-later, not MIT** - `nikos.script`
+  was written by working from Xubuntu's `xubuntu-logo.script` and kept part of
+  its implementation: `strlen()` is identical, `atoi()` differs only by a
+  variable rename, and the status parsing loop is line-for-line identical apart
+  from two more renames. That file is GPL-3-or-later, copyright The Xubuntu
+  Community and Canonical, and those terms do not permit MIT redistribution.
+  The upstream copyright and GPL notice are restored on the file, a full copy
+  of the licence is included at `LICENSES/GPL-3.0-or-later.txt`, and the
+  exception is recorded in `THIRD-PARTY-NOTICES.md`. Everything else in NikOS
+  stays MIT.
+
 ### Added
 - **A full boot splash, including passphrase entry** - the Plymouth theme
   shipped one image, the colour logo, and a script that pulsed it. No password
