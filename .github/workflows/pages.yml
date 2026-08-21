@@ -3,17 +3,25 @@ name: Pages
 # Publishes site/ to GitHub Pages.
 #
 # The site is hand-written HTML with one stylesheet, so there is no build step:
-# the ci-helpers preset publishes a directory that is already in the repository
-# when build_command is empty. Nothing is installed, so no toolchain version is
+# the preset publishes a directory that is already in the repository when
+# build_command is empty. Nothing is installed, so no toolchain version is
 # pinned here either.
 #
-# Pull requests run the workflow without deploying, which is what catches a
-# broken path or an empty site/ before it reaches the published site rather
-# than after.
+# Build and deploy are two jobs rather than the combined pages.yml preset, so a
+# pull-request run holds no write scope at all. GitHub validates a called
+# workflow's declared permissions when the run starts, before any job-level
+# `if:` is evaluated, so calling the combined preset would require this file to
+# grant `pages: write` and `id-token: write` on every pull request — including
+# the ones where nothing is deployed and third-party code runs. Splitting keeps
+# those scopes on the one job that cannot work without them, which checks out
+# nothing and runs no build.
 #
-# There is deliberately no `concurrency:` block. The preset declares its own
-# (`ci-helpers-pages-<ref>`), and a caller that adds a second group leaves the
-# called jobs queued behind the run that started them.
+# Pull requests still build, which is what catches a broken path or an empty
+# site/ before it reaches the published site rather than after.
+#
+# There is deliberately no `concurrency:` block. pages-deploy.yml declares its
+# own, and a caller that adds a second group leaves the called job queued behind
+# the run that started it.
 
 on:
   push:
@@ -28,29 +36,36 @@ on:
   workflow_dispatch:
 
 # Read-only at the workflow level, so anything added to this file later starts
-# with no write scope and has to ask for it. The elevated grant sits on the one
-# job that cannot run without it.
+# with no write scope and has to ask for it.
 permissions:
   contents: read
 
 jobs:
-  pages:
-    uses: nikolareljin/ci-helpers/.github/workflows/pages.yml@production
-    # pages and id-token are required even on pull-request runs where nothing
-    # is deployed: GitHub validates a called workflow's declared permissions at
-    # startup, before any job-level condition is evaluated, so `deploy: false`
-    # does not excuse the caller from granting them.
+  build:
+    uses: nikolareljin/ci-helpers/.github/workflows/pages-build.yml@production
     permissions:
       contents: read
-      pages: write
-      id-token: write
+      # Read, not write: this job validates and uploads an artifact. Nothing
+      # here publishes.
+      pages: read
     with:
       # Nothing reads git history to build this site.
       fetch_depth: 1
       pages_path: "site"
-      # Both halves matter. Excluding pull requests keeps a proposed change from
-      # publishing itself; requiring main keeps a workflow_dispatch run started
-      # from a feature branch from doing the same thing by hand. `push` is
-      # already filtered to main above, so the ref test exists for the dispatch
-      # case.
-      deploy: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      # Both of these call the Pages API, which fails on a repository run that
+      # is only validating. Gate them the same way the deploy job is gated:
+      # excluding pull requests stops a proposed change publishing itself, and
+      # requiring main stops a workflow_dispatch run started from a feature
+      # branch doing the same by hand.
+      configure_pages: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      upload: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+
+  deploy:
+    needs: build
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    uses: nikolareljin/ci-helpers/.github/workflows/pages-deploy.yml@production
+    # The only place a write scope is ever live. On a pull request this job is
+    # skipped, so its token is never minted.
+    permissions:
+      pages: write
+      id-token: write
