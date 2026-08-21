@@ -1,25 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Portrait companion to wallpaper.svg, for monitors in vertical orientation.
-  Same marks, same palette; only the canvas and the centring transform differ.
-  The flat #2e3440 base matches the solid backdrop colour NikOS sets in xfconf,
-  so the gray behind a scaled image is continuous with the image itself.
--->
 <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#2e3440"/>
-      <stop offset="100%" style="stop-color:#3b4252"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="48%" r="28%">
-      <stop offset="0%" style="stop-color:#434c5e;stop-opacity:0.6"/>
-      <stop offset="100%" style="stop-color:#2e3440;stop-opacity:0"/>
-    </radialGradient>
-  </defs>
+  <!--
+    Portrait companion to wallpaper.svg, for monitors in vertical orientation.
+    Same marks, same palette; only the canvas and the centring transform differ.
 
-  <!-- Background -->
-  <rect width="1080" height="1920" fill="url(#bg)"/>
-  <rect width="1080" height="1920" fill="url(#glow)"/>
+    Flat #2e3440 backdrop, the same colour NikOS writes into the xfdesktop
+    rgba1 backdrop property, so the desktop colour left over by the Scaled
+    image is continuous with the image instead of framing it.
+
+    Keep <svg> as the first element after the XML declaration, so gdk-pixbuf
+    can sniff the file as SVG.
+  -->
+  <rect width="1080" height="1920" fill="#2e3440"/>
 
   <!--
     The mark below is the landscape artwork verbatim, re-centred on the portrait

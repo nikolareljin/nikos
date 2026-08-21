@@ -1,19 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#2e3440"/>
-      <stop offset="100%" style="stop-color:#3b4252"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="48%" r="28%">
-      <stop offset="0%" style="stop-color:#434c5e;stop-opacity:0.6"/>
-      <stop offset="100%" style="stop-color:#2e3440;stop-opacity:0"/>
-    </radialGradient>
-  </defs>
+  <!--
+    Flat #2e3440 backdrop, the same colour NikOS writes into the xfdesktop
+    rgba1 backdrop property. The image is drawn Scaled, so on a screen whose
+    aspect ratio is not 16:9 the desktop colour fills the rest. A gradient or a
+    centre glow makes that boundary visible as a frame around the artwork on
+    wide monitors; a single flat colour makes the image edge disappear.
 
-  <!-- Background -->
-  <rect width="1920" height="1080" fill="url(#bg)"/>
-  <rect width="1920" height="1080" fill="url(#glow)"/>
+    Keep <svg> as the first element after the XML declaration, so gdk-pixbuf
+    can sniff the file as SVG.
+  -->
+  <rect width="1920" height="1080" fill="#2e3440"/>
 
   <!--
     Node centres (all symmetric across x=960):
