@@ -19,6 +19,6 @@ jobs:
         ansible-galaxy collection install -r requirements.yml
         ansible-lint site.yml
         shellcheck install.sh scripts/nikos scripts/nikos-progress.sh \
-          roles/theming/files/nikos-apply-wallpaper.sh
+          scripts/repo-sync.sh roles/theming/files/nikos-apply-wallpaper.sh
       test_command: |
         python -m pytest tests/ -v

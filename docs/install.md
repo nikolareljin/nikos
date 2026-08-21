@@ -68,27 +68,61 @@ GitHub setup wizard runs:
 
 The wizard writes `~/.config/nikos/github-configured` on completion and will not run again.
 
+## Which version gets installed
+
+With no options the installer picks the **newest release tag** — the highest
+`X.Y.Z` the repository publishes. Pre-release tags (`0.6.0-rc1`) and floating
+tags (`production`) are never selected.
+
+| Command | Installs |
+|---|---|
+| `curl -fsSL .../install.sh \| bash` | latest release tag |
+| `bash install.sh` | latest release tag |
+| `bash install.sh --ref release/0.6.0` | that branch or tag |
+| `bash install.sh --dev` | the checkout you launched it from, as it stands |
+
+The persistent checkout at `~/.local/share/nikos` is moved onto the chosen ref
+before the playbook runs. Installing a tag leaves that checkout on a detached
+HEAD, which is expected.
+
+`NIKOS_REPO_REF=<ref>` is equivalent to `--ref <ref>`.
+
+### Dev mode
+
+```bash
+cd ~/Projects/nikos
+bash install.sh --dev
+```
+
+`--dev` runs the checkout the script lives in, **including uncommitted
+changes**. Nothing is cloned, fetched, pulled or stashed, and
+`~/.local/share/nikos` is left untouched — so a broken branch cannot damage a
+working install. Use it to test a change before pushing it.
+
+It refuses to run if the directory has no `site.yml`, and cannot be combined
+with `--ref`.
+
 ## Updating
 
 ```bash
-nikos update
+nikos update                      # newest release
+nikos update --ref release/0.6.0  # a specific branch or tag
 ```
 
-This runs `git pull --ff-only` on `~/.local/share/nikos`, then
-`git submodule update --init --recursive`, and finally re-runs the playbook.
-All roles are idempotent — already-installed components are skipped.
+`nikos update` fetches, moves `~/.local/share/nikos` onto the target ref,
+updates submodules and re-runs the playbook. All roles are idempotent —
+already-installed components are skipped.
+
+The target is chosen from what is currently checked out:
+
+- **On a release tag** — advances to the newest release, and only if it really
+  is newer. An update never downgrades.
+- **On a branch** — stays on that branch and fast-forwards it.
 
 To force the plain-prompt installer path instead of the `dialog` UI:
 
 ```bash
 NIKOS_USE_DIALOG=0 bash install.sh
-```
-
-To force the persistent checkout to a specific branch or tag before the
-playbook runs:
-
-```bash
-NIKOS_REPO_REF=release/0.5.0 bash install.sh
 ```
 
 ## Manual run (without curl | bash)

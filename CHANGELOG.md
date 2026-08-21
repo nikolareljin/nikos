@@ -5,6 +5,18 @@ All notable changes to NikOS are documented here.
 ## [0.5.0] — 2026-08-20
 
 ### Fixed
+- **The installer could not update its own checkout** - installing a release
+  tag leaves `~/.local/share/nikos` on a detached HEAD. The next run began with
+  `git pull --ff-only` on that checkout, which has no upstream to merge, so it
+  failed with `You are not currently on a branch` and exited before reaching
+  the code that would have switched refs. Every install after a tag install
+  failed this way. The sync now fetches first, switches to the target ref, and
+  only fast-forwards when HEAD is on a branch with an upstream. The same guard
+  covers `nikos update`.
+- **`install.sh` guessed the version from its surrounding directory** - the ref
+  was inferred from whatever git checkout the script happened to sit in, so
+  `curl | bash` in a project directory could pick up an unrelated repository's
+  branch name. Version selection is now explicit.
 - **Wallpaper stayed on the Xubuntu default** - the Xubuntu session puts
   `/etc/xdg/xdg-xubuntu` ahead of `/etc/xdg` in `XDG_CONFIG_DIRS`, so
   `xubuntu-default-settings`' `xfce4-desktop.xml` shadowed the NikOS copy, and
@@ -58,6 +70,21 @@ All notable changes to NikOS are documented here.
   manually selected `default.plymouth` alternative instead.
 
 ### Added
+- **Version selection.** With no options the installer resolves and installs the
+  newest release tag (`X.Y.Z`; pre-release and floating tags are ignored).
+  `--ref <branch-or-tag>` pins a specific ref, and `NIKOS_REPO_REF` is
+  equivalent. `install.sh --help` documents both.
+- **`--dev` mode.** Runs the checkout the script lives in, exactly as it stands,
+  including uncommitted changes. Nothing is cloned, fetched, pulled or stashed
+  and `~/.local/share/nikos` is left untouched, so testing a branch cannot
+  damage a working install. Refuses to run outside a NikOS checkout, and cannot
+  be combined with `--ref`.
+- **`nikos update --ref <branch-or-tag>`.** Bare `nikos update` now advances a
+  release install to the newest release and keeps a branch install on its
+  branch, so an update never downgrades.
+- `scripts/repo-sync.sh` is covered by the `shellcheck` gate and by 32 new tests
+  in `tests/test_version_select.py`, including a regression test that reproduces
+  the detached-HEAD failure.
 - **Xubuntu desktop packages** - `xubuntu-desktop-minimal`,
   `xubuntu-default-settings` and `xubuntu-artwork` replace the bare `xfce4`
   install, which is what provides the Xubuntu session and the Xubuntu login

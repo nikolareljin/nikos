@@ -144,6 +144,38 @@ ls /usr/local/bin/lantern
 sudo ~/Projects/git-lantern/install --prefix /opt/git-lantern --bin-link /usr/local/bin/lantern
 ```
 
+### Installer or `nikos update` cannot move the checkout
+
+```
+You are not currently on a branch.
+Please specify which branch you want to merge with.
+Failed to pull updates in /home/you/.local/share/nikos
+```
+
+Installing a release tag leaves `~/.local/share/nikos` on a detached HEAD,
+which is normal. Versions before 0.5.0 then tried to `git pull` it on the next
+run; a detached HEAD has no upstream to merge, so the installer exited before
+it reached the code that would have switched refs.
+
+0.5.0 fetches first and only fast-forwards when HEAD is on a branch with an
+upstream, so this resolves itself. On an installer older than that, move the
+checkout onto a branch by hand:
+
+```bash
+git -C ~/.local/share/nikos switch --track origin/main
+```
+
+### Checking which version is installed
+
+```bash
+cat ~/.local/share/nikos/VERSION
+git -C ~/.local/share/nikos describe --tags --exact-match   # release installs
+git -C ~/.local/share/nikos branch --show-current           # branch installs
+```
+
+An empty `branch --show-current` with a tag from `describe` is a release
+install and is expected.
+
 ## Ansible logs
 
 Run the playbook directly with verbose output:
