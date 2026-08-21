@@ -52,11 +52,18 @@ jobs:
       # Nothing reads git history to build this site.
       fetch_depth: 1
       pages_path: "site"
-      # Both of these call the Pages API, which fails on a repository run that
-      # is only validating. Gate them the same way the deploy job is gated:
-      # excluding pull requests stops a proposed change publishing itself, and
-      # requiring main stops a workflow_dispatch run started from a feature
-      # branch doing the same by hand.
+      # configure_pages runs actions/configure-pages, which *reads* the
+      # repository's Pages configuration - the preset passes no `enablement`,
+      # so it never mutates anything and `pages: read` above is enough for it.
+      # It is still gated, because that read fails on a repository which has
+      # not enabled Pages, and a pull request validating a fork or a fresh
+      # checkout is exactly that case. upload writes an artifact, not a
+      # deployment, and is gated so a proposed change cannot stage one.
+      #
+      # The gate matches the deploy job's: excluding pull requests stops a
+      # proposed change publishing itself, and requiring main stops a
+      # workflow_dispatch run started from a feature branch doing the same by
+      # hand.
       configure_pages: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
       upload: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
 
