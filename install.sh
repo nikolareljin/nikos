@@ -352,6 +352,12 @@ _run_playbook_dialog() {
       # Same treatment as a failing `tee` in the fallback path below: a run
       # whose log could not be written is reported, not silently accepted.
       _tee_rc="${NIKOS_PROGRESS_LOG_RC:-0}"
+      # nikos_progress_run also folds that failure into its own exit status.
+      # Hand it back through _tee_rc alone, so the caller prints the message
+      # that names the log instead of reporting a bare playbook failure.
+      if (( _tee_rc != 0 )) && (( rc == _tee_rc )); then
+        rc=0
+      fi
       _restore_terminal_cursor
       return "${rc}"
     fi
