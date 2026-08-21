@@ -14,6 +14,7 @@
   register: cloud_ai_cli_node_path
   changed_when: false
   failed_when: false
+  check_mode: false
   tags: [ai-node, ai-gemini, openclaw]
 
 - name: Read that Node's version
@@ -21,20 +22,29 @@
   register: cloud_ai_cli_system_node
   changed_when: false
   failed_when: false
-  when: cloud_ai_cli_node_path.rc == 0
+  check_mode: false
+  when: cloud_ai_cli_node_path.rc | default(1) == 0
   tags: [ai-node, ai-gemini, openclaw]
 
 # Resolve the version against the Node that is actually first on PATH, not
 # against an assumed /usr/bin/node. On a machine where the user already runs
 # nvm, those are different binaries with different versions, and picking the
 # wrong one is what put Node 18 under a CLI that needs 22.
+- name: Read the located Node's version number
+  ansible.builtin.set_fact:
+    cloud_ai_cli_node_version: >-
+      {{ cloud_ai_cli_system_node.stdout | default('') | trim | regex_replace('^v', '') }}
+  tags: [ai-node, ai-gemini, openclaw]
+
+# The version test raises on an empty input rather than returning false, and
+# every path that cannot find Node - no node on PATH, a skipped lookup under
+# --check - produces exactly that. Guard it rather than relying on `and` to
+# short-circuit, which it does not do here.
 - name: Decide whether that Node is new enough
   ansible.builtin.set_fact:
     cloud_ai_cli_system_node_ok: >-
-      {{ cloud_ai_cli_node_path.rc == 0
-         and cloud_ai_cli_system_node.rc | default(1) == 0
-         and (cloud_ai_cli_system_node.stdout | default('v0') | regex_replace('^v', ''))
-             is version(nikos_node_min_version, '>=') }}
+      {{ cloud_ai_cli_node_version != ''
+         and cloud_ai_cli_node_version is version(nikos_node_min_version, '>=') }}
   tags: [ai-node, ai-gemini, openclaw]
 
 - name: Report the Node that will be used
