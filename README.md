@@ -10,6 +10,8 @@ One command turns a fresh Ubuntu install into a fully configured AI workstation 
 
 **Version:** 0.6.0 · **License:** MIT · **Author:** Nikola Reljin
 
+> One file, the Plymouth boot splash, is GPL-3.0-or-later rather than MIT, because it is derived from Xubuntu's theme. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
 <img src="./assets/logo.png" />
 
 ---
