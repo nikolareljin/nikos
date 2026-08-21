@@ -230,11 +230,23 @@
     mode: "0644"
   notify: Theming_update_initramfs
 
-- name: Copy NikOS Plymouth logo into Plymouth theme directory
+# Plymouth runs before any icon theme, font config or toolkit exists, so the
+# whole splash has to arrive as pre-rendered PNGs. They are generated from the
+# NikOS artwork by scripts/render-plymouth-assets.py and committed, so nothing
+# has to be rendered on the target machine.
+- name: Copy the NikOS Plymouth boot chrome into the theme directory
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/assets/plymouth-logo.png"
-    dest: /usr/share/plymouth/themes/nikos/nikos-logo.png
+    src: "{{ playbook_dir }}/assets/plymouth/"
+    dest: /usr/share/plymouth/themes/nikos/
     mode: "0644"
+  notify: Theming_update_initramfs
+
+# Older installs put the colour logo here under a name the script no longer
+# loads. Left in place it is dead weight inside every initramfs rebuild.
+- name: Remove the superseded Plymouth logo
+  ansible.builtin.file:
+    path: /usr/share/plymouth/themes/nikos/nikos-logo.png
+    state: absent
   notify: Theming_update_initramfs
 
 # xubuntu-artwork depends on plymouth-theme-xubuntu-logo and
