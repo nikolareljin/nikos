@@ -2,7 +2,7 @@
 
 All notable changes to NikOS are documented here.
 
-## [Unreleased]
+## [0.6.0] — 2026-08-21
 
 ### Fixed
 - **The Whisker Menu button drew a missing-image placeholder** - the icon was
