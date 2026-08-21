@@ -396,20 +396,34 @@ _run_playbook_dialog() {
   return "${pipe_status[0]}"
 }
 
+# Total one PLAY RECAP field across every recap in a log.
+#
+# An install can run the playbook more than once - the main run, then a second
+# for the optional bundles - and each run prints its own PLAY RECAP. Reading
+# them with a bare grep returned one line per recap, so `ok` became "177\n10"
+# rather than a number: the summary box printed the remainder on its own line,
+# and `[[ "0\n1" -gt 0 ]]` failed with a syntax error and evaluated false, which
+# silently hid a real failure in the second run. Summing keeps the value an
+# integer whatever the number of runs.
+_recap_total() {
+  local field="$1" file="$2"
+  grep -A2 "^PLAY RECAP" "${file}" 2>/dev/null \
+    | grep "localhost" \
+    | grep -oP "${field}=\\K[0-9]+" \
+    | awk '{ total += $1 } END { print total + 0 }'
+}
+
 # Parse Ansible PLAY RECAP and print a summary to screen + log
 _install_summary() {
   local rc="${1:-0}"
 
   _strip_ansi_from_log
 
-  local recap ok=0 changed=0 failed=0 unreachable=0
-  recap=$(grep -A2 "^PLAY RECAP" "${INSTALL_LOG}" 2>/dev/null | grep "localhost" || true)
-  if [[ -n "${recap}" ]]; then
-    ok=$(echo "${recap}"          | grep -oP 'ok=\K[0-9]+' || echo 0)
-    changed=$(echo "${recap}"     | grep -oP 'changed=\K[0-9]+' || echo 0)
-    failed=$(echo "${recap}"      | grep -oP 'failed=\K[0-9]+' || echo 0)
-    unreachable=$(echo "${recap}" | grep -oP 'unreachable=\K[0-9]+' || echo 0)
-  fi
+  local ok changed failed unreachable
+  ok=$(_recap_total ok "${INSTALL_LOG}")
+  changed=$(_recap_total changed "${INSTALL_LOG}")
+  failed=$(_recap_total failed "${INSTALL_LOG}")
+  unreachable=$(_recap_total unreachable "${INSTALL_LOG}")
 
   echo ""
   echo "----------------------------------------"

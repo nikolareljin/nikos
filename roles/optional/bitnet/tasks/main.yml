@@ -17,12 +17,35 @@
     update: false
   when: not ansible_check_mode
 
+# BitNet adds llama.cpp with add_subdirectory, which leaves LLAMA_STANDALONE
+# off, and llama.cpp defaults LLAMA_BUILD_COMMON and LLAMA_BUILD_TOOLS to that
+# value. Its CMakeLists then guards `add_subdirectory(tools)` on both, so the
+# build produced only the shared libraries and no llama-cli, and the install
+# step below failed with "Source .../build/bin/llama-cli not found". BitNet
+# forces LLAMA_BUILD_SERVER on for the same reason but does not cover tools.
+- name: Check whether the BitNet.cpp build is configured to build the CLI
+  ansible.builtin.command: >
+    grep -q '^LLAMA_BUILD_TOOLS:BOOL=ON'
+    {{ nikos_home }}/Projects/bitnet.cpp/build/CMakeCache.txt
+  register: bitnet_tools_configured
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+# Re-configures an existing build tree as well as a fresh one. A `creates:`
+# guard on CMakeCache.txt would leave any machine that already ran the old
+# command with a cache that never builds the CLI, so the failure would survive
+# every reinstall.
 - name: Configure BitNet.cpp build
-  ansible.builtin.command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+  ansible.builtin.command: >
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    -DLLAMA_BUILD_COMMON=ON -DLLAMA_BUILD_TOOLS=ON
   args:
     chdir: "{{ nikos_home }}/Projects/bitnet.cpp"
-    creates: "{{ nikos_home }}/Projects/bitnet.cpp/build/CMakeCache.txt"
-  when: not ansible_check_mode
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - bitnet_tools_configured.rc | default(1) != 0
 
 - name: Build BitNet.cpp
   ansible.builtin.command: cmake --build build --config Release -j
@@ -31,11 +54,81 @@
     creates: "{{ nikos_home }}/Projects/bitnet.cpp/build/bin/llama-cli"
   when: not ansible_check_mode
 
-- name: Install BitNet.cpp CLI
-  ansible.builtin.copy:
-    src: "{{ nikos_home }}/Projects/bitnet.cpp/build/bin/llama-cli"
-    dest: "{{ nikos_home }}/.local/bin/bitnet-cli"
-    remote_src: true
+# The CLI is installed away from the build tree, not linked back into it.
+# llama-cli is built with a RUNPATH holding the build directory's absolute
+# path, so a bare copy resolved its libraries out of ~/Projects/bitnet.cpp and
+# broke whenever that tree moved, was cleaned, or belonged to a different home.
+# Binary and libraries are copied into a prefix of their own instead, and the
+# build tree is then only needed to rebuild.
+- name: Ensure the BitNet install prefix exists
+  ansible.builtin.file:
+    path: "{{ bitnet_prefix }}"
+    state: directory
+    owner: root
+    group: root
     mode: "0755"
-    force: false
+  become: true
+
+- name: Check the built BitNet CLI
+  ansible.builtin.stat:
+    path: "{{ bitnet_build_bin }}/llama-cli"
+  register: bitnet_built_cli
+
+- name: Check the installed BitNet CLI
+  ansible.builtin.stat:
+    path: "{{ bitnet_prefix }}/llama-cli"
+  register: bitnet_installed_cli
+
+# cp -a rather than a copy loop: build/bin holds each library as a chain of
+# symlinks (libggml.so -> libggml.so.0 -> libggml.so.0.15.3), and copying
+# through them would dereference every link and triple the payload.
+#
+# Every *.so* goes across, not only what ldd reports. ggml dlopens its backend
+# libraries at run time, so a strict dependency-only copy passes ldd and then
+# fails when a backend is loaded.
+- name: Install the BitNet CLI and the libraries it loads
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cp -a {{ bitnet_build_bin }}/llama-cli {{ bitnet_build_bin }}/*.so* {{ bitnet_prefix }}/
+    chown -R root:root {{ bitnet_prefix }}
+  become: true
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - bitnet_built_cli.stat.exists
+    - not bitnet_installed_cli.stat.exists
+      or bitnet_built_cli.stat.checksum != bitnet_installed_cli.stat.checksum
+
+- name: Install the BitNet CLI entry point
+  ansible.builtin.copy:
+    dest: /usr/local/bin/bitnet-cli
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      # Self-contained: everything this needs lives beside the binary, so the
+      # BitNet build tree can be deleted without breaking the command.
+      bitnet_prefix="{{ bitnet_prefix }}"
+
+      if [[ ! -x "${bitnet_prefix}/llama-cli" ]]; then
+        echo "bitnet-cli: ${bitnet_prefix}/llama-cli is missing." >&2
+        echo "bitnet-cli: re-run the NikOS install with the bitnet bundle." >&2
+        exit 127
+      fi
+
+      export LD_LIBRARY_PATH="${bitnet_prefix}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+      exec "${bitnet_prefix}/llama-cli" "$@"
+  become: true
   when: not ansible_check_mode
+
+# ~/.local/bin comes before /usr/local/bin on a default PATH, so a copy left
+# there by an earlier version would shadow the entry point above and keep
+# resolving libraries out of the build tree.
+- name: Remove the superseded per-user BitNet CLI
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.local/bin/bitnet-cli"
+    state: absent
+  become: false
