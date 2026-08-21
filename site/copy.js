@@ -91,6 +91,14 @@
 
     var revert;
     button.addEventListener("click", function () {
+      // One attribute with one value, rather than two independent classes.
+      // Two classes can both be set - a failed click followed by a successful
+      // one inside the revert window did exactly that - and then the later
+      // rule wins at equal specificity, colouring a successful copy as a
+      // failure. A single value cannot contradict itself.
+      clearTimeout(revert);
+      delete button.dataset.state;
+
       // textContent, not innerText: innerText is the *rendered* text, so it
       // forces a reflow and can renormalise whitespace. Code must survive a
       // round trip byte for byte, and the <code> child is the code itself
@@ -98,15 +106,15 @@
       var source = pre.querySelector("code") || pre;
       copyText(source.textContent).then(function () {
         button.textContent = "Copied";
-        button.classList.add("is-copied");
+        button.dataset.state = "copied";
       }, function () {
         button.textContent = selectBlock() ? "Selected — press " + copyShortcut() : "Copy failed";
-        button.classList.add("is-failed");
+        button.dataset.state = "failed";
       }).then(function () {
         clearTimeout(revert);
         revert = setTimeout(function () {
           button.textContent = "Copy";
-          button.classList.remove("is-copied", "is-failed");
+          delete button.dataset.state;
         }, 2000);
       });
     });
