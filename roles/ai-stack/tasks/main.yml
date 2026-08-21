@@ -111,18 +111,6 @@
         remote_src: true
         mode: preserve
         directory_mode: "0755"
-
-    # $ORIGIN resolves against the symlink target, so linking into ~/.local/bin
-    # keeps the libraries reachable.
-    - name: Link llama.cpp binaries into the local bin directory
-      ansible.builtin.file:
-        src: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/{{ item }}"
-        dest: "{{ nikos_home }}/.local/bin/{{ item }}"
-        state: link
-        force: true
-      loop:
-        - llama-cli
-        - llama-server
   rescue:
     - name: Warn that llama.cpp could not be installed
       ansible.builtin.debug:
@@ -130,6 +118,30 @@
           llama.cpp {{ llama_cpp_version }} could not be installed
           ({{ ansible_failed_result.msg | default('unknown error') }}).
           Continuing with the rest of the NikOS install; Ollama is unaffected.
+
+# Outside the install block on purpose. The release tree can be in place from
+# an earlier run while the links are gone, replaced or pointing at a version
+# that was removed, and the block above is skipped in exactly that case.
+- name: Re-check the llama.cpp release tree
+  ansible.builtin.stat:
+    path: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/llama-server"
+  register: ai_stack_llama_tree
+  when: not ansible_check_mode
+
+# $ORIGIN resolves against the symlink target, so linking into ~/.local/bin
+# keeps the libraries reachable.
+- name: Link llama.cpp binaries into the local bin directory
+  ansible.builtin.file:
+    src: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/{{ item }}"
+    dest: "{{ nikos_home }}/.local/bin/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - llama-cli
+    - llama-server
+  when:
+    - not ansible_check_mode
+    - ai_stack_llama_tree.stat.exists | default(false)
 
 - name: Check if Miniforge is already installed
   ansible.builtin.stat:
