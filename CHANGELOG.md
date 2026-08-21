@@ -2,6 +2,62 @@
 
 All notable changes to NikOS are documented here.
 
+## [Unreleased]
+
+### Fixed
+- **The Whisker Menu button drew a missing-image placeholder** - the icon was
+  installed under hicolor, the icon cache was current, and `GtkIconTheme`
+  resolved the name, but gdk-pixbuf refused the file with
+  `Unrecognized image file format (3)`. gdk-pixbuf picks a loader by matching
+  the head of a file against each loader's signature, and the SVG signature is
+  the literal `<svg`. `menu-icon.svg` opened with a comment block between the
+  XML declaration and the root element, which pushed `<svg` past the window
+  gdk-pixbuf looks at. `logo.svg` and `wallpaper.svg` carry `<svg` on line 2,
+  so only the menu icon was affected. The comment now sits inside the root
+  element. `assets/wallpaper-vertical.svg` had the same defect, latent, since
+  nothing loads it through gdk-pixbuf.
+- **The wallpaper read as a framed panel on wide monitors** - both wallpapers
+  filled their background with a diagonal gradient and a centre glow, while
+  xfdesktop paints a flat `#2e3440` behind them. The image is drawn Scaled, so
+  on a 3440x1440 screen it covers 2560px and the lighter gradient region ended
+  visibly where the flat colour began. Both now use the same flat `#2e3440`.
+  Marks, wordmark, taglines and every coordinate are unchanged.
+- **Artwork changes never reached an existing install** - both wallpaper PNG
+  exports were guarded by `creates:`, so a machine that already had a PNG kept
+  the artwork it was first installed with, `nikos update` included. They now
+  re-export when the SVG changes or the PNG is missing.
+- **A re-rendered wallpaper needed a logout to appear** - the backdrop path
+  does not change between releases, so re-setting it to the same value emits no
+  xfconf signal and xfdesktop keeps serving the image it cached at session
+  start. `xfdesktop --reload` now runs after the wallpaper pass.
+
+### Added
+- **A full boot splash, including passphrase entry** - the Plymouth theme
+  shipped one image, the colour logo, and a script that pulsed it. No password
+  handler was registered and no dialog existed to draw, so a machine with an
+  encrypted root sat on a static logo while it waited for a passphrase, with
+  nothing on screen to say so. `nikos.script` now registers refresh, boot
+  progress, password, normal, message, status and quit handlers, covering
+  passphrase entry, boot progress, fsck progress and shutdown.
+- **Boot chrome rendered from the existing artwork** -
+  `scripts/render-plymouth-assets.py` generates the greyscale set the splash
+  needs: the mark and wordmark from `plymouth-logo.svg`, and the spinner and
+  passphrase bullet from `menu-icon.svg`, which is the cut of the mark drawn to
+  survive icon sizes. Progress meters and the passphrase dialog are drawn to
+  match. Everything is transparent and desaturated, because the splash sets its
+  own background and the mark's blue reads as a colour cast on a dim
+  framebuffer. The output is committed, so nothing is rendered on the target
+  machine.
+- **Tests for the artwork and the splash** - `tests/test_assets.py` requires
+  every asset SVG to expose its root element inside the gdk-pixbuf sniff
+  window, and the wallpaper backdrop to stay a flat colour matching the `rgba1`
+  value in `xfce4-desktop.xml`. `tests/test_plymouth_theme.py` checks that the
+  splash registers every handler it needs, that every image it loads is
+  committed, that the spinner sequence has no gaps, and that the artwork stays
+  transparent and desaturated. The splash cannot be exercised locally:
+  `plymouthd` takes exclusive control of the framebuffer and Ubuntu ships no
+  X11 renderer for it, so anything past these checks needs a reboot or a VM.
+
 ## [0.5.0] — 2026-08-20
 
 ### Fixed
