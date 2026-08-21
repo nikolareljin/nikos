@@ -25,6 +25,7 @@ HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
 NIKOS_LOG_DIR="${NIKOS_CONFIG_DIR}/logs"
 INSTALL_LOG="${NIKOS_LOG_DIR}/install-$(date +%Y%m%d-%H%M%S).log"
 REPO_SYNC_HELPERS_REL="scripts/repo-sync.sh"
+PROGRESS_LIB_REL="scripts/nikos-progress.sh"
 USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
 MAIN_VARS_REL="vars/main.yml"
 LOCAL_VARS_REL="vars/local.yml"
@@ -67,9 +68,24 @@ _cleanup_install() {
   _restore_terminal_cursor
 }
 
-# Strip ANSI escape codes from the log after a tee'd run
+# Strip ANSI escape codes from a stream, for the fallback progress view.
+_strip_ansi_stream() {
+  LC_ALL=C sed -u \
+    -e 's|\x1b\][^\x07]*\x07||g' \
+    -e 's|\x1b\[[0-9;:<=>?]*[ -/]*[@-~]||g' \
+    -e 's|\x1b[()][A-Za-z0-9]||g' \
+    -e 's|\r$||'
+}
+
+# Strip ANSI escape codes from the log after a tee'd run.
+# LC_ALL=C keeps the [ -/] and [@-~] ranges byte-ordered; under a UTF-8 locale
+# they follow collation order and silently stop matching.
 _strip_ansi_from_log() {
-  sed -i 's/\x1b\[[0-9;:]*[a-zA-Z]//g' "${INSTALL_LOG}" 2>/dev/null || true
+  LC_ALL=C sed -i \
+    -e 's|\x1b\][^\x07]*\x07||g' \
+    -e 's|\x1b\[[0-9;:<=>?]*[ -/]*[@-~]||g' \
+    -e 's|\x1b[()][A-Za-z0-9]||g' \
+    "${INSTALL_LOG}" 2>/dev/null || true
 }
 
 _install_bootstrap_packages() {
@@ -296,6 +312,65 @@ _collect_become_password_dialog() {
   printf '%s\n' "${pw}"
 }
 
+# What the user has to do to land in the Xubuntu session. Switching the
+# display manager only takes effect once the current graphical session ends,
+# and a session started under GDM has to go all the way through a reboot.
+_session_next_step() {
+  local current="${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-unknown}}"
+  case "${current,,}" in
+    *xfce*|*xubuntu*)
+      echo "Log out and back in to pick up the NikOS Xubuntu session."
+      ;;
+    *)
+      echo "Reboot to finish switching to LightDM and the Xubuntu session (currently running ${current})."
+      ;;
+  esac
+}
+
+# Run ansible-playbook behind the dialog UI.
+#
+# Prefers the mixedgauge view from scripts/nikos-progress.sh: one row per role,
+# an overall percentage and the current task as the caption. Falls back to an
+# ANSI-stripped scrolling box when the library, dialog or the task list is
+# unavailable. Returns the playbook's own exit status.
+_run_playbook_dialog() {
+  local title="$1"
+  shift
+  local -a opts=("$@")
+  local -a pipe_status=()
+  local rc=0
+
+  _dialog_rc=0
+  _tee_rc=0
+
+  if [[ "${_PROGRESS_LIB_LOADED}" == "true" ]] && nikos_progress_supported; then
+    dialog_init
+    if nikos_progress_plan "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg" "${opts[@]}"; then
+      nikos_progress_run "${title}" "${INSTALL_LOG}" \
+        "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg" "${opts[@]}"
+      rc=$?
+      _restore_terminal_cursor
+      return "${rc}"
+    fi
+    _safe_logfile "[WARNING] could not enumerate playbook tasks; using the plain progress view"
+  fi
+
+  (
+    cd "${NIKOS_HOME}" || exit 127
+    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
+      PYTHONUNBUFFERED=1 ansible-playbook "${opts[@]}"
+  ) 2>&1 \
+    | _strip_ansi_stream \
+    | tee -a "${INSTALL_LOG}" \
+    | dialog --title "${title}" \
+        --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
+  pipe_status=("${PIPESTATUS[@]}")
+  _restore_terminal_cursor
+  _tee_rc=${pipe_status[2]:-0}
+  _dialog_rc=${pipe_status[3]:-0}
+  return "${pipe_status[0]}"
+}
+
 # Parse Ansible PLAY RECAP and print a summary to screen + log
 _install_summary() {
   local rc="${1:-0}"
@@ -352,11 +427,13 @@ _install_summary() {
   Unreachable:   ${unreachable}"
     _dlg_body+="
 
+$(_session_next_step)
+
   Full log: ${INSTALL_LOG}"
     if [[ "${rc}" -eq 0 ]]; then
-      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 14 72 || true
+      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 17 76 || true
     else
-      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 14 72 || true
+      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 17 76 || true
     fi
   fi
 }
@@ -823,6 +900,21 @@ else
   exit 1
 fi
 
+# Progress rendering library. Optional: without it the installer falls back to
+# the plain scrolling view.
+_PROGRESS_LIB_LOADED=false
+for _progress_lib in "${NIKOS_HOME}/${PROGRESS_LIB_REL}" "${SCRIPT_DIR}/${PROGRESS_LIB_REL}"; do
+  if [[ -f "${_progress_lib}" ]]; then
+    # shellcheck source=scripts/nikos-progress.sh
+    source "${_progress_lib}"
+    _PROGRESS_LIB_LOADED=true
+    break
+  fi
+done
+unset _progress_lib
+[[ "${_PROGRESS_LIB_LOADED}" == "true" ]] || \
+  _safe_logfile "[WARNING] ${PROGRESS_LIB_REL} not found; using the plain progress view"
+
 _ensure_ansible_collections
 
 # Bundle selection ─────────────────────────────────────────────────
@@ -1045,33 +1137,9 @@ if _can_use_dialog; then
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"
   set +e
-  if command -v script >/dev/null 2>&1; then
-    printf -v _script_cmd 'cd %q && ANSIBLE_CONFIG=%q ansible-playbook' "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg"
-    for _play_opt in "${PLAY_OPTS[@]}"; do
-      printf -v _script_cmd '%s %q' "${_script_cmd}" "${_play_opt}"
-    done
-    script -qefc "${_script_cmd}" /dev/null 2>&1 \
-      | tee -a "${INSTALL_LOG}" \
-      | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
-          --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
-    _pipe_status=("${PIPESTATUS[@]}")
-    unset _script_cmd
-    unset _play_opt
-  else
-    (
-      cd "${NIKOS_HOME}"
-      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
-    ) 2>&1 \
-      | tee -a "${INSTALL_LOG}" \
-      | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
-          --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
-    _pipe_status=("${PIPESTATUS[@]}")
-  fi
+  _run_playbook_dialog "NikOS ${NIKOS_VERSION} — Installing" "${PLAY_OPTS[@]}"
+  _ansible_rc=$?
   set -e
-  _restore_terminal_cursor
-  _ansible_rc=${_pipe_status[0]}
-  _tee_rc=${_pipe_status[1]}
-  _dialog_rc=${_pipe_status[2]:-0}
 else
   echo "Running NikOS ${NIKOS_VERSION} playbook..."
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
@@ -1101,40 +1169,18 @@ if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
   _logfile "--- optional playbook output start ---"
   set +e
   if _can_use_dialog; then
-    if command -v script >/dev/null 2>&1; then
-      printf -v _script_cmd 'cd %q && ANSIBLE_CONFIG=%q ansible-playbook' "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg"
-      for _play_opt in "${OPTIONAL_PLAY_OPTS[@]}"; do
-        printf -v _script_cmd '%s %q' "${_script_cmd}" "${_play_opt}"
-      done
-      script -qefc "${_script_cmd}" /dev/null 2>&1 \
-        | tee -a "${INSTALL_LOG}" \
-        | dialog --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
-            --progressbox "Installing selected optional bundles..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
-      _pipe_status=("${PIPESTATUS[@]}")
-      unset _script_cmd
-      unset _play_opt
-    else
-      (
-        cd "${NIKOS_HOME}"
-        ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
-      ) 2>&1 \
-        | tee -a "${INSTALL_LOG}" \
-        | dialog --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
-            --progressbox "Installing selected optional bundles..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
-      _pipe_status=("${PIPESTATUS[@]}")
-    fi
-    _restore_terminal_cursor
-    _dialog_rc=${_pipe_status[2]:-0}
+    _run_playbook_dialog "NikOS ${NIKOS_VERSION} — Optional Bundles" "${OPTIONAL_PLAY_OPTS[@]}"
+    _ansible_rc=$?
   else
     (
       cd "${NIKOS_HOME}"
       ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
     ) 2>&1 | tee -a "${INSTALL_LOG}"
     _pipe_status=("${PIPESTATUS[@]}")
+    _ansible_rc=${_pipe_status[0]}
+    _tee_rc=${_pipe_status[1]}
   fi
   set -e
-  _ansible_rc=${_pipe_status[0]}
-  _tee_rc=${_pipe_status[1]}
   _logfile "--- optional playbook output end ---"
 fi
 
@@ -1158,7 +1204,7 @@ _install_summary "${_playbook_rc}"
 echo ""
 if [[ "${_playbook_rc}" -eq 0 ]]; then
   echo "NikOS ${NIKOS_VERSION} installation complete."
-  echo "Log out and back in to start Xfce."
+  _session_next_step
 else
   echo "NikOS ${NIKOS_VERSION} installation finished with errors (rc=${_playbook_rc})."
   echo "Review the log above or: cat ${INSTALL_LOG}"
