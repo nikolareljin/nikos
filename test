@@ -327,6 +327,8 @@ checks=(
   "code --list-extensions 2>/dev/null | grep -q arcticicestudio"
   "command -v ollama"
   "command -v lantern"
+  "command -v mugshot"
+  "grep -q nikolareljin.github.io/nikos /usr/share/xfce4/applications/xfhelp4.desktop"
   "test -d /usr/share/themes/Nordic"
   "test -d /usr/share/icons/Papirus-Dark"
   "test -f /usr/share/nikos/wallpaper.png"

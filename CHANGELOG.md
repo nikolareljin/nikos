@@ -5,6 +5,23 @@ All notable changes to NikOS are documented here.
 ## [0.6.0] — 2026-08-21
 
 ### Fixed
+- **The menu's "Help" entry opened a file that was never installed** - Xubuntu's
+  `xfhelp4.desktop` runs `exo-open` on `/usr/share/xubuntu-docs/index.html`, which
+  comes from the `xubuntu-docs` package. The full `xubuntu-desktop` metapackage
+  Recommends it; NikOS installs `xubuntu-desktop-minimal`, which does not, so Help
+  opened a dead `file://` URL. Rather than pull in 78 MB of documentation that is
+  still at version 22.04, Help now opens the NikOS help page, which links out to the
+  current Xubuntu and Xfce documentation and says how to install the offline
+  handbook. The override is installed to `/usr/share/xfce4/applications`, which
+  `XDG_DATA_DIRS` resolves ahead of `/usr/share/xubuntu`, so nothing belonging to
+  `xubuntu-default-settings` is modified.
+- **Whisker Menu's "Edit Profile" failed with "Failed to execute child process
+  `mugshot`"** - the menu shows that button by default and runs `mugshot` for
+  it, but the plugin only *Suggests* mugshot, and Suggests are never installed.
+  A stock Xubuntu has it because the full `xubuntu-desktop` metapackage
+  Recommends it; NikOS installs `xubuntu-desktop-minimal`, which does not, so
+  the button pointed at a binary that was never there. mugshot is now installed
+  with the other desktop packages, and the post-install checklist probes for it.
 - **The Whisker Menu button drew a missing-image placeholder** - the icon was
   installed under hicolor, the icon cache was current, and `GtkIconTheme`
   resolved the name, but gdk-pixbuf refused the file with
