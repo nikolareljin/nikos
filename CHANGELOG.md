@@ -31,6 +31,19 @@ All notable changes to NikOS are documented here.
   error on a multi-line operand and evaluates it false, so a bundle that failed
   was reported as a clean install. The counts are now totalled across every
   recap, so they stay integers however many times the playbook ran.
+- **`bitnet-cli` resolved its libraries through the build tree it was compiled
+  in** - the CLI was installed by copying `llama-cli` into `~/.local/bin`, but
+  that binary links against the shared libraries in BitNet's build output and
+  carries a `RUNPATH` with that directory's absolute path baked in. The copy
+  worked only while the build tree stayed where it was built, under the home it
+  was built with, and `ldd` on the installed file pointed back into
+  `Projects/bitnet.cpp/build/bin` rather than anywhere it had been installed. A
+  machine with more than one `Projects` tree resolves the wrong one. It is now a
+  wrapper that sets `LD_LIBRARY_PATH` and execs the built binary, the same shape
+  as the `distrodeck` wrapper, and it reports a missing build tree with an
+  actionable message instead of a loader error. The previous task carried
+  `force: false`, so the wrapper is written unconditionally to replace the bare
+  binary already installed on existing machines.
 - **BitNet.cpp built no CLI, and the install step failed on the missing file** -
   the role built only shared libraries, then failed with `Source
   .../build/bin/llama-cli not found`. BitNet adds llama.cpp with
