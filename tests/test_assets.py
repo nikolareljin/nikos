@@ -9,9 +9,12 @@ checks here run on the repository copies rather than on an installed system.
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
+
+SVG_NS = "{http://www.w3.org/2000/svg}"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPO_ROOT / "assets"
@@ -75,18 +78,32 @@ def test_wallpaper_backdrop_is_flat(svg: Path) -> None:
     assert "linearGradient" not in text and "radialGradient" not in text, (
         f"{svg.name}: the backdrop must be flat, not a gradient."
     )
-    assert BACKDROP_COLOUR in text, (
-        f"{svg.name}: the backdrop must use {BACKDROP_COLOUR}, "
-        "the colour NikOS writes into the xfdesktop rgba1 property."
+
+    # The fill on the backdrop rect itself, not a substring of the file: both
+    # wallpapers name the colour in a comment, so a plain search stays green
+    # even when the rectangle that paints the screen is recoloured.
+    root = ET.parse(svg).getroot()
+    rect = root.find(f"{SVG_NS}rect")
+    assert rect is not None, f"{svg.name}: no backdrop rect"
+    assert rect.get("fill") == BACKDROP_COLOUR, (
+        f"{svg.name}: the backdrop rect is filled {rect.get('fill')}, not "
+        f"{BACKDROP_COLOUR}, the colour NikOS writes into the xfdesktop "
+        "rgba1 property."
     )
 
 
 @pytest.mark.parametrize("svg", WALLPAPERS, ids=lambda p: p.name)
 def test_wallpaper_keeps_its_wordmark_and_taglines(svg: Path) -> None:
-    text = svg.read_text(encoding="utf-8")
+    # Read the <text> elements rather than the file, for the same reason as
+    # above: "NikOS" appears in the backdrop comment, so a substring search
+    # passes even with the wordmark deleted.
+    root = ET.parse(svg).getroot()
+    rendered = {(element.text or "").strip() for element in root.iter(f"{SVG_NS}text")}
     for phrase in ("NikOS", "Neural Innovation for Knowledge OS",
                    "LIGHT SYSTEM. HEAVY THINKING."):
-        assert phrase in text, f"{svg.name}: lost the '{phrase}' text"
+        assert phrase in rendered, (
+            f"{svg.name}: no <text> element renders '{phrase}'; found {sorted(rendered)}"
+        )
 
 
 def test_wallpaper_backdrop_matches_the_xfconf_backdrop_colour() -> None:

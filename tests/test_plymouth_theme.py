@@ -8,6 +8,7 @@ to report an error, so the cheap structural checks are worth having.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import re
 from pathlib import Path
@@ -217,3 +218,41 @@ def test_the_highlight_actually_wraps(generator) -> None:
         )
         # The remainder restarts at the beginning of the stroke.
         assert min(start for start, _ in runs) == 0.0
+
+
+# ── Committed output is not stale ────────────────────────────────────────────
+
+MANIFEST = ASSET_DIR / "SOURCES.sha256"
+
+
+def test_committed_boot_chrome_matches_its_sources() -> None:
+    """The playbook copies these files; it never runs the generator.
+
+    So an edit to menu-icon.svg, plymouth-logo.svg or the generator that is not
+    followed by a regeneration would ship boot artwork that no longer matches
+    the repository, and every other check here would stay green.
+
+    Input hashes rather than a re-render: PNG bytes depend on the installed
+    librsvg and cairo, so comparing rendered output would tie this to one
+    library version and fail on an unrelated upgrade, which is not staleness.
+    """
+    assert MANIFEST.is_file(), (
+        "assets/plymouth/SOURCES.sha256 is missing; run "
+        "scripts/render-plymouth-assets.py"
+    )
+
+    stale = []
+    for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        recorded, relative = line.split("  ", 1)
+        source = REPO_ROOT / relative
+        assert source.is_file(), f"{relative} named in the manifest does not exist"
+        actual = hashlib.sha256(source.read_bytes()).hexdigest()
+        if actual != recorded:
+            stale.append(relative)
+
+    assert not stale, (
+        f"{', '.join(stale)} changed since the boot chrome was generated. "
+        "Re-run scripts/render-plymouth-assets.py and commit the result."
+    )

@@ -38,11 +38,11 @@ SPINNER_FRAMES = 36;
 # refreshes 50 times a second, so 2 gives a pass of about 1.4 seconds.
 SPINNER_HOLD = 2;
 
-# Declared before it is indexed, as the other arrays here are. Plymouth's
-# script engine is not documented on whether indexed assignment creates a
-# variable, and a theme that trips over it fails at boot, on a screen with no
-# way to report the error.
-spinner_images;
+# Initialised explicitly, as message_lines below is. Plymouth's engine does
+# auto-vivify: script_evaluate_hash() replaces a non-hash with a fresh hash
+# before indexing it, so a bare declaration would work. An empty set literal
+# says what the variable is for without relying on that.
+spinner_images = [];
 
 for (i = 0; i < SPINNER_FRAMES; i++) {
     # Frame files are one-based and zero-padded to four digits.
@@ -117,12 +117,11 @@ fsck_fade_sprite.SetPosition(fsck_x, progress_y, 11);
 fsck_fade_sprite.SetOpacity(0);
 
 fsck_running = 0;
-fsck_dev_array;
+fsck_dev_array = [];
 fsck_dev_counter = 0;
 
-# Filled by status_callback, declared here with the other globals for the same
-# reason as spinner_images above.
-status_array;
+# Filled by status_callback, initialised here with the other globals.
+status_array = [];
 
 # ── Password prompt ──────────────────────────────────────────────────────────
 
@@ -136,7 +135,7 @@ passw_dialog_sprite.SetOpacity(0);
 passw_label_sprite = Sprite();
 passw_label_sprite.SetOpacity(0);
 
-bullets_array;
+bullets_array = [];
 bullets_count = 0;
 
 MAX_BULLETS = 14;
@@ -368,6 +367,7 @@ fun status_callback(status) {
             }
         }
         if (already_added == 0) {
+            fsck_dev_array[fsck_dev_counter] = [];
             fsck_dev_array[fsck_dev_counter][0] = status_array[1];
             fsck_dev_array[fsck_dev_counter][1] = status_array[2];
             fsck_dev_counter++;
