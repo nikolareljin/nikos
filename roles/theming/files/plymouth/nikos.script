@@ -305,6 +305,12 @@ fun message_callback(text) {
     }
     if (text.SubString(0, 17) == "fsckd-cancel-msg:") {
         text = text.SubString(17, strlen(text));
+        # The check is over, so release the bar. Without this fsck_running
+        # stays set, and boot_progress_callback returns early for the rest of
+        # the boot, so the progress bar never reappears.
+        fsck_meter_sprite.SetOpacity(0);
+        fsck_fade_sprite.SetOpacity(0);
+        fsck_running = 0;
     }
 
     for (i = 4; i > 0; i--) {
@@ -343,7 +349,10 @@ fun status_callback(status) {
     }
 
     # Pre-systemd fsck reports one device at a time: fsck:<device>:<progress>.
-    if (status_array[0] == "fsck") {
+    # A bare "fsck" marker carries neither field, and status_array outlives the
+    # call, so acting on it would aggregate whatever the previous status left
+    # behind. element_count is the number of separators this record had.
+    if (status_array[0] == "fsck" && element_count >= 2) {
         if (fsck_running == 0) {
             message_callback("Checking disks");
             fsck_running = 1;
@@ -387,7 +396,7 @@ fun status_callback(status) {
     # field carries a fractional part that atoi cannot read; its separator and
     # digit count depend on systemd's format string and the locale, so take the
     # leading integer rather than trimming a fixed number of characters.
-    if (status_array[0] == "fsckd") {
+    if (status_array[0] == "fsckd" && element_count >= 2) {
         if (fsck_running == 0) {
             fsck_running = 1;
             progress_meter_sprite.SetOpacity(0);
@@ -414,6 +423,13 @@ Plymouth.SetUpdateStatusFunction(status_callback);
 # ── Shutdown ─────────────────────────────────────────────────────────────────
 
 fun quit_callback() {
+    # display_normal_callback drops the bullets; quitting straight out of the
+    # prompt has to do the same, or they stay on screen over the handover.
+    for (i = 0; i < bullets_count; i++) {
+        bullets_array[i] = NULL;
+    }
+    bullets_count = 0;
+
     spinner_sprite.SetOpacity(0);
     progress_meter_sprite.SetOpacity(0);
     progress_fade_sprite.SetOpacity(0);
