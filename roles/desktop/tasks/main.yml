@@ -224,6 +224,43 @@
     group: root
     mode: "0644"
 
+# Same shadowing as the wallpaper: the Xubuntu session reads
+# /etc/xdg/xdg-xubuntu before /etc/xdg, so xubuntu-default-settings' whiskermenu
+# defaults win and the menu button keeps the Xubuntu mouse icon
+# (`xubuntu-logo-menu`). Point that copy at the NikOS icon too.
+- name: Check for Xubuntu whiskermenu defaults
+  ansible.builtin.stat:
+    path: /etc/xdg/xdg-xubuntu/xfce4/whiskermenu/defaults.rc
+  register: desktop_xubuntu_whiskermenu_defaults
+
+- name: Point the Xubuntu whiskermenu defaults at the NikOS menu icon
+  ansible.builtin.lineinfile:
+    path: /etc/xdg/xdg-xubuntu/xfce4/whiskermenu/defaults.rc
+    regexp: "^button-icon="
+    line: "button-icon=nikos-menu"
+  when: desktop_xubuntu_whiskermenu_defaults.stat.exists
+
+# Whisker Menu only writes a per-plugin rc once its settings are changed, so
+# most installs have none and the defaults above are enough. Where one exists it
+# outranks every default, and still carries the mouse icon.
+- name: Find existing user whiskermenu configs
+  ansible.builtin.find:
+    paths: "{{ nikos_home }}/.config/xfce4/panel"
+    patterns: "whiskermenu-*.rc"
+    file_type: file
+  register: desktop_user_whiskermenu_configs
+  become: false
+
+- name: Point existing user whiskermenu configs at the NikOS menu icon
+  ansible.builtin.lineinfile:
+    path: "{{ item.path }}"
+    regexp: "^button-icon="
+    line: "button-icon=nikos-menu"
+  loop: "{{ desktop_user_whiskermenu_configs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: false
+
 # ── Verify the handover ──────────────────────────────────────────────────────
 
 - name: Read the active display-manager.service target

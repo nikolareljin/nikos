@@ -170,6 +170,28 @@
     dest: /usr/share/nikos/logo.svg
     mode: "0644"
 
+# Panel menu button icon. Installed under hicolor as `nikos-menu` so the
+# Whisker Menu can reference it by icon name and GTK scales the SVG per panel
+# size, instead of pointing at an absolute path that only fits one size.
+- name: Copy NikOS menu icon to system asset directory
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/menu-icon.svg"
+    dest: /usr/share/nikos/menu-icon.svg
+    mode: "0644"
+
+- name: Ensure the scalable hicolor app icon directory exists
+  ansible.builtin.file:
+    path: /usr/share/icons/hicolor/scalable/apps
+    state: directory
+    mode: "0755"
+
+- name: Install the NikOS menu icon into the hicolor theme
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/menu-icon.svg"
+    dest: /usr/share/icons/hicolor/scalable/apps/nikos-menu.svg
+    mode: "0644"
+  notify: Theming_update_icon_cache
+
 - name: Create NikOS Plymouth theme directory
   ansible.builtin.file:
     path: /usr/share/plymouth/themes/nikos

@@ -19,6 +19,14 @@ All notable changes to NikOS are documented here.
   the real monitors.
 
 ### Added
+- **NikOS menu button icon** - `assets/menu-icon.svg`, installed as
+  `nikos-menu` under `/usr/share/icons/hicolor/scalable/apps`. The Whisker Menu
+  button kept the Xubuntu mouse (`xubuntu-logo-menu`) because
+  `/etc/xdg/xdg-xubuntu/xfce4/whiskermenu/defaults.rc` shadows the NikOS
+  defaults the same way the wallpaper file did; that copy and any existing
+  per-user `whiskermenu-*.rc` are now pointed at the NikOS icon. The NikOS
+  defaults themselves named `/usr/share/nikos/wallpaper.png` as the button
+  icon, which is a 1920x1080 wallpaper, not an icon.
 - **Portrait wallpaper** - `assets/wallpaper-vertical.svg`, exported to
   `/usr/share/nikos/wallpaper-vertical.png`. Monitors in vertical orientation
   get the portrait cut; every other monitor gets the landscape one.
@@ -26,6 +34,10 @@ All notable changes to NikOS are documented here.
   Zoomed, so nothing is cropped, and `color-style`/`rgba1` are set to `#2e3440`,
   the flat base colour of both wallpapers, so the area an aspect ratio does not
   cover reads as part of the image.
+- **Wallpaper follows monitor changes** - the marker file records the monitor
+  layout the wallpaper was last applied to. Rotating, adding or removing a
+  monitor re-applies at the next login, but only over backdrops still holding a
+  NikOS wallpaper, so a wallpaper the user picked themselves is left alone.
 - **Ubuntu hosts never switched to Xubuntu** - the desktop role probed a single
   `gnome-session` package to decide whether it was migrating an Ubuntu install.
   Ubuntu 24.04 ships `ubuntu-session`, `gnome-session-bin` and

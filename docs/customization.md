@@ -141,13 +141,19 @@ part of the artwork. Keep that colour in the SVG background if you replace the
 artwork, or change `RGBA1` in `roles/theming/files/nikos-apply-wallpaper.sh` to
 match your own.
 
+Monitor orientation is read from `xrandr --listmonitors`, which already
+reflects rotation, so a screen turned either way reports the taller geometry and
+gets the portrait wallpaper.
+
 xfdesktop only creates the per-connector backdrop properties once an Xfce
 session is running, so the playbook cannot set them directly. NikOS installs
 `/usr/local/bin/nikos-apply-wallpaper` and registers it under
-`/etc/xdg/autostart`; it runs once per user, after xfdesktop has registered the
-real monitors, and records that in
-`~/.local/state/nikos/wallpaper-applied`. Delete that marker to have it apply
-the NikOS wallpaper again at the next login:
+`/etc/xdg/autostart`; it runs at login, after xfdesktop has registered the real
+monitors, and records the monitor layout it applied to in
+`~/.local/state/nikos/wallpaper-applied`. An unchanged layout is a no-op. A
+changed one (a monitor rotated, added or removed) re-applies, but only over
+backdrops still holding a NikOS wallpaper, so your own wallpaper is left alone.
+Delete the marker to have it claim every backdrop again at the next login:
 
 ```bash
 rm -f ~/.local/state/nikos/wallpaper-applied
@@ -197,3 +203,15 @@ NIKOS_REPO_URL=https://github.com/YOUR_USER/nikos bash install.sh
 ```
 
 This keeps `install.sh` unmodified and works with the repo-sync flow (`nikos update` will continue pulling from your fork).
+
+## Changing the menu button icon
+
+The Whisker Menu button uses `assets/menu-icon.svg`, installed as the
+`nikos-menu` icon under `/usr/share/icons/hicolor/scalable/apps`. Edit the SVG
+and run `nikos update`; the panel picks the new icon up at the next panel start
+(`xfce4-panel -r` applies it immediately).
+
+To use a different icon, set `button-icon` to any icon name or absolute path in
+`roles/desktop/files/whiskermenu-defaults.rc`. Note that the Xubuntu defaults in
+`/etc/xdg/xdg-xubuntu/xfce4/whiskermenu/defaults.rc` are read before the NikOS
+ones, so the desktop role rewrites the `button-icon` line there as well.

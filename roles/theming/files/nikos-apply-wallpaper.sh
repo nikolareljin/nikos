@@ -5,14 +5,18 @@
 # (monitorHDMI-A-0, monitorDisplayPort-2, ...) once an Xfce session is running,
 # and it seeds them from the system defaults it can see at that moment. The
 # playbook runs before any session exists, so it cannot reach those properties.
-# This script runs once from /etc/xdg/autostart on the first login after
-# installation; after that the user owns their wallpaper choice.
+# This script runs from /etc/xdg/autostart at login and does the work there.
 #
 # Every monitor gets the same artwork. Monitors in portrait orientation get the
 # portrait cut of it. The image is Scaled rather than Zoomed, so nothing is
 # cropped, and the backdrop colour is set to #2e3440 - the flat base colour of
 # both wallpapers - so whatever the aspect ratio does not cover reads as part
 # of the image.
+#
+# The marker file records the monitor layout the wallpaper was last applied to.
+# An unchanged layout means there is nothing to do. A changed layout (a monitor
+# added, removed or rotated) re-applies, but only over backdrops still holding a
+# NikOS wallpaper, so a wallpaper the user picked themselves is left alone.
 set -euo pipefail
 
 WALLPAPER="${NIKOS_WALLPAPER:-/usr/share/nikos/wallpaper.png}"
@@ -35,19 +39,21 @@ if ! command -v xfconf-query >/dev/null 2>&1; then
   exit 0
 fi
 
-if [[ -e "${MARKER}" ]]; then
-  exit 0
-fi
-
 # -- Monitor orientation -----------------------------------------------------
 # `xrandr --listmonitors` prints one row per active monitor:
 #   0: +DisplayPort-2 3440/797x1440/334+0+0  DisplayPort-2
 # The last field is the connector name xfdesktop uses in its property paths.
+# Rotation is already reflected in the geometry, so a portrait monitor reports
+# its height as the larger number whichever way it was turned.
 declare -A MONITOR_VERTICAL=()
+
+monitor_rows() {
+  command -v xrandr >/dev/null 2>&1 || return 0
+  xrandr --listmonitors 2>/dev/null | tail -n +2
+}
 
 collect_monitor_orientation() {
   local index geometry connector width height rest
-  command -v xrandr >/dev/null 2>&1 || return 0
   while read -r index _ geometry connector rest; do
     [[ "${index}" == *: ]] || continue
     [[ -n "${connector}" ]] || continue
@@ -60,7 +66,16 @@ collect_monitor_orientation() {
     else
       MONITOR_VERTICAL["${connector}"]=0
     fi
-  done < <(xrandr --listmonitors 2>/dev/null | tail -n +2)
+  done < <(monitor_rows)
+}
+
+monitor_signature() {
+  local connector
+  {
+    for connector in "${!MONITOR_VERTICAL[@]}"; do
+      printf '%s:%s\n' "${connector}" "${MONITOR_VERTICAL[${connector}]}"
+    done
+  } | sort | tr '\n' ' '
 }
 
 image_for_monitor() {
@@ -97,6 +112,23 @@ for _ in $(seq 1 30); do
 done
 
 collect_monitor_orientation
+signature="$(monitor_signature)"
+
+previous=""
+if [[ -f "${MARKER}" ]]; then
+  previous="$(cat "${MARKER}" 2>/dev/null || true)"
+fi
+
+if [[ -n "${previous}" && "${previous}" == "${signature}" ]]; then
+  exit 0
+fi
+
+# Without a usable marker this is the first run after an install: claim every
+# backdrop. With one, the layout changed, so only NikOS-owned backdrops move.
+first_run=1
+if [[ -n "${previous}" ]]; then
+  first_run=0
+fi
 
 applied=0
 while read -r prop; do
@@ -105,6 +137,17 @@ while read -r prop; do
   connector="${prop#/backdrop/screen0/monitor}"
   connector="${connector%%/*}"
   image="$(image_for_monitor "${connector}")"
+
+  if (( first_run == 0 )); then
+    current="$(xfconf-query -c xfce4-desktop -p "${prop}" 2>/dev/null || true)"
+    if [[ "${current}" != "${WALLPAPER}" && "${current}" != "${WALLPAPER_VERTICAL}" ]]; then
+      continue
+    fi
+    if [[ "${current}" == "${image}" ]]; then
+      applied=1
+      continue
+    fi
+  fi
 
   xfconf-query -c xfce4-desktop -p "${prop}" -s "${image}" 2>/dev/null || continue
   set_int "${base}/image-style" "${IMAGE_STYLE}"
@@ -118,4 +161,4 @@ if [[ "${applied}" -ne 1 ]]; then
 fi
 
 mkdir -p "${STATE_DIR}"
-: > "${MARKER}"
+printf '%s\n' "${signature}" > "${MARKER}"

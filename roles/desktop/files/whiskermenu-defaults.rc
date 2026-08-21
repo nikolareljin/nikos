@@ -1,6 +1,6 @@
 favorites=xfce4-terminal-emulator.desktop,code.desktop,thunar.desktop,xfce4-settings-manager.desktop
 button-title=NikOS
-button-icon=/usr/share/nikos/wallpaper.png
+button-icon=nikos-menu
 show-button-title=false
 show-button-icon=true
 load-hierarchy=true
