@@ -8,7 +8,7 @@
 - **User:** a non-root user with `sudo` access
 - **Internet:** required during install (packages, theme files, models)
 - **Disk:** ~20 GB free (Ollama model + conda env + VS Code + tools); add
-  about 26 GB if selecting the optional Ollama model bundle
+  about 93 GB if selecting every optional Ollama model group
 - **RAM:** 4 GB minimum; 8 GB recommended for running `qwen2.5-coder:7b`
 
 ## Quick install

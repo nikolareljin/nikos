@@ -1,7 +1,16 @@
 ---
-- name: Install OpenClaw globally via npm
-  ansible.builtin.command: npm install -g openclaw@latest
+# `creates: /usr/bin/openclaw` used to short-circuit this task, so
+# `openclaw@latest` was resolved exactly once — on the first install — and the
+# package then stayed frozen at whatever version that was. state: latest lets
+# `nikos update` actually move it forward.
+#
+# OpenClaw declares `node >=22.22.3 <23 || >=24.15.0 <25 || >=25.9.0`. The
+# cloud-ai-cli role installs the NodeSource 22.x line, which satisfies the
+# first range.
+- name: Install or upgrade OpenClaw globally via npm
   become: true
-  args:
-    creates: /usr/bin/openclaw
+  community.general.npm:
+    name: openclaw
+    global: true
+    state: latest
   when: not ansible_check_mode

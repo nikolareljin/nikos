@@ -17,11 +17,57 @@
   changed_when: false
   tags: [ai-local]
 
-- name: Install Claude Code globally via npm
+# ── Image analysis ──────────────────────────────────────────────────────────
+# OpenCV's wheels are dynamically linked; without these the import fails at
+# runtime with "libGL.so.1: cannot open shared object file" on a minimal host.
+- name: Install image analysis system libraries
+  become: true
+  ansible.builtin.apt:
+    name: "{{ nikos_vision_apt_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: not ansible_check_mode
+  tags: [ai-vision]
+
+- name: Install Tesseract OCR engine
+  become: true
+  ansible.builtin.apt:
+    name:
+      - tesseract-ocr
+      - tesseract-ocr-osd
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: not ansible_check_mode
+  tags: [ai-vision]
+
+- name: Install Tesseract language data
+  become: true
+  ansible.builtin.apt:
+    name: >-
+      {{ ['tesseract-ocr-all'] if nikos_tesseract_languages == ['all']
+         else nikos_tesseract_languages | map('regex_replace', '^', 'tesseract-ocr-') | list }}
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: not ansible_check_mode
+  tags: [ai-vision]
+
+- name: Install Python image analysis libraries in nikos-ai env
+  ansible.builtin.command: >
+    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install
+    {{ nikos_vision_pip_packages | join(' ') }}
+  changed_when: false
+  tags: [ai-local, ai-vision]
+
+# state: present would pin Claude Code to whatever shipped on the day of the
+# first install; state: latest lets `nikos update` move it forward.
+- name: Install or upgrade Claude Code globally via npm
   become: true
   community.general.npm:
     name: "@anthropic-ai/claude-code"
     global: true
-    state: present
+    state: latest
   when: not ansible_check_mode
   tags: [ai-claude]

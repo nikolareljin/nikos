@@ -97,7 +97,7 @@ Usage:
   nikos setup            Run full NikOS playbook (first install)
   nikos update           Move to the newest release, then re-run playbook (idempotent)
   nikos update --ref <r> Update to a specific branch or tag instead
-  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | openclaw
+  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw
   nikos status           Show NikOS version, Ollama models, installed roles
   nikos doctor           Check for broken configs and missing dependencies
   nikos log [N]          Show last N lines of the latest playbook log (default 50)
@@ -259,7 +259,7 @@ cmd_update() {
 cmd_add() {
   local role="${1:-}"
   case "${role}" in
-    network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | openclaw)
+    network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
       _playbook --tags "${role}"

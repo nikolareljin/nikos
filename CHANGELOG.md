@@ -17,6 +17,11 @@ All notable changes to NikOS are documented here.
   was inferred from whatever git checkout the script happened to sit in, so
   `curl | bash` in a project directory could pick up an unrelated repository's
   branch name. Version selection is now explicit.
+- **The AI CLIs never upgraded** - Gemini CLI and Claude Code used
+  `state: present` and OpenClaw guarded on `creates: /usr/bin/openclaw`, so
+  each was resolved once at first install and then stayed frozen at that
+  version forever, `nikos update` included. All three now use
+  `state: latest`.
 - **`gh extension install github/gh-copilot` failed the play** - gh 2.98.0
   promoted `copilot` to a built-in command, and `gh extension install` rejects
   any extension whose name collides with one (`"copilot" matches the name of a
@@ -82,6 +87,31 @@ All notable changes to NikOS are documented here.
   manually selected `default.plymouth` alternative instead.
 
 ### Added
+- **Ollama models grouped by capability.** `ollama_models_reasoning`,
+  `_coding`, `_text`, `_vision` and `_embedding`, each with its own tag, so a
+  laptop can take one capability without pulling the rest:
+  `nikos add ollama-vision` (~13 GB) instead of `nikos add ollama-models`
+  (~93 GB). Every group lists its smallest usable model first;
+  `deepseek-r1:1.5b` runs on a 4 GB machine.
+- **Model refresh.** `codellama:7b`, `deepseek-coder:6.7b`, `gemma2:9b` and
+  `llava:7b` were all two years old and are replaced rather than kept:
+  Code Llama has no successor at all, since Meta discontinued the line, so its
+  role passes to `qwen2.5-coder:14b` and `deepseek-coder-v2:16b`;
+  `gemma2:9b` -> `gemma3:12b`; `llava:7b` -> `qwen2.5vl:7b`,
+  `minicpm-v:8b` and `granite3.2-vision:2b`. New additions cover reasoning
+  (`deepseek-r1`, `qwen3`), text generation (`granite4`, `llama3.1`,
+  `mistral`) and current embeddings (`embeddinggemma`,
+  `qwen3-embedding:0.6b`, replacing the two-year-old `nomic-embed-text`).
+  Nothing on the list is now older than about a year. The default stays
+  `qwen2.5-coder:7b`, because `qwen3-coder` publishes no tag below `30b`
+  (19 GB).
+- **Image analysis stack** (`ai-vision` tag) - `opencv-contrib-python`,
+  `pillow`, `scikit-image`, `imageio`, `pytesseract` and `timm` in the
+  `nikos-ai` environment, with the shared libraries OpenCV's wheels link
+  against (`libgl1`, `libglib2.0-0t64`, `libsm6`, `libxext6`, `ffmpeg`) so
+  `import cv2` also works on a minimal host.
+- **Tesseract OCR** with `osd` and nine language packs by default, selectable
+  through `nikos_tesseract_languages`; set it to `["all"]` for all 160+.
 - **Version selection.** With no options the installer resolves and installs the
   newest release tag (`X.Y.Z`; pre-release and floating tags are ignored).
   `--ref <branch-or-tag>` pins a specific ref, and `NIKOS_REPO_REF` is
