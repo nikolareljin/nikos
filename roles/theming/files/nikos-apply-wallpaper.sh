@@ -103,16 +103,14 @@ set_rgba() {
     -s "${RGBA1[0]}" -s "${RGBA1[1]}" -s "${RGBA1[2]}" -s "${RGBA1[3]}" 2>/dev/null || true
 }
 
-# xfdesktop registers its backdrop properties a moment after the session starts.
-for _ in $(seq 1 30); do
-  if xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -qE '/(last-image|image-path)$'; then
-    break
-  fi
-  sleep 1
-done
-
+# The layout comes from xrandr, which needs no wait, so decide whether there is
+# anything to do before waiting on xfdesktop. On the usual login, where nothing
+# has changed since the last run, this exits immediately.
 collect_monitor_orientation
 signature="$(monitor_signature)"
+# Without xrandr there is no layout to compare. Record a constant instead, so a
+# second login still short-circuits rather than reapplying every time.
+[[ -n "${signature}" ]] || signature="unknown-layout"
 
 previous=""
 if [[ -f "${MARKER}" ]]; then
@@ -122,6 +120,14 @@ fi
 if [[ -n "${previous}" && "${previous}" == "${signature}" ]]; then
   exit 0
 fi
+
+# xfdesktop registers its backdrop properties a moment after the session starts.
+for _ in $(seq 1 30); do
+  if xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -qE '/(last-image|image-path)$'; then
+    break
+  fi
+  sleep 1
+done
 
 # Without a usable marker this is the first run after an install: claim every
 # backdrop. With one, the layout changed, so only NikOS-owned backdrops move.
