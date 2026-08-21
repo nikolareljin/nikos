@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NikOS — Help</title>
+<meta name="description" content="Where to find help for NikOS, and for the Xubuntu desktop it is built on.">
+<link rel="icon" href="assets/menu-icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/menu-icon.svg" alt=""> NikOS</a>
+    <nav class="site">
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install</a>
+      <a href="included.html">What's included</a>
+      <a href="help.html" aria-current="page">Help</a>
+      <a href="about.html">About</a>
+      <a href="https://github.com/nikolareljin/nikos">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+  <p class="tagline">Help</p>
+  <h1>Where to get help</h1>
+  <p class="lede">The <strong>Help</strong> entry in the applications menu opens this page. NikOS
+  documents itself here; the desktop underneath it is Xubuntu, and Xubuntu documents that.</p>
+
+  <h2>NikOS itself</h2>
+
+  <p>NikOS is an Ansible playbook and the desktop configuration it applies. Anything specific
+  to it lives on this site, at
+  <a href="https://nikolareljin.github.io/nikos/">nikolareljin.github.io/nikos</a>:</p>
+
+  <ul class="tight">
+    <li><a href="install.html">Installing and updating</a> — choosing a version, re-running the
+    playbook, and what to do when a run fails partway.</li>
+    <li><a href="included.html">What's included</a> — every role, the packages it installs and
+    the commands it provides.</li>
+    <li><a href="about.html">About</a> — what the project is for, and the other projects it
+    pulls in.</li>
+    <li><a href="https://github.com/nikolareljin/nikos/issues">Issue tracker</a> — anything that
+    looks like a bug in the playbook or the desktop configuration.</li>
+    <li><a href="https://github.com/nikolareljin/nikos">Source</a> — the playbook itself, which
+    is the authoritative answer to "what does this actually do".</li>
+  </ul>
+
+  <h2>The desktop, which is Xubuntu</h2>
+
+  <p>NikOS does not replace the desktop. It installs Xubuntu and configures it, so what you are
+  using is Xfce as Xubuntu ships it, with a Nord theme and a different panel menu on top.
+  Thunar, the panel, the settings manager, workspaces, keyboard shortcuts, printing and
+  removable media are all Xubuntu, and Xubuntu documents them properly:</p>
+
+  <ul class="tight">
+    <li><a href="https://docs.xubuntu.org/">Xubuntu documentation</a> — the full user guide for
+    the desktop, its applications and its settings.</li>
+    <li><a href="https://xubuntu.org/help/">Xubuntu help and support</a> — mailing lists, IRC and
+    the community forums.</li>
+    <li><a href="https://xubuntu.org/">xubuntu.org</a> — the project, its news and its release
+    notes.</li>
+    <li><a href="https://docs.xfce.org/">Xfce documentation</a> — the upstream desktop
+    environment, for anything below the Xubuntu layer.</li>
+  </ul>
+
+  <div class="note">
+    <strong>Why this page and not the offline handbook?</strong> NikOS installs
+    <code>xubuntu-desktop-minimal</code> rather than the full <code>xubuntu-desktop</code>, so the
+    offline documentation package is not pulled in. It is about 78&nbsp;MB installed and is still
+    at version 22.04, while the site above tracks the current release. Install it if you want the
+    handbook available without a network:
+  </div>
+
+<pre><code>sudo apt install xubuntu-docs</code></pre>
+
+  <h2>Credit</h2>
+
+  <p>NikOS owes its entire desktop to <a href="https://xubuntu.org/">Xubuntu</a> and to
+  <a href="https://www.xfce.org/">Xfce</a> underneath it. The Plymouth boot splash is derived
+  from Xubuntu's own theme and stays under that theme's licence — see
+  <a href="https://github.com/nikolareljin/nikos/blob/main/THIRD-PARTY-NOTICES.md">THIRD-PARTY-NOTICES.md</a>.</p>
+
+</div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>NikOS — Neural Innovation for Knowledge OS</span>
+    <span><a href="https://github.com/nikolareljin/nikos">github.com/nikolareljin/nikos</a> · MIT, except the <a href="https://github.com/nikolareljin/nikos/blob/main/THIRD-PARTY-NOTICES.md">Plymouth boot splash</a> (GPL-3.0-or-later)</span>
+  </div>
+</footer>
+
+<script src="copy.js" defer></script>
+</body>
+</html>

@@ -239,6 +239,30 @@
     group: root
     mode: "0644"
 
+# xubuntu-default-settings ships /usr/share/xubuntu/applications/xfhelp4.desktop,
+# whose Exec opens /usr/share/xubuntu-docs/index.html. That file only exists with
+# the xubuntu-docs package, which the full xubuntu-desktop metapackage Recommends
+# and xubuntu-desktop-minimal does not, so on NikOS the menu's Help entry opened a
+# file:// URL that was never installed.
+#
+# The replacement goes in /usr/share/xfce4/applications rather than over the
+# Xubuntu copy: XDG_DATA_DIRS lists /usr/share/xfce4 ahead of /usr/share/xubuntu,
+# so the same desktop-file ID resolves here first, and nothing owned by
+# xubuntu-default-settings is touched or lost on its next upgrade.
+- name: Ensure the Xfce application directory exists
+  ansible.builtin.file:
+    path: /usr/share/xfce4/applications
+    state: directory
+    mode: "0755"
+
+- name: Point the menu's Help entry at the NikOS documentation
+  ansible.builtin.copy:
+    src: xfhelp4.desktop
+    dest: /usr/share/xfce4/applications/xfhelp4.desktop
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Deploy system-wide whiskermenu defaults
   ansible.builtin.copy:
     src: whiskermenu-defaults.rc

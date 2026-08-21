@@ -8,7 +8,9 @@
 A curated Xubuntu / Ubuntu 24.04 LTS setup for AI coding and development.  
 One command turns a fresh Ubuntu install into a fully configured AI workstation — Xubuntu desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
 
-**Version:** 0.5.0 · **License:** MIT · **Author:** Nikola Reljin
+**Version:** 0.6.0 · **License:** MIT · **Author:** Nikola Reljin
+
+> One file, the Plymouth boot splash, is GPL-3.0-or-later rather than MIT, because it is derived from Xubuntu's theme. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 <img src="./assets/logo.png" />
 
@@ -149,7 +151,7 @@ nikos add act        # install optional: local GitHub Actions runner
 nikos add fabric     # install optional: Fabric AI pattern CLI
 nikos add openclaw   # install optional: OpenClaw LLM gateway CLI
 nikos add monitoring # install optional: Netdata
-nikos add bitnet     # install optional: BitNet.cpp 1-bit inference
+nikos add bitnet     # install optional: BitNet.cpp 1-bit inference (bitnet-cli)
 nikos add mistral-rs # install optional: mistral.rs Rust LLM server
 nikos add ollama-*   # install optional: a model group (see Local models above)
 nikos status         # show version, Ollama models, conda envs

@@ -21,6 +21,7 @@
       <a href="index.html">Overview</a>
       <a href="install.html">Install</a>
       <a href="included.html" aria-current="page">What's included</a>
+      <a href="help.html">Help</a>
       <a href="about.html">About</a>
       <a href="https://github.com/nikolareljin/nikos">GitHub</a>
     </nav>
@@ -45,7 +46,7 @@
     <tbody>
       <tr><td><code>base</code></td><td>nala, git, curl, wget, build-essential, python3-pip, python3-venv, flatpak, gnupg, ca-certificates, dialog, xfconf, inkscape, openssh-server, tmux, pipx, sqlite3, unzip. Sets timezone, locale and NTP, adds the Flathub remote, deploys a default <code>.tmux.conf</code>.</td></tr>
       <tr><td><code>desktop</code></td><td>The Xubuntu desktop package set, LightDM and its GTK greeter. Detects an existing GNOME install, hands <code>display-manager.service</code> to LightDM, and sets the account's default session.</td></tr>
-      <tr><td><code>theming</code></td><td>Nord GTK theme and icons, a generated wallpaper, GRUB theme, Plymouth boot splash, and an autostart entry that applies the wallpaper across every connected monitor.</td></tr>
+      <tr><td><code>theming</code></td><td>Nord GTK theme and icons, a generated wallpaper, GRUB theme, Plymouth boot splash (<a href="https://github.com/nikolareljin/nikos/blob/main/THIRD-PARTY-NOTICES.md">GPL-3.0-or-later</a>, derived from Xubuntu's theme), and an autostart entry that applies the wallpaper across every connected monitor.</td></tr>
       <tr><td><code>github-setup</code></td><td>GitHub CLI from GitHub's apt repository, plus the first-run wizard for auth, SSH keys and git identity.</td></tr>
       <tr><td><code>ai-stack</code></td><td>Ollama as a user service, the default model, Miniforge, the <code>nikos-ai</code> conda environment, PyTorch (CPU), and llama.cpp binaries.</td></tr>
       <tr><td><code>editors</code></td><td>VS Code from Microsoft's apt repository, plus the extension set.</td></tr>
@@ -78,7 +79,7 @@
       <tr><td><code>k8s-tools</code></td><td>kubectl and Helm</td></tr>
       <tr><td><code>act</code></td><td>Run GitHub Actions workflows locally</td></tr>
       <tr><td><code>fabric</code></td><td>The Fabric AI pattern CLI</td></tr>
-      <tr><td><code>bitnet</code></td><td>BitNet.cpp 1-bit inference, built from source</td></tr>
+      <tr><td><code>bitnet</code></td><td>BitNet.cpp 1-bit inference, built from source. Provides <code>bitnet-cli</code>.</td></tr>
       <tr><td><code>mistral-rs</code></td><td>mistral.rs, a Rust OpenAI-compatible LLM server</td></tr>
       <tr><td><code>monitoring</code></td><td>Netdata metrics dashboard</td></tr>
       <tr><td><code>openclaw</code></td><td>The OpenClaw LLM gateway CLI</td></tr>
@@ -217,7 +218,7 @@ nikos log list         <span class="c"># list available logs</span></code></pre>
 <footer class="site">
   <div class="wrap">
     <span>NikOS — Neural Innovation for Knowledge OS</span>
-    <span><a href="https://github.com/nikolareljin/nikos">github.com/nikolareljin/nikos</a> · MIT</span>
+    <span><a href="https://github.com/nikolareljin/nikos">github.com/nikolareljin/nikos</a> · MIT, except the <a href="https://github.com/nikolareljin/nikos/blob/main/THIRD-PARTY-NOTICES.md">Plymouth boot splash</a> (GPL-3.0-or-later)</span>
   </div>
 </footer>
 

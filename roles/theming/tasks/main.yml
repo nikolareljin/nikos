@@ -10,15 +10,25 @@
     src: "{{ playbook_dir }}/assets/wallpaper.svg"
     dest: /usr/share/nikos/wallpaper.svg
     mode: "0644"
+  register: theming_wallpaper_svg
 
+- name: Check for the exported wallpaper PNG
+  ansible.builtin.stat:
+    path: /usr/share/nikos/wallpaper.png
+  register: theming_wallpaper_png
+
+# Export whenever the SVG moved, not just when the PNG is missing. A `creates:`
+# guard would leave every existing install on the PNG rendered by the version
+# it was first installed with, so artwork changes would never reach an upgrade.
 - name: Export wallpaper SVG to PNG
   ansible.builtin.command: >
     inkscape /usr/share/nikos/wallpaper.svg
     --export-filename=/usr/share/nikos/wallpaper.png
     --export-width=1920 --export-height=1080
-  args:
-    creates: /usr/share/nikos/wallpaper.png
-  when: not ansible_check_mode
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - theming_wallpaper_svg is changed or not theming_wallpaper_png.stat.exists
 
 # Portrait cut of the same artwork, for monitors rotated into vertical
 # orientation. Scaling the landscape image onto a 9:16 screen leaves most of
@@ -28,15 +38,23 @@
     src: "{{ playbook_dir }}/assets/wallpaper-vertical.svg"
     dest: /usr/share/nikos/wallpaper-vertical.svg
     mode: "0644"
+  register: theming_wallpaper_vertical_svg
+
+- name: Check for the exported portrait wallpaper PNG
+  ansible.builtin.stat:
+    path: /usr/share/nikos/wallpaper-vertical.png
+  register: theming_wallpaper_vertical_png
 
 - name: Export portrait wallpaper SVG to PNG
   ansible.builtin.command: >
     inkscape /usr/share/nikos/wallpaper-vertical.svg
     --export-filename=/usr/share/nikos/wallpaper-vertical.png
     --export-width=1080 --export-height=1920
-  args:
-    creates: /usr/share/nikos/wallpaper-vertical.png
-  when: not ansible_check_mode
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - theming_wallpaper_vertical_svg is changed
+      or not theming_wallpaper_vertical_png.stat.exists
 
 - name: Install Papirus icon theme
   ansible.builtin.apt:
@@ -192,6 +210,55 @@
     mode: "0644"
   notify: Theming_update_icon_cache
 
+# GTK searches ~/.icons and ~/.local/share/icons ahead of /usr/share/icons, so
+# a copy of nikos-menu in either shadows the one installed above and a
+# reinstall silently changes nothing. Earlier NikOS builds left one behind, and
+# it is why a machine could keep drawing the missing-image placeholder after
+# the icon itself had been fixed. NikOS owns this icon name, so removing the
+# user-level copies is safe: there is no user artwork to lose.
+- name: Look for user-level copies of the NikOS menu icon
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  become: false
+  loop:
+    - "{{ nikos_home }}/.icons/hicolor/scalable/apps/nikos-menu.svg"
+    - "{{ nikos_home }}/.local/share/icons/hicolor/scalable/apps/nikos-menu.svg"
+  register: theming_user_menu_icons
+
+# Restricted to regular files and symlinks. `state: absent` on a directory
+# removes it and everything under it, so a directory that happens to carry this
+# name would be deleted wholesale rather than skipped.
+- name: Record which user-level copies are shadowing the system icon
+  ansible.builtin.set_fact:
+    theming_shadowing_menu_icons: >-
+      {{ theming_user_menu_icons.results
+         | selectattr('stat.exists')
+         | selectattr('stat.isdir', 'false')
+         | map(attribute='item')
+         | list }}
+
+- name: Remove user-level copies of the NikOS menu icon
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  become: false
+  loop: "{{ theming_shadowing_menu_icons }}"
+
+# A cache that still lists the icon is as good as the file itself: GTK trusts
+# the cache and keeps resolving a name with nothing behind it. These
+# directories carry no index.theme, so the cache is rebuilt without one. The
+# loop is empty when nothing was shadowing, so this does not run on a clean
+# machine.
+- name: Refresh the user icon caches the removed copies were listed in
+  ansible.builtin.command: >
+    gtk-update-icon-cache --force --ignore-theme-index
+    {{ item | dirname | dirname | dirname }}
+  become: false
+  changed_when: true
+  failed_when: false
+  loop: "{{ theming_shadowing_menu_icons }}"
+  when: not ansible_check_mode
+
 - name: Create NikOS Plymouth theme directory
   ansible.builtin.file:
     path: /usr/share/plymouth/themes/nikos
@@ -212,11 +279,23 @@
     mode: "0644"
   notify: Theming_update_initramfs
 
-- name: Copy NikOS Plymouth logo into Plymouth theme directory
+# Plymouth runs before any icon theme, font config or toolkit exists, so the
+# whole splash has to arrive as pre-rendered PNGs. They are generated from the
+# NikOS artwork by scripts/render-plymouth-assets.py and committed, so nothing
+# has to be rendered on the target machine.
+- name: Copy the NikOS Plymouth boot chrome into the theme directory
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/assets/plymouth-logo.png"
-    dest: /usr/share/plymouth/themes/nikos/nikos-logo.png
+    src: "{{ playbook_dir }}/assets/plymouth/"
+    dest: /usr/share/plymouth/themes/nikos/
     mode: "0644"
+  notify: Theming_update_initramfs
+
+# Older installs put the colour logo here under a name the script no longer
+# loads. Left in place it is dead weight inside every initramfs rebuild.
+- name: Remove the superseded Plymouth logo
+  ansible.builtin.file:
+    path: /usr/share/plymouth/themes/nikos/nikos-logo.png
+    state: absent
   notify: Theming_update_initramfs
 
 # xubuntu-artwork depends on plymouth-theme-xubuntu-logo and
@@ -451,6 +530,17 @@
   # No-op when the installer runs outside a session: the helper exits without
   # writing its marker, so the autostart entry retries at the next login.
   ansible.builtin.command: /usr/local/bin/nikos-apply-wallpaper
+  become: false
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+# The backdrop path does not change between releases, so re-setting it to the
+# same value emits no xfconf signal and xfdesktop keeps serving the image it
+# cached at session start. Reload it explicitly, so a re-rendered wallpaper
+# appears without logging out.
+- name: Reload xfdesktop so a re-rendered wallpaper is picked up
+  ansible.builtin.command: xfdesktop --reload
   become: false
   changed_when: false
   failed_when: false

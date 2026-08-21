@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Help
+Comment=NikOS documentation, and where to find Xubuntu's
+Exec=exo-open --launch WebBrowser https://nikolareljin.github.io/nikos/help.html
+Icon=help-browser
+StartupNotify=false
+Terminal=false
+Categories=X-XFCE;X-Xfce-Toplevel;
+OnlyShowIn=XFCE;
