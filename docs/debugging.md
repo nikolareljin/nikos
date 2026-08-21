@@ -17,6 +17,37 @@ It checks:
 
 Any `[!!]` items indicate missing or broken components. Run `nikos update` to attempt repair.
 
+## Reading the install summary
+
+The installer prints a summary when it finishes, and writes the same numbers to
+the log:
+
+```
+[SUMMARY] rc=0 ok=189 changed=15 failed=0 unreachable=0
+[DONE] Install complete
+```
+
+An install runs the playbook twice: once for the main run, and once more for
+any optional bundles that were selected. Each run prints its own `PLAY RECAP`,
+and the summary totals them, so `ok=` will not match any single recap in the
+log. To see the runs separately:
+
+```bash
+grep -A2 '^PLAY RECAP' ~/.config/nikos/logs/install-latest.log | grep localhost
+```
+
+`failed=` counts both runs. Before 0.6.0 the summary read only one number per
+field, which made the count a multi-line value: the box printed the remainder on
+its own line, and the comparison that decides whether to report a failure raised
+a shell error and evaluated false. A bundle could fail while the installer
+reported a clean install. If you are on an older version and a bundle looks like
+it did not install, check the log directly:
+
+```bash
+grep -c '^fatal:' ~/.config/nikos/logs/install-latest.log
+awk '/^TASK \[/{t=$0} /^fatal: \[/{print t}' ~/.config/nikos/logs/install-latest.log
+```
+
 ## Common issues
 
 ### Xfce doesn't start after install
@@ -143,6 +174,34 @@ ls /usr/local/bin/lantern
 # Reinstall if missing:
 sudo ~/Projects/git-lantern/install --prefix /opt/git-lantern --bin-link /usr/local/bin/lantern
 ```
+
+### bitnet-cli not found, or fails to load a library
+
+```bash
+which bitnet-cli                          # expect /usr/local/bin/bitnet-cli
+ls /usr/local/lib/nikos/bitnet/llama-cli  # the binary it runs
+```
+
+`bitnet-cli` is a small wrapper. The binary and the shared libraries it loads
+are installed together under `/usr/local/lib/nikos/bitnet`, so the command does
+not depend on the BitNet build tree: `~/Projects/bitnet.cpp` is only needed to
+rebuild, and can be deleted to reclaim disk.
+
+Two things to check if it misbehaves:
+
+```bash
+# A copy from an older NikOS shadowing the real one. ~/.local/bin comes first
+# on a default PATH, and that copy read its libraries out of the build tree.
+ls ~/.local/bin/bitnet-cli && rm ~/.local/bin/bitnet-cli
+
+# Nothing installed at all: the bundle is optional and may never have run.
+nikos add bitnet
+```
+
+Building the CLI needs `LLAMA_BUILD_TOOLS`. llama.cpp turns it off by default
+when it is built as a subdirectory, which BitNet does, so a build configured by
+an older NikOS produced only the shared libraries and no `llama-cli`. `nikos add
+bitnet` re-configures an existing build tree rather than skipping it.
 
 ### Installer or `nikos update` cannot move the checkout
 

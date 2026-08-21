@@ -151,7 +151,7 @@ nikos add act        # install optional: local GitHub Actions runner
 nikos add fabric     # install optional: Fabric AI pattern CLI
 nikos add openclaw   # install optional: OpenClaw LLM gateway CLI
 nikos add monitoring # install optional: Netdata
-nikos add bitnet     # install optional: BitNet.cpp 1-bit inference
+nikos add bitnet     # install optional: BitNet.cpp 1-bit inference (bitnet-cli)
 nikos add mistral-rs # install optional: mistral.rs Rust LLM server
 nikos add ollama-*   # install optional: a model group (see Local models above)
 nikos status         # show version, Ollama models, conda envs

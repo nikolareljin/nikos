@@ -106,6 +106,19 @@ All notable changes to NikOS are documented here.
   one behind. The theming role now removes the user-level copies and rebuilds
   the icon cache that listed them, so the system icon is the only one left.
 
+### Documentation
+- **The `bitnet` bundle never named the command it installs** - `bitnet-cli` was
+  not mentioned in the README, the customization guide or the site, so the only
+  way to discover it was to read the role. All three now name it, and
+  `docs/debugging.md` gains an entry covering where it is installed, the copy an
+  older NikOS may have left in `~/.local/bin` shadowing it, and why a build
+  configured by an older NikOS produced no CLI.
+- **Nothing explained the install summary** - `docs/debugging.md` now describes
+  it, including why `ok=` does not match any single `PLAY RECAP` in the log: an
+  install runs the playbook twice and the counts are totalled. It also records
+  how a failed optional bundle could be reported as a clean install before
+  0.6.0, and how to check the log on an older version.
+
 ### Licensing
 - **The Plymouth boot splash is GPL-3.0-or-later, not MIT** - `nikos.script`
   was written by working from Xubuntu's `xubuntu-logo.script` and kept part of
