@@ -18,6 +18,6 @@ jobs:
         sudo apt-get install -y shellcheck
         ansible-galaxy collection install -r requirements.yml
         ansible-lint site.yml
-        shellcheck install.sh scripts/nikos
+        shellcheck install.sh scripts/nikos scripts/nikos-progress.sh
       test_command: |
         python -m pytest tests/ -v
