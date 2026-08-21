@@ -5,6 +5,23 @@ All notable changes to NikOS are documented here.
 ## [0.6.0] — 2026-08-21
 
 ### Fixed
+- **The menu editor entry pointed at software that was never installed** - both
+  the Xubuntu whiskermenu defaults and the NikOS ones set
+  `command-menueditor=menulibre` with the button shown, and menulibre is a
+  Recommends of the full `xubuntu-desktop` only. On `xubuntu-desktop-minimal` it
+  is absent, so the entry failed the same way "Edit Profile" did. menulibre is
+  now installed with the other desktop packages. Found by auditing every menu
+  command after the mugshot report, rather than by another click.
+- **A menu favourite silently never appeared** - the favourites list named
+  `xfce4-settings-manager.desktop`, but the file `xfce4-settings` ships is
+  `xfce-settings-manager.desktop`, with no `4` after `xfce`. The binary *is*
+  `xfce4-settings-manager`, which is what makes the wrong id easy to write and
+  hard to notice: nothing errors, the favourite is just missing.
+- **Tests now cover the whole class** - `tests/test_desktop_menu.py` checks that
+  every displayed menu command has something installing its binary, that no
+  shown button lacks a command, and that favourites are well-formed desktop ids.
+  Verified against both defects above: removing menulibre from the package list
+  or restoring the wrong desktop id fails the suite.
 - **The install summary printed broken numbers and hid a real failure** - an
   install runs the playbook twice, once for the main run and once for the
   optional bundles, and each prints its own `PLAY RECAP`. The summary read them
