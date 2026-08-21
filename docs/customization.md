@@ -125,7 +125,39 @@ nikos add ollama-models # Pull optional Ollama models; about 26 GB
 
 ## Changing the wallpaper
 
-The wallpaper is `assets/wallpaper.svg` — a vector file exported to PNG on install. Edit the SVG directly and run `nikos update` to re-export and apply.
+The wallpaper is a pair of vector files exported to PNG on install:
+
+| File | Exported to | Used on |
+| --- | --- | --- |
+| `assets/wallpaper.svg` | `/usr/share/nikos/wallpaper.png` (1920x1080) | monitors in landscape orientation |
+| `assets/wallpaper-vertical.svg` | `/usr/share/nikos/wallpaper-vertical.png` (1080x1920) | monitors rotated into portrait orientation |
+
+Edit either SVG and run `nikos update` to re-export and apply.
+
+Backdrops are set to Scaled, not Zoomed, so the whole image stays on screen
+whatever the monitor aspect ratio is, and the backdrop colour is set to
+`#2e3440` - the flat base colour of both wallpapers - so the remainder reads as
+part of the artwork. Keep that colour in the SVG background if you replace the
+artwork, or change `RGBA1` in `roles/theming/files/nikos-apply-wallpaper.sh` to
+match your own.
+
+xfdesktop only creates the per-connector backdrop properties once an Xfce
+session is running, so the playbook cannot set them directly. NikOS installs
+`/usr/local/bin/nikos-apply-wallpaper` and registers it under
+`/etc/xdg/autostart`; it runs once per user, after xfdesktop has registered the
+real monitors, and records that in
+`~/.local/state/nikos/wallpaper-applied`. Delete that marker to have it apply
+the NikOS wallpaper again at the next login:
+
+```bash
+rm -f ~/.local/state/nikos/wallpaper-applied
+```
+
+Running it by hand applies the wallpaper to the current session immediately:
+
+```bash
+rm -f ~/.local/state/nikos/wallpaper-applied && nikos-apply-wallpaper
+```
 
 ## Changing the timezone
 
