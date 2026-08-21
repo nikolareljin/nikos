@@ -225,11 +225,15 @@
     - "{{ nikos_home }}/.local/share/icons/hicolor/scalable/apps/nikos-menu.svg"
   register: theming_user_menu_icons
 
+# Restricted to regular files and symlinks. `state: absent` on a directory
+# removes it and everything under it, so a directory that happens to carry this
+# name would be deleted wholesale rather than skipped.
 - name: Record which user-level copies are shadowing the system icon
   ansible.builtin.set_fact:
     theming_shadowing_menu_icons: >-
       {{ theming_user_menu_icons.results
          | selectattr('stat.exists')
+         | selectattr('stat.isdir', 'false')
          | map(attribute='item')
          | list }}
 

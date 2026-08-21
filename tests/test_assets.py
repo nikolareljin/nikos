@@ -39,9 +39,23 @@ def test_svg_assets_exist() -> None:
     assert SVG_ASSETS, "no SVG assets found to check"
 
 
+COMMENT = re.compile(rb"<!--.*?-->", re.S)
+
+
+def mask_comments(data: bytes) -> bytes:
+    """Blank out comment bodies while keeping every byte offset intact.
+
+    The artwork comments talk about `<svg>`, so a naive search for the token
+    can match inside a comment and pass while the real root element sits
+    outside the window. gdk-pixbuf counts bytes from the start of the file,
+    comments included, so the masking has to preserve length.
+    """
+    return COMMENT.sub(lambda m: b" " * len(m.group(0)), data)
+
+
 @pytest.mark.parametrize("svg", SVG_ASSETS, ids=lambda p: p.name)
 def test_root_element_is_within_the_gdk_pixbuf_sniff_window(svg: Path) -> None:
-    head = svg.read_bytes()[:SNIFF_WINDOW_BYTES]
+    head = mask_comments(svg.read_bytes())[:SNIFF_WINDOW_BYTES]
     assert b"<svg" in head, (
         f"{svg.name}: '<svg' must appear in the first {SNIFF_WINDOW_BYTES} bytes. "
         "Move any comment inside the root element, otherwise gdk-pixbuf cannot "
