@@ -111,8 +111,12 @@ def build_mono_logo() -> str:
         "    plymouth-logo.svg. Edit that file, then re-run the script.\n"
         "  -->\n"
     )
-    head, sep, tail = mono.partition(">")
-    return head + sep + "\n" + note + tail.lstrip("\n")
+    # After the root tag, never after the first ">" in the document: that one
+    # closes the XML declaration, which would put the note ahead of <svg> and
+    # rebuild the very sniff-window hazard this repository guards against.
+    root_start = mono.index("<svg")
+    root_end = mono.index(">", root_start) + 1
+    return mono[:root_end] + "\n" + note + mono[root_end:].lstrip("\n")
 
 
 def load_mark() -> tuple[list[tuple[float, float, float, float]],

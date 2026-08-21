@@ -16,7 +16,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPO_ROOT / "assets"
 
-SVG_ASSETS = sorted(ASSETS.glob("*.svg"))
+# Recursive: the generated boot chrome lives in assets/plymouth/, and it is
+# rendered by a script rather than hand-edited, so it is the more likely place
+# for a pre-root comment to reappear.
+SVG_ASSETS = sorted(ASSETS.rglob("*.svg"))
 
 # gdk-pixbuf picks a loader by matching the head of the file against each
 # loader's signature, and the SVG signature is the literal "<svg". Anything

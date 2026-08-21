@@ -38,7 +38,12 @@ SPINNER_FRAMES = 36;
 # refreshes 50 times a second, so 2 gives a pass of about 1.4 seconds.
 SPINNER_HOLD = 2;
 
-spinner_images[0] = Image("spinner-0001.png");
+# Declared before it is indexed, as the other arrays here are. Plymouth's
+# script engine is not documented on whether indexed assignment creates a
+# variable, and a theme that trips over it fails at boot, on a screen with no
+# way to report the error.
+spinner_images;
+
 for (i = 0; i < SPINNER_FRAMES; i++) {
     # Frame files are one-based and zero-padded to four digits.
     n = i + 1;
@@ -114,6 +119,10 @@ fsck_fade_sprite.SetOpacity(0);
 fsck_running = 0;
 fsck_dev_array;
 fsck_dev_counter = 0;
+
+# Filled by status_callback, declared here with the other globals for the same
+# reason as spinner_images above.
+status_array;
 
 # ── Password prompt ──────────────────────────────────────────────────────────
 
