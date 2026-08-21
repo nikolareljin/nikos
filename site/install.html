@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Installing NikOS</title>
 <meta name="description" content="How to install NikOS on Ubuntu 24.04: requirements, the three install modes, first boot, updating, and recovery.">
-<link rel="icon" href="assets/logo.svg">
+<link rel="icon" href="assets/menu-icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
 
 <header class="site">
   <div class="wrap">
-    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""> NikOS</a>
+    <a class="brand" href="index.html"><img src="assets/menu-icon.svg" alt=""> NikOS</a>
     <nav class="site">
       <a href="index.html">Overview</a>
       <a href="install.html" aria-current="page">Install</a>
@@ -136,7 +136,7 @@ nikos log 100</code></pre>
 
   <p>Create <code>vars/local.yml</code> to override defaults without editing tracked files:</p>
 
-<pre><code><span class="p">nikos_timezone:</span> "Europe/Belgrade"
+<pre><code><span class="p">nikos_timezone:</span> "Europe/London"
 <span class="p">nikos_desktop_flavor:</span> "xubuntu-full"
 <span class="p">nikos_remove_gnome:</span> true
 <span class="p">ollama_default_model:</span> "qwen3:8b"
@@ -190,5 +190,6 @@ nikos log 100</code></pre>
   </div>
 </footer>
 
+<script src="copy.js" defer></script>
 </body>
 </html>

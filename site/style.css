@@ -91,6 +91,53 @@ pre code { background: none; border: 0; padding: 0; color: inherit; font-size: 1
 pre .c { color: var(--dim); }
 pre .p { color: var(--frost-bright); }
 
+/* Copy button. The shell and bar are added by copy.js, so without JavaScript
+   the code block renders exactly as it did before.
+
+   The button lives in a bar above the code, not floating over it: install
+   commands scroll horizontally, and a floating button covers the end of the
+   line precisely when someone scrolls across to read it. */
+.code-block { margin: 0 0 1.4em; }
+
+.code-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  background: var(--terminal);
+  border-radius: 10px 10px 0 0;
+  padding: .45rem .5rem .1rem;
+}
+
+.code-block pre { border-radius: 0 0 10px 10px; margin: 0; }
+
+.copy-btn {
+  font-family: "Public Sans", sans-serif;
+  font-size: .78rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: .38rem .7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid rgba(216, 222, 233, .24);
+  transition: color .12s, border-color .12s, background .12s;
+}
+
+.copy-btn:hover {
+  color: var(--terminal-ink);
+  border-color: rgba(216, 222, 233, .5);
+  background: rgba(255, 255, 255, .08);
+}
+
+.copy-btn:focus-visible { outline: 2px solid var(--frost-bright); outline-offset: 2px; }
+.copy-btn.is-copied { color: var(--aurora-green); border-color: var(--aurora-green); }
+.copy-btn.is-failed { color: var(--aurora-amber); border-color: var(--aurora-amber); }
+
+@media (max-width: 620px) {
+  .copy-btn { font-size: .72rem; padding: .32rem .55rem; }
+}
+
 /* ── Layout ───────────────────────────────────────────────────────────── */
 
 .wrap { max-width: 940px; margin: 0 auto; padding: 0 1.4rem; }
@@ -124,7 +171,8 @@ header.site .wrap {
   letter-spacing: -.01em;
 }
 
-.brand img { width: 26px; height: 26px; }
+/* The whisker-menu N, drawn to stay legible small. */
+.brand img { width: 21px; height: 21px; }
 
 nav.site { display: flex; gap: 1.15rem; margin-left: auto; flex-wrap: wrap; }
 nav.site a { color: var(--ink-soft); text-decoration: none; font-size: .95rem; font-weight: 500; }
