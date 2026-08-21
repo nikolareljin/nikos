@@ -542,26 +542,50 @@ fi
 
 _require_supported_ansible
 
-# Source repo sync helpers if available, to reuse the git stash/pop logic for smoother updates if the installer is re-run
+# Source the repo sync helpers.
+#
+# The copy at NIKOS_HOME belongs to the *installed* version, which can predate
+# this installer: upgrading from 0.4.2 would otherwise load a helper with no
+# _sync_repo_to_ref in it. Each candidate is checked for the functions this
+# installer actually needs, and a stale one is replaced from the remote rather
+# than having its logic duplicated here.
 _source_repo_sync_helpers() {
-  local helpers_path=""
-  local script_dir
+  local candidate=""
+  local fresh=""
+  local remote_head=""
 
-  if [[ -f "${NIKOS_HOME}/${REPO_SYNC_HELPERS_REL}" ]]; then
-    helpers_path="${NIKOS_HOME}/${REPO_SYNC_HELPERS_REL}"
-  else
-    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-    if [[ -f "${script_dir}/${REPO_SYNC_HELPERS_REL}" ]]; then
-      helpers_path="${script_dir}/${REPO_SYNC_HELPERS_REL}"
+  for candidate in "${NIKOS_HOME}/${REPO_SYNC_HELPERS_REL}" "${SCRIPT_DIR}/${REPO_SYNC_HELPERS_REL}"; do
+    [[ -f "${candidate}" ]] || continue
+    # shellcheck source=/dev/null
+    source "${candidate}" || continue
+    if declare -F _sync_repo_to_ref >/dev/null; then
+      return 0
     fi
-  fi
+  done
 
-  if [[ -z "${helpers_path}" ]]; then
-    return 1
-  fi
+  [[ -d "${NIKOS_HOME}/.git" ]] || return 1
 
-  # shellcheck source=/dev/null
-  source "${helpers_path}"
+  echo "Installed repo sync helpers are older than this installer; refreshing them..."
+  git -C "${NIKOS_HOME}" fetch --quiet --prune --tags --force origin || return 1
+
+  # Prefer the ref actually being installed, then the newest release, then the
+  # remote's default branch.
+  for remote_head in ${REPO_REF:+"${REPO_REF}"} \
+    "$(git -C "${NIKOS_HOME}" tag --list | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)" \
+    origin/HEAD origin/main origin/master; do
+    [[ -n "${remote_head}" ]] || continue
+    git -C "${NIKOS_HOME}" rev-parse --verify --quiet "${remote_head}" >/dev/null || continue
+    fresh="$(mktemp "${TMPDIR:-/tmp}/nikos-repo-sync.XXXXXX")"
+    if git -C "${NIKOS_HOME}" show "${remote_head}:${REPO_SYNC_HELPERS_REL}" > "${fresh}" 2>/dev/null; then
+      # shellcheck source=/dev/null
+      source "${fresh}"
+      rm -f "${fresh}"
+      declare -F _sync_repo_to_ref >/dev/null && return 0
+    fi
+    rm -f "${fresh}"
+  done
+
+  return 1
 }
 
 # Check if script-helpers is present, which indicates the repo and submodules are properly staged
