@@ -1,42 +1,408 @@
-# NikOS Plymouth boot splash
-# Displays the NikOS logo centered on screen with a fade-in pulse animation.
+# NikOS boot splash.
+#
+# Plymouth runs before any icon theme, font config or toolkit exists, so every
+# element here is a pre-rendered PNG copied into this directory by the theming
+# role. They are generated from the NikOS artwork by
+# scripts/render-plymouth-assets.py.
+#
+# Layout, top to bottom, centred on the primary display:
+#
+#     logo-mono.png        the mark and wordmark
+#     spinner-NNNN.png     the "N" with a highlight running along it
+#     progress-meter.png   boot or fsck progress, drawn only when known
+#     passw-dialog.png     password entry, drawn only when prompted
+#
+# The password path matters on an encrypted disk: without it the boot sits on
+# the logo with no visible prompt while it waits for a passphrase.
 
 Window.SetBackgroundTopColor(0.05, 0.05, 0.08);
 Window.SetBackgroundBottomColor(0.02, 0.02, 0.05);
-
-logo_image = Image("nikos-logo.png");
 
 screen_x = Window.GetX();
 screen_y = Window.GetY();
 screen_width = Window.GetWidth();
 screen_height = Window.GetHeight();
 
+# ── Images ───────────────────────────────────────────────────────────────────
+
+logo_image = Image("logo-mono.png");
+progress_meter_image = Image("progress-meter.png");
+progress_fade_image = Image("progress-fade.png");
+fsck_meter_image = Image("fsck-meter.png");
+fsck_fade_image = Image("fsck-fade.png");
+passw_dialog_image = Image("passw-dialog.png");
+bullet_image = Image("bullet.png");
+
+SPINNER_FRAMES = 36;
+# One highlight pass takes SPINNER_FRAMES * SPINNER_HOLD refreshes. Plymouth
+# refreshes 50 times a second, so 2 gives a pass of about 1.4 seconds.
+SPINNER_HOLD = 2;
+
+# Declared before it is indexed, as the other arrays here are. Plymouth's
+# script engine is not documented on whether indexed assignment creates a
+# variable, and a theme that trips over it fails at boot, on a screen with no
+# way to report the error.
+spinner_images;
+
+for (i = 0; i < SPINNER_FRAMES; i++) {
+    # Frame files are one-based and zero-padded to four digits.
+    n = i + 1;
+    if (n < 10) {
+        name = "spinner-000" + n + ".png";
+    } else {
+        name = "spinner-00" + n + ".png";
+    }
+    spinner_images[i] = Image(name);
+}
+
+# ── Logo ─────────────────────────────────────────────────────────────────────
+
+# Hold the mark to at most 30% of the screen width, so it stays a splash rather
+# than filling a small panel or getting lost on a large one.
 logo_width = logo_image.GetWidth();
 logo_height = logo_image.GetHeight();
-
-# Scale logo to at most 30% of screen width while preserving aspect ratio
 max_logo_width = Math.Int(screen_width * 0.30);
 if (logo_width > max_logo_width) {
     scale = max_logo_width / logo_width;
 } else {
     scale = 1.0;
 }
-scaled_w = Math.Int(logo_width  * scale);
-scaled_h = Math.Int(logo_height * scale);
+logo_image = logo_image.Scale(Math.Int(logo_width * scale), Math.Int(logo_height * scale));
+logo_width = logo_image.GetWidth();
+logo_height = logo_image.GetHeight();
 
-logo_image = logo_image.Scale(scaled_w, scaled_h);
 logo_sprite = Sprite(logo_image);
-logo_sprite.SetPosition(screen_x + Math.Int((screen_width - logo_image.GetWidth()) / 2),
-                        screen_y + Math.Int((screen_height - logo_image.GetHeight()) / 2) - 40,
-                        10);
+logo_x = screen_x + Math.Int((screen_width - logo_width) / 2);
+logo_y = screen_y + Math.Int((screen_height - logo_height) / 2) - 40;
+logo_sprite.SetPosition(logo_x, logo_y, 10);
 logo_sprite.SetOpacity(1.0);
 
-# Subtle pulse: opacity oscillates between 0.75 and 1.0
-opacity_angle = 0;
+# Everything below the logo hangs off its lower edge.
+below_logo_y = logo_y + logo_height;
+
+# ── Spinner ──────────────────────────────────────────────────────────────────
+
+spinner_sprite = Sprite(spinner_images[0]);
+spinner_sprite.SetPosition(
+    screen_x + Math.Int((screen_width - spinner_images[0].GetWidth()) / 2),
+    below_logo_y + 30,
+    10);
+spinner_sprite.SetOpacity(1.0);
+
+spinner_index = 0;
+spinner_tick = 0;
+
+# ── Progress ─────────────────────────────────────────────────────────────────
+
+progress_x = screen_x + Math.Int((screen_width - progress_meter_image.GetWidth()) / 2);
+# Clears the spinner, which is 96px tall and starts 30px below the logo.
+progress_y = below_logo_y + 150;
+
+progress_meter_sprite = Sprite(progress_meter_image);
+progress_meter_sprite.SetPosition(progress_x, progress_y, 10);
+progress_meter_sprite.SetOpacity(0);
+
+progress_fade_sprite = Sprite(progress_fade_image.Scale(1, progress_fade_image.GetHeight()));
+progress_fade_sprite.SetPosition(progress_x, progress_y, 11);
+progress_fade_sprite.SetOpacity(0);
+
+fsck_x = screen_x + Math.Int((screen_width - fsck_meter_image.GetWidth()) / 2);
+
+fsck_meter_sprite = Sprite(fsck_meter_image);
+fsck_meter_sprite.SetPosition(fsck_x, progress_y, 10);
+fsck_meter_sprite.SetOpacity(0);
+
+fsck_fade_sprite = Sprite(fsck_fade_image.Scale(1, fsck_fade_image.GetHeight()));
+fsck_fade_sprite.SetPosition(fsck_x, progress_y, 11);
+fsck_fade_sprite.SetOpacity(0);
+
+fsck_running = 0;
+fsck_dev_array;
+fsck_dev_counter = 0;
+
+# Filled by status_callback, declared here with the other globals for the same
+# reason as spinner_images above.
+status_array;
+
+# ── Password prompt ──────────────────────────────────────────────────────────
+
+passw_dialog_sprite = Sprite(passw_dialog_image);
+passw_dialog_sprite.SetPosition(
+    screen_x + Math.Int((screen_width - passw_dialog_image.GetWidth()) / 2),
+    below_logo_y + 70,
+    10);
+passw_dialog_sprite.SetOpacity(0);
+
+passw_label_sprite = Sprite();
+passw_label_sprite.SetOpacity(0);
+
+bullets_array;
+bullets_count = 0;
+
+MAX_BULLETS = 14;
+
+# ── Messages ─────────────────────────────────────────────────────────────────
+
+message_lines = [NULL, NULL, NULL, NULL, NULL];
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+fun strlen(string) {
+    i = 0;
+    while (String(string).CharAt(i)) {
+        i++;
+    }
+    return i;
+}
+
+# Plymouth's script language has no string-to-number conversion, and progress
+# only ever arrives as a percentage, so a table lookup covers every value.
+fun atoi(str) {
+    value = -1;
+    for (i = 0; i <= 100; i++) {
+        if (i + "" == str) {
+            value = i;
+            break;
+        }
+    }
+    return value;
+}
+
+fun set_progress(meter_sprite, fade_sprite, fade_image, meter_image, fraction) {
+    if (fraction < 0) {
+        fraction = 0;
+    }
+    if (fraction > 1) {
+        fraction = 1;
+    }
+    width = Math.Int(meter_image.GetWidth() * fraction);
+    if (width < 1) {
+        width = 1;
+    }
+    meter_sprite.SetOpacity(1);
+    fade_sprite.SetOpacity(1);
+    fade_sprite.SetImage(fade_image.Scale(width, fade_image.GetHeight()));
+}
+
+# ── Refresh ──────────────────────────────────────────────────────────────────
+
 fun refresh_callback() {
-    opacity_angle += ((2 * Math.Pi) / 50) * 0.5;
-    alpha = 0.75 + ((Math.Cos(opacity_angle) + 1) / 2) * 0.25;
-    logo_sprite.SetOpacity(alpha);
+    # The prompt owns the screen while it is up: a spinner next to a password
+    # field reads as the machine still working rather than waiting on input.
+    if (passw_dialog_sprite.GetOpacity() == 1) {
+        spinner_sprite.SetOpacity(0);
+        return;
+    }
+
+    spinner_sprite.SetOpacity(1);
+
+    spinner_tick++;
+    if (spinner_tick >= SPINNER_HOLD) {
+        spinner_tick = 0;
+        spinner_index++;
+        if (spinner_index >= SPINNER_FRAMES) {
+            spinner_index = 0;
+        }
+        spinner_sprite.SetImage(spinner_images[spinner_index]);
+    }
 }
 
 Plymouth.SetRefreshFunction(refresh_callback);
+
+# ── Boot progress ────────────────────────────────────────────────────────────
+
+fun boot_progress_callback(duration, progress) {
+    # fsck owns the bar while it runs, so it is not overwritten here.
+    if (fsck_running == 1) {
+        return;
+    }
+    set_progress(progress_meter_sprite, progress_fade_sprite,
+                 progress_fade_image, progress_meter_image, progress);
+}
+
+Plymouth.SetBootProgressFunction(boot_progress_callback);
+
+# ── Password prompt ──────────────────────────────────────────────────────────
+
+fun display_password_callback(prompt, bullets) {
+    passw_dialog_sprite.SetOpacity(1);
+    passw_label_sprite.SetOpacity(1);
+
+    prompt_image = Image.Text(prompt, 0.85, 0.87, 0.91);
+    passw_label_sprite.SetImage(prompt_image);
+    passw_label_sprite.SetPosition(
+        screen_x + Math.Int((screen_width - prompt_image.GetWidth()) / 2),
+        below_logo_y + 40,
+        10);
+
+    for (i = 0; i < bullets_count; i++) {
+        bullets_array[i] = NULL;
+    }
+    bullets_count = 0;
+
+    shown = bullets;
+    if (shown > MAX_BULLETS) {
+        shown = MAX_BULLETS;
+    }
+
+    # Centre the row of bullets inside the dialog rather than left-aligning it,
+    # so a short passphrase does not sit against the left edge.
+    spacing = 18;
+    row_width = shown * spacing;
+    row_x = screen_x + Math.Int((screen_width - row_width) / 2);
+
+    for (i = 0; i < shown; i++) {
+        bullets_array[i] = Sprite(bullet_image);
+        bullets_array[i].SetPosition(
+            row_x + (i * spacing),
+            below_logo_y + 81,
+            11);
+        bullets_count++;
+    }
+}
+
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+
+fun display_normal_callback() {
+    passw_dialog_sprite.SetOpacity(0);
+    passw_label_sprite.SetOpacity(0);
+    for (i = 0; i < bullets_count; i++) {
+        bullets_array[i] = NULL;
+    }
+    bullets_count = 0;
+}
+
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+
+# ── Messages ─────────────────────────────────────────────────────────────────
+
+fun message_callback(text) {
+    if ((text == "") || !text) {
+        return 0;
+    }
+
+    # Plymouth prefixes some messages for consumers that localise them. NikOS
+    # shows them verbatim, so the prefixes are stripped.
+    if (text.SubString(0, 5) == "keys:") {
+        text = text.SubString(5, strlen(text));
+    }
+    if (text.SubString(0, 17) == "fsckd-cancel-msg:") {
+        text = text.SubString(17, strlen(text));
+    }
+
+    for (i = 4; i > 0; i--) {
+        message_lines[i] = message_lines[i - 1];
+    }
+    message_lines[0] = Sprite(Image.Text(text, 0.55, 0.59, 0.65));
+
+    distance = 1;
+    for (i = 0; i < 5; i++) {
+        if (message_lines[i] != NULL) {
+            message_lines[i].SetPosition(
+                screen_x + Math.Int((screen_width - message_lines[i].GetImage().GetWidth()) / 2),
+                screen_y + (screen_height - message_lines[i].GetImage().GetHeight()) - (20 * distance),
+                10);
+            distance++;
+        }
+    }
+}
+
+Plymouth.SetMessageFunction(message_callback);
+
+# ── Status, used for fsck progress ───────────────────────────────────────────
+
+fun status_callback(status) {
+    status_array[0] = "";
+    element_count = 0;
+
+    for (i = 0; String(status).CharAt(i) != ""; i++) {
+        character = String(status).CharAt(i);
+        if (character != ":") {
+            status_array[element_count] += character;
+        } else {
+            element_count++;
+            status_array[element_count] = "";
+        }
+    }
+
+    # Pre-systemd fsck reports one device at a time: fsck:<device>:<progress>.
+    if (status_array[0] == "fsck") {
+        if (fsck_running == 0) {
+            message_callback("Checking disks");
+            fsck_running = 1;
+            progress_meter_sprite.SetOpacity(0);
+            progress_fade_sprite.SetOpacity(0);
+        }
+
+        already_added = 0;
+        for (i = 0; i < fsck_dev_counter; i++) {
+            if (fsck_dev_array[i][0] == status_array[1]) {
+                fsck_dev_array[i][1] = status_array[2];
+                already_added = 1;
+            }
+        }
+        if (already_added == 0) {
+            fsck_dev_array[fsck_dev_counter][0] = status_array[1];
+            fsck_dev_array[fsck_dev_counter][1] = status_array[2];
+            fsck_dev_counter++;
+        }
+
+        total = 0;
+        for (i = 0; i < fsck_dev_counter; i++) {
+            total += atoi(fsck_dev_array[i][1]);
+        }
+
+        if (fsck_dev_counter > 0) {
+            set_progress(fsck_meter_sprite, fsck_fade_sprite,
+                         fsck_fade_image, fsck_meter_image,
+                         (total / fsck_dev_counter) / 100);
+        }
+
+        if (total == (100 * fsck_dev_counter)) {
+            fsck_meter_sprite.SetOpacity(0);
+            fsck_fade_sprite.SetOpacity(0);
+            fsck_running = 0;
+        }
+    }
+
+    # systemd-fsckd reports the whole run: fsckd:<devices>:<progress>:<string>.
+    # The progress field carries a decimal fraction that atoi cannot read, so
+    # the ",x" tail is cut before the lookup.
+    if (status_array[0] == "fsckd") {
+        if (fsck_running == 0) {
+            fsck_running = 1;
+            progress_meter_sprite.SetOpacity(0);
+            progress_fade_sprite.SetOpacity(0);
+        }
+
+        progress_string = status_array[2];
+        progress = atoi(progress_string.SubString(0, strlen(progress_string) - 2));
+
+        if (progress >= 0) {
+            set_progress(fsck_meter_sprite, fsck_fade_sprite,
+                         fsck_fade_image, fsck_meter_image, progress / 100);
+        }
+
+        if (progress == 100) {
+            fsck_meter_sprite.SetOpacity(0);
+            fsck_fade_sprite.SetOpacity(0);
+            fsck_running = 0;
+        }
+    }
+}
+
+Plymouth.SetUpdateStatusFunction(status_callback);
+
+# ── Shutdown ─────────────────────────────────────────────────────────────────
+
+fun quit_callback() {
+    spinner_sprite.SetOpacity(0);
+    progress_meter_sprite.SetOpacity(0);
+    progress_fade_sprite.SetOpacity(0);
+    fsck_meter_sprite.SetOpacity(0);
+    fsck_fade_sprite.SetOpacity(0);
+    passw_dialog_sprite.SetOpacity(0);
+    passw_label_sprite.SetOpacity(0);
+}
+
+Plymouth.SetQuitFunction(quit_callback);
