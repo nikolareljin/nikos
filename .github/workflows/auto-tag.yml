@@ -1,5 +1,17 @@
 name: Auto Tag Release
 
+# Tags a merged release/X.Y.Z PR and publishes the GitHub Release for it.
+#
+# The release is created here rather than by release.yml's tag-push trigger.
+# The tag job pushes its tag with GITHUB_TOKEN, and GitHub does not run
+# workflows for pushes made with that token, so `on: push: tags:` never fired:
+# 0.5.0 and 0.6.0 were tagged with no Release created, and the repository went
+# on advertising 0.4.2 as the latest. ci-helpers documents this restriction in
+# auto-tag-release.yml.
+#
+# Calling release-build.yml directly, rather than dispatching release.yml,
+# keeps the whole thing in one run and needs no `actions: write`.
+
 on:
   push:
     branches: [main]
@@ -14,3 +26,17 @@ jobs:
     with:
       runner: ubuntu-24.04
       update_production_tag: false
+
+  # version is empty when the push was not a release/* merge, which is how
+  # ordinary pushes to main skip this.
+  release:
+    needs: tag
+    if: ${{ needs.tag.outputs.version != '' }}
+    uses: nikolareljin/ci-helpers/.github/workflows/release-build.yml@production
+    permissions:
+      contents: write
+    with:
+      runner: ubuntu-24.04
+      artifact_paths: install.sh
+      release_tag: ${{ needs.tag.outputs.version }}
+      release_name: "NikOS ${{ needs.tag.outputs.version }}"
