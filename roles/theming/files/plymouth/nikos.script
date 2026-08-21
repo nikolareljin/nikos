@@ -38,7 +38,7 @@ SPINNER_FRAMES = 36;
 # refreshes 50 times a second, so 2 gives a pass of about 1.4 seconds.
 SPINNER_HOLD = 2;
 
-# Initialised explicitly, as message_lines below is. Plymouth's engine does
+# Initialised explicitly, as the message ring below is. Plymouth's engine does
 # auto-vivify: script_evaluate_hash() replaces a non-hash with a fresh hash
 # before indexing it, so a bare declaration would work. An empty set literal
 # says what the variable is for without relying on that.
@@ -117,11 +117,15 @@ fsck_fade_sprite.SetPosition(fsck_x, progress_y, 11);
 fsck_fade_sprite.SetOpacity(0);
 
 fsck_running = 0;
-fsck_dev_array = [];
-fsck_dev_counter = 0;
 
-# Filled by status_callback, initialised here with the other globals.
-status_array = [];
+# Per-device check progress, keyed by device name, with the names kept in a
+# parallel list because the script language cannot enumerate hash keys. The
+# percentage shown is the mean over every device seen so far, so a run over
+# several disks advances smoothly instead of jumping per device.
+fsck_percent = [];
+fsck_seen = [];
+fsck_names = [];
+fsck_device_count = 0;
 
 # ── Password prompt ──────────────────────────────────────────────────────────
 
@@ -140,45 +144,71 @@ bullets_count = 0;
 
 MAX_BULLETS = 14;
 
+# Upper bound on characters scanned in a status record or number.
+MAX_FIELD_SCAN = 256;
+
 # ── Messages ─────────────────────────────────────────────────────────────────
 
-message_lines = [NULL, NULL, NULL, NULL, NULL];
+MESSAGE_SLOTS = 5;
+
+# A ring: message_head is the slot the next message goes into, and the most
+# recent MESSAGE_SLOTS messages are read back from it in reverse. Nothing is
+# copied between slots when a message arrives.
+message_ring = [];
+message_head = 0;
+message_shown = 0;
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-fun strlen(string) {
-    i = 0;
-    while (String(string).CharAt(i)) {
-        i++;
-    }
-    return i;
+# Plymouth exposes String.Length natively, so there is no hand-rolled length
+# counter here; these helpers cover what it does not provide.
+
+fun digit_value(character) {
+    if (character == "0") return 0;
+    if (character == "1") return 1;
+    if (character == "2") return 2;
+    if (character == "3") return 3;
+    if (character == "4") return 4;
+    if (character == "5") return 5;
+    if (character == "6") return 6;
+    if (character == "7") return 7;
+    if (character == "8") return 8;
+    if (character == "9") return 9;
+    return -1;
 }
 
-# Plymouth's script language has no string-to-number conversion, and progress
-# only ever arrives as a percentage, so a table lookup covers every value.
-fun atoi(str) {
-    value = -1;
-    for (i = 0; i <= 100; i++) {
-        if (i + "" == str) {
-            value = i;
-            break;
-        }
+# Leading integer of a string, or -1 when it does not start with a digit.
+# Accumulates as it goes, so it is not bounded to any particular range.
+fun int_prefix(text) {
+    value = 0;
+    digits = 0;
+    for (i = 0; i < MAX_FIELD_SCAN; i++) {
+        digit = digit_value(String(text).CharAt(i));
+        if (digit < 0) break;
+        value = (value * 10) + digit;
+        digits++;
     }
+    if (digits == 0) return -1;
     return value;
 }
 
-fun int_prefix(str) {
-    digits = "";
-    for (i = 0; String(str).CharAt(i) != ""; i++) {
-        c = String(str).CharAt(i);
-        if (c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
-            c == "5" || c == "6" || c == "7" || c == "8" || c == "9") {
-            digits += c;
+# One colon-separated field of a status record, "" when the record has no such
+# field. Reading fields on demand avoids splitting the whole record into an
+# array that the callers then have to agree on the shape of.
+fun status_field(record, wanted) {
+    field = "";
+    index = 0;
+    for (i = 0; i < MAX_FIELD_SCAN; i++) {
+        character = String(record).CharAt(i);
+        if (character == "") break;
+        if (character == ":") {
+            index++;
+            if (index > wanted) break;
         } else {
-            break;
+            if (index == wanted) field += character;
         }
     }
-    return atoi(digits);
+    return field;
 }
 
 fun set_progress(meter_sprite, fade_sprite, fade_image, meter_image, fraction) {
@@ -298,32 +328,31 @@ fun message_callback(text) {
     }
 
     # Plymouth prefixes some messages for consumers that localise them. NikOS
-    # shows them verbatim, so the prefixes are stripped.
+    # shows them verbatim, so the prefixes come off.
     if (text.SubString(0, 5) == "keys:") {
-        text = text.SubString(5, strlen(text));
+        text = text.SubString(5, String(text).Length());
     }
     # systemd-fsckd sends this while checks are running, not when they end: it
     # carries "Press Ctrl+C to cancel all filesystem checks in progress", and
     # fsckd clears it afterwards. Only the prefix comes off. Touching the fsck
     # state here would hide a live meter and let boot progress draw over it.
     if (text.SubString(0, 17) == "fsckd-cancel-msg:") {
-        text = text.SubString(17, strlen(text));
+        text = text.SubString(17, String(text).Length());
     }
 
-    for (i = 4; i > 0; i--) {
-        message_lines[i] = message_lines[i - 1];
-    }
-    message_lines[0] = Sprite(Image.Text(text, 0.55, 0.59, 0.65));
+    message_ring[message_head] = Sprite(Image.Text(text, 0.55, 0.59, 0.65));
+    message_head = (message_head + 1) % MESSAGE_SLOTS;
+    if (message_shown < MESSAGE_SLOTS) message_shown++;
 
-    distance = 1;
-    for (i = 0; i < 5; i++) {
-        if (message_lines[i] != NULL) {
-            message_lines[i].SetPosition(
-                screen_x + Math.Int((screen_width - message_lines[i].GetImage().GetWidth()) / 2),
-                screen_y + (screen_height - message_lines[i].GetImage().GetHeight()) - (20 * distance),
-                10);
-            distance++;
-        }
+    # Walk back from the newest, stacking upwards from the bottom edge.
+    for (row = 0; row < message_shown; row++) {
+        slot = (message_head - 1 - row + (2 * MESSAGE_SLOTS)) % MESSAGE_SLOTS;
+        line = message_ring[slot];
+        if (line == NULL) continue;
+        line.SetPosition(
+            screen_x + Math.Int((screen_width - line.GetImage().GetWidth()) / 2),
+            screen_y + (screen_height - line.GetImage().GetHeight()) - (20 * (row + 1)),
+            10);
     }
 }
 
@@ -331,87 +360,69 @@ Plymouth.SetMessageFunction(message_callback);
 
 # ── Status, used for fsck progress ───────────────────────────────────────────
 
+# Record or update one device's progress and return the mean across every
+# device seen. Keyed by device name, so a repeated report for a device updates
+# it in place rather than being searched for.
+fun fsck_record(device, percent) {
+    if (fsck_seen[device] != 1) {
+        fsck_seen[device] = 1;
+        fsck_names[fsck_device_count] = device;
+        fsck_device_count++;
+    }
+    fsck_percent[device] = percent;
+
+    total = 0;
+    for (i = 0; i < fsck_device_count; i++) {
+        total += fsck_percent[fsck_names[i]];
+    }
+    return total / fsck_device_count;
+}
+
+fun fsck_show(percent) {
+    if (fsck_running == 0) {
+        fsck_running = 1;
+        # The two bars share a row, so the boot bar steps aside while a disk
+        # check owns it. boot_progress_callback returns early while this is set.
+        progress_meter_sprite.SetOpacity(0);
+        progress_fade_sprite.SetOpacity(0);
+        # Said once per run, not per record: fsck reports continuously.
+        message_callback("Checking disks");
+    }
+
+    set_progress(fsck_meter_sprite, fsck_fade_sprite,
+                 fsck_fade_image, fsck_meter_image, percent / 100);
+
+    if (percent >= 100) {
+        fsck_meter_sprite.SetOpacity(0);
+        fsck_fade_sprite.SetOpacity(0);
+        fsck_running = 0;
+    }
+}
+
 fun status_callback(status) {
-    status_array[0] = "";
-    element_count = 0;
+    kind = status_field(status, 0);
 
-    for (i = 0; String(status).CharAt(i) != ""; i++) {
-        character = String(status).CharAt(i);
-        if (character != ":") {
-            status_array[element_count] += character;
-        } else {
-            element_count++;
-            status_array[element_count] = "";
-        }
+    # Upstart-era mountall: fsck:<device>:<percent>, one device per record, so
+    # the bar shows the mean over the devices reported so far.
+    if (kind == "fsck") {
+        device = status_field(status, 1);
+        percent = int_prefix(status_field(status, 2));
+        if (device == "") return 0;
+        if (percent < 0) return 0;
+
+        fsck_show(fsck_record(device, percent));
+        return 0;
     }
 
-    # Pre-systemd fsck reports one device at a time: fsck:<device>:<progress>.
-    # A bare "fsck" marker carries neither field, and status_array outlives the
-    # call, so acting on it would aggregate whatever the previous status left
-    # behind. element_count is the number of separators this record had.
-    if (status_array[0] == "fsck" && element_count >= 2) {
-        if (fsck_running == 0) {
-            message_callback("Checking disks");
-            fsck_running = 1;
-            progress_meter_sprite.SetOpacity(0);
-            progress_fade_sprite.SetOpacity(0);
-        }
+    # systemd-fsckd reports the whole run in one record. Its format string is
+    # "fsckd:%d:%3.1f:%s", so field 2 is the percentage, carrying one fractional
+    # digit whose separator follows the locale; int_prefix takes the integer.
+    if (kind == "fsckd") {
+        percent = int_prefix(status_field(status, 2));
+        if (percent < 0) return 0;
 
-        already_added = 0;
-        for (i = 0; i < fsck_dev_counter; i++) {
-            if (fsck_dev_array[i][0] == status_array[1]) {
-                fsck_dev_array[i][1] = status_array[2];
-                already_added = 1;
-            }
-        }
-        if (already_added == 0) {
-            fsck_dev_array[fsck_dev_counter] = [];
-            fsck_dev_array[fsck_dev_counter][0] = status_array[1];
-            fsck_dev_array[fsck_dev_counter][1] = status_array[2];
-            fsck_dev_counter++;
-        }
-
-        total = 0;
-        for (i = 0; i < fsck_dev_counter; i++) {
-            total += atoi(fsck_dev_array[i][1]);
-        }
-
-        if (fsck_dev_counter > 0) {
-            set_progress(fsck_meter_sprite, fsck_fade_sprite,
-                         fsck_fade_image, fsck_meter_image,
-                         (total / fsck_dev_counter) / 100);
-        }
-
-        if (total == (100 * fsck_dev_counter)) {
-            fsck_meter_sprite.SetOpacity(0);
-            fsck_fade_sprite.SetOpacity(0);
-            fsck_running = 0;
-        }
-    }
-
-    # systemd-fsckd reports the whole run. Its format string is
-    # "fsckd:%d:%3.1f:%s", so field 2 is the progress percentage, carrying one
-    # fractional digit whose separator follows the locale. atoi cannot read
-    # that, so take the leading integer.
-    if (status_array[0] == "fsckd" && element_count >= 2) {
-        if (fsck_running == 0) {
-            fsck_running = 1;
-            progress_meter_sprite.SetOpacity(0);
-            progress_fade_sprite.SetOpacity(0);
-        }
-
-        progress = int_prefix(status_array[2]);
-
-        if (progress >= 0) {
-            set_progress(fsck_meter_sprite, fsck_fade_sprite,
-                         fsck_fade_image, fsck_meter_image, progress / 100);
-        }
-
-        if (progress == 100) {
-            fsck_meter_sprite.SetOpacity(0);
-            fsck_fade_sprite.SetOpacity(0);
-            fsck_running = 0;
-        }
+        fsck_show(percent);
+        return 0;
     }
 }
 
