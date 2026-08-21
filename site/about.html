@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About — Nik Reljin</title>
+<meta name="description" content="Nik Reljin builds local-first AI tooling, developer infrastructure and security tools. NikOS is one of them; here are the others.">
+<link rel="icon" href="assets/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""> NikOS</a>
+    <nav class="site">
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install</a>
+      <a href="included.html">What's included</a>
+      <a href="about.html" aria-current="page">About</a>
+      <a href="https://github.com/nikolareljin/nikos">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+  <p class="tagline">About</p>
+  <h1>Nik Reljin</h1>
+  <p class="lede">NikOS is one project out of a set that mostly points the same direction: software that
+  runs on your own machine, does one job well, and can be read start to finish.</p>
+
+  <h2>What I work on</h2>
+
+  <p>Five threads run through most of it.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h3>Local-first AI</h3>
+      <p>Inference that runs on hardware you own, without a request leaving the machine. Model
+      compression and finetuning so smaller hardware stays viable.</p>
+    </div>
+    <div class="card">
+      <h3>Developer infrastructure</h3>
+      <p>Reusable CI, shared shell libraries and repo tooling — the parts that get copy-pasted between
+      projects until someone factors them out.</p>
+    </div>
+    <div class="card">
+      <h3>Security tooling</h3>
+      <p>Finding credentials before they ship, and removing them from history once they have. Scanners
+      that produce evidence rather than adjectives.</p>
+    </div>
+    <div class="card">
+      <h3>Hardware that does something</h3>
+      <p>E-paper companions, Android display nodes, second lives for a Raspberry Pi or an old Kinect.
+      Small devices with a clear job.</p>
+    </div>
+    <div class="card">
+      <h3>Terminal-first interfaces</h3>
+      <p>TUIs and CLIs for work that does not need a browser: markdown reading, image preview, repository
+      dashboards.</p>
+    </div>
+  </div>
+
+  <h2>Things I've been building</h2>
+
+  <p>All of these are public on GitHub. Several have their own documentation sites.</p>
+
+  <h3>AI and local inference</h3>
+  <div class="repo-grid">
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/nikos">NikOS</a></h4>
+      <p>This project. An Ansible playbook that turns Ubuntu 24.04 into a local-first AI development
+      workstation.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/nikos">Repository</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/local-ai-lab">local-ai-lab</a></h4>
+      <p>A hands-on course for building local, private AI from scratch — RAG, MCP, LangChain and LangGraph,
+      in Python, Node.js and C#. No Docker required.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/local-ai-lab">Repository</a> <a href="https://nikolareljin.github.io/local-ai-lab/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/shrink-llm">shrink-llm</a></h4>
+      <p>An end-to-end toolkit for compressing large models and deploying them on phones — quantization,
+      pruning and knowledge distillation.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/shrink-llm">Repository</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/finetorch">finetorch</a></h4>
+      <p>A Rust-native LLM finetuning toolkit: LoRA and QLoRA, dataset preparation, training orchestration
+      and evaluation on a single GPU.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/finetorch">Repository</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/ai-runner">ai-runner</a></h4>
+      <p>Pick an Ollama model and run it locally from a simple interface.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/ai-runner">Repository</a></div>
+    </div>
+  </div>
+
+  <h3>Security</h3>
+  <div class="repo-grid">
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/leak-lock">Leak Lock</a></h4>
+      <p>A VS Code extension that finds secrets in git history, verifies whether the credentials are still
+      live, and rewrites them out of every branch and tag — with a script you can read before running it.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/leak-lock">Repository</a> <a href="https://nikolareljin.github.io/leak-lock/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/claude-reposec">claude-reposec</a></h4>
+      <p>Deep-scans a repository for secrets, PII, code vulnerabilities, history leaks and dependency CVEs.
+      Secrets are redacted in all output; <code>--ci</code> fails the build on high findings.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/claude-reposec">Repository</a> <a href="https://nikolareljin.github.io/claude-reposec/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/credential-lens">credential-lens</a></h4>
+      <p>Safely inspects SSH key files and compact JWTs, producing evidence-based facts for security-review
+      tooling rather than guesses.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/credential-lens">Repository</a></div>
+    </div>
+  </div>
+
+  <h3>Developer tooling</h3>
+  <div class="repo-grid">
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/ci-helpers">ci-helpers</a></h4>
+      <p>Shared GitHub Actions workflows and Bash utilities for CI/CD across many repositories — tests,
+      builds, deploys and PR gates as reusable presets. It publishes this site.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/ci-helpers">Repository</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/script-helpers">script-helpers</a></h4>
+      <p>A Bash helper library for the things every script re-implements: logging, dialogs, git and
+      directory handling. Usually vendored as a submodule.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/script-helpers">Repository</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/git-lantern">git-lantern</a></h4>
+      <p>A CLI that maps your local and GitHub repositories — branch status, ahead/behind counts, visibility
+      and release packaging in one dashboard.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/git-lantern">Repository</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/git-pulse">GitPulse</a></h4>
+      <p>A self-hosted dashboard that analyses repositories for contributor impact, repo health and code
+      quality, combining commit analytics with heuristic review signals.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/git-pulse">Repository</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/vellum">vellum</a></h4>
+      <p>A rich Markdown viewer for the terminal — syntax-highlighted code, inline images, clickable links,
+      search and navigation history in a full TUI.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/vellum">Repository</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/docforge">docforge</a></h4>
+      <p>Generates developer references and end-user guides from any codebase, on push via GitHub Actions.
+      Output tuned for NotebookLM.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/docforge">Repository</a> <a href="https://nikolareljin.github.io/docforge/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/image-view">image-view</a></h4>
+      <p>A lightweight Rust CLI for terminal image previews and directory browsing. NikOS installs it.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/image-view">Repository</a></div>
+    </div>
+  </div>
+
+  <h3>Claude Code plugins</h3>
+  <div class="repo-grid">
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/claude-plugins">claude-plugins</a></h4>
+      <p>The plugin marketplace registry the others are published through.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/claude-plugins">Repository</a> <a href="https://nikolareljin.github.io/claude-plugins/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/claude-docsmith">claude-docsmith</a></h4>
+      <p>Generates user and developer documentation from a repository, using Claude or a local Ollama model.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/claude-docsmith">Repository</a> <a href="https://nikolareljin.github.io/claude-docsmith/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/claude-reelsmith">claude-reelsmith</a></h4>
+      <p>Batch-finishes a folder of video: audio enhancement, stabilisation, logo branding and news-style
+      titles and captions.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/claude-reelsmith">Repository</a> <a href="https://nikolareljin.github.io/claude-reelsmith/">Site</a></div>
+    </div>
+  </div>
+
+  <h3>Hardware and embedded</h3>
+  <div class="repo-grid">
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/ink-mate">ink-mate</a></h4>
+      <p>A local-first ESP32-S3 e-paper desk companion with voice input, a FastAPI gateway, Ollama support
+      and safety-gated tool automation.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/ink-mate">Repository</a> <a href="https://nikolareljin.github.io/ink-mate/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/pharos">Pharos</a></h4>
+      <p>A general-purpose Android display and control node for dashboards, telemetry, alerts, media and
+      AI-assisted interfaces.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/pharos">Repository</a> <a href="https://nikolareljin.github.io/pharos/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/ShelfCast">ShelfCast</a></h4>
+      <p>Turns a Raspberry Pi into a touch-first dashboard for a Nook Simple Touch or an old Android tablet,
+      with a local web UI and kiosk mode.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/ShelfCast">Repository</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/kinect-forge">Kinect Forge</a></h4>
+      <p>Turns a Kinect v1 into a practical 3D scanner for Ubuntu — capture, reconstruct, measure and export
+      clean meshes.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/kinect-forge">Repository</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/home-monitor">Home Monitor</a></h4>
+      <p>Django, React and a local Ollama brain watching air quality, weather and sensors, with Home
+      Assistant sync.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/home-monitor">Repository</a></div>
+    </div>
+  </div>
+
+  <h3>Applications</h3>
+  <div class="repo-grid">
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/scancontext">ScanContext</a></h4>
+      <p>A free, local-first medical image and report viewer with optional AI assistance, for Windows, macOS
+      and Linux. Data stays on your computer. Not a medical device.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/scancontext">Repository</a> <a href="https://nikolareljin.github.io/scancontext/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/denial-shield">DenialShield</a></h4>
+      <p>An automated assistant for drafting rebuttals to medical claim denials.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/denial-shield">Repository</a> <a href="https://nikolareljin.github.io/denial-shield/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/orthodox-calendar">orthodox-calendar</a></h4>
+      <p>Orthodox and Oriental Orthodox saints, name-days, liturgical readings, moon phases and ICS feeds —
+      FastAPI and React across 17 traditions.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/orthodox-calendar">Repository</a> <a href="https://nikolareljin.github.io/orthodox-calendar/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/PravKal">PravKal</a></h4>
+      <p>A Free Pascal TUI port of the classic DOS Serbian Orthodox calendar — Cyrillic UI, parallel
+      Julian/Gregorian dates, Alexandrian Paschalion and a 372-feast database.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/PravKal">Repository</a> <a href="https://nikolareljin.github.io/PravKal/">Site</a></div>
+    </div>
+    <div class="repo">
+      <h4><a href="https://github.com/nikolareljin/500ad">500 A.D.</a></h4>
+      <p>A mobile-optimised turn-based Byzantine strategy game covering 500–1453 AD, with 12 historical
+      leaders and a 24,000-tile Mediterranean map.</p>
+      <div class="links"><a href="https://github.com/nikolareljin/500ad">Repository</a> <a href="https://nikolareljin.github.io/500ad/">Site</a></div>
+    </div>
+  </div>
+
+  <h2>Elsewhere</h2>
+
+  <p><a href="https://github.com/nikolareljin">github.com/nikolareljin</a> — everything above, plus the
+  smaller utilities that did not make this page.</p>
+
+  <div class="actions">
+    <a class="btn btn-primary" href="index.html">Back to NikOS</a>
+    <a class="btn btn-ghost" href="https://github.com/nikolareljin">All repositories</a>
+  </div>
+
+</div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>NikOS — Neural Innovation for Knowledge OS</span>
+    <span><a href="https://github.com/nikolareljin/nikos">github.com/nikolareljin/nikos</a> · MIT</span>
+  </div>
+</footer>
+
+</body>
+</html>

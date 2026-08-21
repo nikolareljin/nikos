@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NikOS — an AI workstation built on Ubuntu 24.04</title>
+<meta name="description" content="An Ansible playbook that turns an Ubuntu 24.04 machine into a local-first AI development workstation: Xfce desktop, Ollama, a conda AI environment, and the tooling around them.">
+<link rel="icon" href="assets/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""> NikOS</a>
+    <nav class="site">
+      <a href="index.html" aria-current="page">Overview</a>
+      <a href="install.html">Install</a>
+      <a href="included.html">What's included</a>
+      <a href="about.html">About</a>
+      <a href="https://github.com/nikolareljin/nikos">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+  <div class="hero">
+    <div class="hero-text">
+      <p class="tagline">Light system · Heavy thinking</p>
+      <h1>An AI workstation, assembled on the machine you already have.</h1>
+      <p class="lede">NikOS is an Ansible playbook that takes an Ubuntu 24.04 install and turns it into a
+      local-first AI development workstation — Xfce on top, Ollama and a conda AI environment underneath,
+      and the developer tooling that usually takes an afternoon to assemble.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="install.html">How to install</a>
+        <a class="btn btn-ghost" href="included.html">See what it installs</a>
+      </div>
+    </div>
+    <div class="hero-mark"><img src="assets/logo.svg" alt="NikOS logo"></div>
+  </div>
+
+  <div class="note">
+    <strong>It is a playbook, not an ISO.</strong> There is nothing to burn and nothing to reinstall.
+    You run it against a working Ubuntu 24.04 system and it converges that system to a defined state.
+    Run it twice and the second run changes almost nothing.
+  </div>
+
+  <h2>What it actually does to the machine</h2>
+
+  <p>Worth reading before you run it, because some of this is not cosmetic.</p>
+
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Change</th><th>What that means</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Switches the display manager</strong></td>
+        <td>GDM3 is disabled and LightDM takes over <code>display-manager.service</code>. On an Ubuntu host this
+        needs a reboot to take effect. GDM3 is disabled, not removed.</td>
+      </tr>
+      <tr>
+        <td><strong>Changes your default session</strong></td>
+        <td>The account's session is set to Xubuntu (Xfce). GNOME stays installed and selectable from the
+        greeter unless you set <code>nikos_remove_gnome: true</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Installs the Xubuntu desktop</strong></td>
+        <td><code>xubuntu-desktop-minimal</code> by default, with the Xubuntu greeter and artwork.
+        <code>xubuntu-full</code> and bare <code>xfce</code> are the other options.</td>
+      </tr>
+      <tr>
+        <td><strong>Applies a Nord theme</strong></td>
+        <td>GTK theme, icons, a generated wallpaper, GRUB theme and a Plymouth boot splash.</td>
+      </tr>
+      <tr>
+        <td><strong>Adds apt repositories</strong></td>
+        <td>GitHub CLI, Microsoft (VS Code) and NodeSource, each with its own keyring.</td>
+      </tr>
+      <tr>
+        <td><strong>Installs Ollama</strong></td>
+        <td>Runs as a user service and pulls one model by default (<code>qwen2.5-coder:7b</code>, 4.7&nbsp;GB).
+        Nothing else is downloaded unless you ask for it.</td>
+      </tr>
+      <tr>
+        <td><strong>Creates a conda environment</strong></td>
+        <td>Miniforge under <code>~/.local/share/nikos</code>-adjacent paths, with a <code>nikos-ai</code>
+        environment holding PyTorch (CPU), the LangChain and LlamaIndex stacks, and an image analysis stack.</td>
+      </tr>
+      <tr>
+        <td><strong>Clones tools into <code>~/Projects</code></strong></td>
+        <td>distrodeck, image-view, git-lantern and ai-runner are built or installed from source.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Everything it does is in the roles, in plain YAML, in the repository. If a line above matters to you,
+  you can read the task that performs it.</p>
+
+  <h2>How it works</h2>
+
+  <figure>
+    <svg viewBox="0 0 760 190" role="img" aria-labelledby="flow-title">
+      <title id="flow-title">Install flow: the installer resolves a version, syncs a checkout, then runs Ansible against the local machine</title>
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.5" color="#8FA1B3">
+        <line x1="150" y1="60" x2="196" y2="60" marker-end="url(#arrow)"/>
+        <line x1="330" y1="60" x2="376" y2="60" marker-end="url(#arrow)"/>
+        <line x1="510" y1="60" x2="556" y2="60" marker-end="url(#arrow)"/>
+        <line x1="440" y1="90" x2="440" y2="126" marker-end="url(#arrow)"/>
+      </g>
+      <g font-family="JetBrains Mono, monospace" font-size="12">
+        <g>
+          <rect x="10" y="38" width="140" height="44" rx="8" fill="#5E81AC"/>
+          <text x="80" y="58" text-anchor="middle" fill="#ECEFF4" font-size="12.5">install.sh</text>
+          <text x="80" y="73" text-anchor="middle" fill="#D8DEE9" font-size="10.5">curl or checkout</text>
+        </g>
+        <g>
+          <rect x="196" y="38" width="134" height="44" rx="8" fill="none" stroke="#8FA1B3" stroke-width="1.3"/>
+          <text x="263" y="58" text-anchor="middle" fill="currentColor" font-size="12.5">resolve version</text>
+          <text x="263" y="73" text-anchor="middle" fill="#8FA1B3" font-size="10.5">latest tag / --ref / --dev</text>
+        </g>
+        <g>
+          <rect x="376" y="38" width="134" height="44" rx="8" fill="none" stroke="#8FA1B3" stroke-width="1.3"/>
+          <text x="443" y="58" text-anchor="middle" fill="currentColor" font-size="12.5">sync checkout</text>
+          <text x="443" y="73" text-anchor="middle" fill="#8FA1B3" font-size="10.5">fetch, switch, submodules</text>
+        </g>
+        <g>
+          <rect x="556" y="38" width="194" height="44" rx="8" fill="#A3BE8C"/>
+          <text x="653" y="58" text-anchor="middle" fill="#2E3440" font-size="12.5">ansible-playbook</text>
+          <text x="653" y="73" text-anchor="middle" fill="#2E3440" font-size="10.5">27 roles against localhost</text>
+        </g>
+        <g>
+          <rect x="330" y="126" width="226" height="40" rx="8" fill="none" stroke="#8FA1B3" stroke-width="1.3" stroke-dasharray="4 3"/>
+          <text x="443" y="151" text-anchor="middle" fill="#8FA1B3" font-size="11">--dev skips the sync entirely</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption>The installer picks a version, brings a persistent checkout to it, then hands off to Ansible.
+    <code>--dev</code> runs the checkout you launched it from instead.</figcaption>
+  </figure>
+
+  <h2>What it is for</h2>
+
+  <div class="cards">
+    <div class="card">
+      <h3>Running models locally</h3>
+      <p>Ollama with model groups you opt into by capability — reasoning, coding, text, vision, embeddings.
+      The smallest reasoning model runs on a 4&nbsp;GB machine.</p>
+    </div>
+    <div class="card">
+      <h3>Building on top of them</h3>
+      <p>A conda environment with PyTorch, LangChain, LlamaIndex, Chroma, Qdrant and sentence-transformers,
+      plus llama.cpp for direct inference.</p>
+    </div>
+    <div class="card">
+      <h3>Image analysis</h3>
+      <p>OpenCV, Pillow, scikit-image, timm and Tesseract OCR in the same environment, alongside
+      vision models that read documents and images.</p>
+    </div>
+    <div class="card">
+      <h3>Ordinary development</h3>
+      <p>VS Code, the GitHub CLI, Node, Rust and Go toolchains, and optional bundles for Postgres,
+      Redis, Kubernetes tooling, Podman and more.</p>
+    </div>
+  </div>
+
+  <h2>The constraint it is built around</h2>
+
+  <p>A 250&nbsp;MB idle RAM target. Xfce rather than GNOME, no always-running inference server, and every
+  heavyweight component opt-in. Models load when you call them and unload afterwards, so a 19&nbsp;GB model
+  on disk costs nothing while you are not using it.</p>
+
+  <p>That target is also why the optional bundles exist rather than a single "install everything" default.
+  A base install pulls one model. The rest is yours to choose.</p>
+
+  <h2>Requirements</h2>
+
+  <ul class="tight">
+    <li><strong>Ubuntu 24.04 LTS</strong> or Xubuntu 24.04. Other releases are not supported.</li>
+    <li>A non-root user with <code>sudo</code>.</li>
+    <li>About 20&nbsp;GB free disk for a base install.</li>
+    <li>4&nbsp;GB RAM minimum; 8&nbsp;GB to run the default 7B model comfortably.</li>
+    <li>An internet connection during the run. Offline installs are not supported.</li>
+  </ul>
+
+  <div class="actions">
+    <a class="btn btn-primary" href="install.html">Installation guide</a>
+    <a class="btn btn-ghost" href="https://github.com/nikolareljin/nikos">Source on GitHub</a>
+  </div>
+
+</div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>NikOS — Neural Innovation for Knowledge OS</span>
+    <span><a href="https://github.com/nikolareljin/nikos">github.com/nikolareljin/nikos</a> · MIT</span>
+  </div>
+</footer>
+
+</body>
+</html>
