@@ -54,11 +54,40 @@
     creates: "{{ nikos_home }}/Projects/bitnet.cpp/build/bin/llama-cli"
   when: not ansible_check_mode
 
-- name: Install BitNet.cpp CLI
-  ansible.builtin.copy:
-    src: "{{ nikos_home }}/Projects/bitnet.cpp/build/bin/llama-cli"
-    dest: "{{ nikos_home }}/.local/bin/bitnet-cli"
-    remote_src: true
+- name: Ensure the user bin directory exists
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.local/bin"
+    state: directory
     mode: "0755"
-    force: false
+  when: not ansible_check_mode
+
+# A wrapper, not a copy of the binary. llama-cli links against the shared
+# libraries in BitNet's build tree and carries a RUNPATH with that tree's
+# absolute path baked in, so copying it out on its own produced something that
+# only worked while the build directory stayed where it was built, under the
+# home it was built with. Two parallel Projects trees on one machine is enough
+# to break that. The wrapper resolves the path at run time and points the
+# loader at the build output, which is the same shape as the distrodeck wrapper
+# in the dev-tools role.
+#
+# No force: false here. The previous version installed the bare binary, so an
+# existing bitnet-cli has to be replaced rather than kept.
+- name: Install the BitNet.cpp CLI wrapper
+  ansible.builtin.copy:
+    dest: "{{ nikos_home }}/.local/bin/bitnet-cli"
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      bitnet_bin="{{ nikos_home }}/Projects/bitnet.cpp/build/bin"
+
+      if [[ ! -x "${bitnet_bin}/llama-cli" ]]; then
+        echo "bitnet-cli: ${bitnet_bin}/llama-cli is missing." >&2
+        echo "bitnet-cli: re-run the NikOS install with the bitnet bundle to rebuild it." >&2
+        exit 127
+      fi
+
+      export LD_LIBRARY_PATH="${bitnet_bin}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+      exec "${bitnet_bin}/llama-cli" "$@"
   when: not ansible_check_mode
