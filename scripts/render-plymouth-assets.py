@@ -26,11 +26,6 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-import gi
-
-gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import GdkPixbuf  # noqa: E402
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPO_ROOT / "assets"
 OUT = ASSETS / "plymouth"
@@ -73,6 +68,14 @@ FSCK_WIDTH = 160
 
 
 def render(svg: str, path: Path, width: int, height: int) -> None:
+    # Imported here rather than at module scope so the geometry above can be
+    # imported and checked without PyGObject and the librsvg loader present.
+    # tests/test_plymouth_theme.py relies on that; CI has no GTK stack.
+    import gi
+
+    gi.require_version("GdkPixbuf", "2.0")
+    from gi.repository import GdkPixbuf
+
     loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
     loader.set_size(width, height)
     loader.write(svg.encode("utf-8"))

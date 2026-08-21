@@ -8,6 +8,7 @@ to report an error, so the cheap structural checks are worth having.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from pathlib import Path
 
@@ -143,3 +144,76 @@ def test_assets_are_transparent_and_desaturated() -> None:
             assert spread <= max_channel_spread, (
                 f"{path.name} carries a colour cast at rgb({red}, {green}, {blue})"
             )
+
+
+# ── Spinner geometry ─────────────────────────────────────────────────────────
+#
+# The generated frames are checked as pixels above. These checks go at the
+# geometry that produces them, because the defect they guard against was
+# invisible in any single frame: the wrapped part of the highlight used to be
+# emitted as a second copy of the path offset by one dash period, and a period
+# offset lands on the same pixels, so the overrun was drawn twice at the head
+# instead of once at each end and the highlight shortened as it reached the end
+# of the stroke.
+#
+# The generator imports PyGObject lazily, inside render(), so the geometry can
+# be exercised here without a GTK stack. Keep it that way: making the import
+# module-level would force this file to skip, and a guard that skips is not a
+# guard.
+
+GENERATOR = REPO_ROOT / "scripts/render-plymouth-assets.py"
+
+# stroke-dasharray="0 <start> <length> <period>"
+RUN_PATTERN = re.compile(r'stroke-dasharray="0 ([0-9.]+) ([0-9.]+) ([0-9.]+)"')
+
+
+@pytest.fixture(scope="module")
+def generator():
+    spec = importlib.util.spec_from_file_location("render_plymouth_assets", GENERATOR)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def highlight_runs(module, frame: int) -> list[tuple[float, float]]:
+    """(start, length) of each bright run the frame draws."""
+    svg = module.build_spinner_frame(frame)
+    return [(float(m.group(1)), float(m.group(2))) for m in RUN_PATTERN.finditer(svg)]
+
+
+def test_generator_imports_without_a_gtk_stack(generator) -> None:
+    assert generator.SPINNER_FRAMES == SPINNER_FRAMES
+
+
+def test_highlight_length_is_constant_across_frames(generator) -> None:
+    """A frame that draws less highlight than its neighbours reads as a stutter."""
+    totals = [
+        sum(length for _, length in highlight_runs(generator, f))
+        for f in range(SPINNER_FRAMES)
+    ]
+    assert totals[0] > 0
+    # Each run is written to the SVG at two decimals, so a wrapped frame can
+    # differ from a whole one by a hundredth. A real seam loses tens of units.
+    spread = max(totals) - min(totals)
+    assert spread <= 0.05, (
+        f"the spinner highlight changes length between frames by {spread:.2f}: "
+        f"{min(totals):.2f} to {max(totals):.2f}"
+    )
+
+
+def test_the_highlight_actually_wraps(generator) -> None:
+    """At least one frame must straddle the end of the stroke.
+
+    Without this the constant-length check above could pass on a spinner whose
+    highlight simply never reaches the end.
+    """
+    wrapping = [f for f in range(SPINNER_FRAMES) if len(highlight_runs(generator, f)) == 2]
+    assert wrapping, "no frame wraps; the highlight never reaches the end of the stroke"
+
+    for frame in wrapping:
+        runs = highlight_runs(generator, frame)
+        assert runs[0] != runs[1], (
+            f"frame {frame + 1} draws the same run twice instead of the wrapped remainder"
+        )
+        # The remainder restarts at the beginning of the stroke.
+        assert min(start for start, _ in runs) == 0.0
