@@ -9,12 +9,25 @@
 # the current task as the caption.
 #
 # Public functions:
-#   nikos_progress_supported          — true when mixedgauge rendering can run
-#   nikos_progress_plan <opts...>     — pre-count tasks and roles for a run
-#   nikos_progress_run <title> <log> <cmd...> — run a command behind the gauge
-#   nikos_progress_stream <log>       — ANSI-stripped fallback filter
+#   nikos_progress_supported
+#       true when mixedgauge rendering can run
+#   nikos_progress_plan <workdir> <ansible_cfg> <play_opts...>
+#       pre-count tasks and roles for a run
+#   nikos_progress_run <title> <log> <workdir> <ansible_cfg> <play_opts...>
+#       run ansible-playbook behind the gauge
+#   nikos_progress_stream <title> <log>
+#       fallback view: ANSI-stripped output scrolled in a progressbox
+#   nikos_progress_filter <title> <log>
+#       gauge renderer, reads plain Ansible output on stdin
+#   nikos_progress_strip_ansi
+#       stdin filter that removes escape sequences and carriage returns
 #
 # All rendering goes to /dev/tty because the command output occupies stdout.
+#
+# Losing the install log is treated the same way install.sh treats a failing
+# `tee`: fatal. A run that could not be recorded is reported as a failure
+# rather than passing silently, through NIKOS_PROGRESS_LOG_RC and the exit
+# status of nikos_progress_filter.
 
 # ── Internal state ───────────────────────────────────────────────────────────
 NIKOS_PROGRESS_ROLES=()          # ordered role names
@@ -30,6 +43,14 @@ readonly NIKOS_PROGRESS_PENDING="-0"
 
 # Tasks that run outside any role (pre_tasks/post_tasks) are grouped here.
 readonly NIKOS_PROGRESS_PLAY_ROLE="playbook"
+
+# sysexits.h EX_IOERR, returned when the install log cannot be written.
+readonly NIKOS_PROGRESS_EX_IOERR=74
+
+# Set by nikos_progress_run and nikos_progress_stream to the exit status of the
+# stage that writes the log, so the caller can report a lost log separately from
+# a failed playbook. Reset at the start of each run.
+NIKOS_PROGRESS_LOG_RC=0
 
 _nikos_progress_tty() {
   [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null
@@ -166,12 +187,19 @@ _nikos_progress_finalize() {
 nikos_progress_filter() {
   local title="$1" log="$2"
   local line inner role task current_role="" caption="Starting..."
-  local done_count=0 percent=0 recap_seen=0
+  local done_count=0 percent=0 recap_seen=0 log_rc=0
 
   _nikos_progress_draw "${title}" 0 "Preparing..." ""
 
   while IFS= read -r line; do
-    printf '%s\n' "${line}" >>"${log}"
+    # Keep draining stdin after a write failure: closing the pipe here would
+    # SIGPIPE ansible-playbook and abort the install midway. The failure is
+    # reported through this function's exit status instead.
+    # The braces keep the shell's own redirection error out of the stream too,
+    # not just printf's.
+    if (( log_rc == 0 )) && ! { printf '%s\n' "${line}" >>"${log}"; } 2>/dev/null; then
+      log_rc="${NIKOS_PROGRESS_EX_IOERR}"
+    fi
 
     case "${line}" in
       "TASK ["*|"RUNNING HANDLER ["*)
@@ -223,28 +251,47 @@ nikos_progress_filter() {
   if (( recap_seen == 0 )); then
     _nikos_progress_draw "${title}" "${percent}" "${caption}" "${current_role}"
   fi
+
+  return "${log_rc}"
 }
 
 # nikos_progress_stream <title> <log>
-# Fallback view: strip ANSI, log, and scroll the output in a programbox.
+# Fallback view: strip ANSI, log, and scroll the output in a progressbox.
+# Returns the log writer's exit status when it failed, dialog's otherwise.
 nikos_progress_stream() {
   local title="$1" log="$2"
+  local -a pipe_status=()
+
+  NIKOS_PROGRESS_LOG_RC=0
+
   nikos_progress_strip_ansi \
     | tee -a "${log}" \
     | dialog --title "${title}" \
         --progressbox "Running Ansible playbook..." \
         "${DIALOG_HEIGHT:-20}" "${DIALOG_WIDTH:-72}"
+  pipe_status=("${PIPESTATUS[@]}")
+
+  NIKOS_PROGRESS_LOG_RC="${pipe_status[1]:-0}"
+  if (( NIKOS_PROGRESS_LOG_RC != 0 )); then
+    return "${NIKOS_PROGRESS_LOG_RC}"
+  fi
+  return "${pipe_status[2]:-0}"
 }
 
 # nikos_progress_run <title> <log> <workdir> <ansible_cfg> <play_opts...>
 # Runs ansible-playbook behind the mixedgauge and returns the playbook's own
-# exit status (not dialog's, and not tee's).
+# exit status (not dialog's). A playbook that succeeded while the log could not
+# be written returns NIKOS_PROGRESS_EX_IOERR, so a lost log is never reported as
+# a clean install; NIKOS_PROGRESS_LOG_RC carries that status for the caller.
 nikos_progress_run() {
   local title="$1" log="$2" workdir="$3" ansible_cfg="$4"
   shift 4
 
-  local rc_file rc
+  local rc_file rc filter_rc
+  local -a pipe_status=()
   rc_file="$(mktemp "${TMPDIR:-/tmp}/nikos-play-rc.XXXXXX")"
+
+  NIKOS_PROGRESS_LOG_RC=0
 
   {
     if ! cd "${workdir}"; then
@@ -255,9 +302,16 @@ nikos_progress_run() {
       PYTHONUNBUFFERED=1 ansible-playbook "$@" 2>&1
     printf '%s\n' "$?" >"${rc_file}"
   } | nikos_progress_strip_ansi | nikos_progress_filter "${title}" "${log}"
+  pipe_status=("${PIPESTATUS[@]}")
 
   rc="$(cat "${rc_file}" 2>/dev/null || echo 1)"
   rm -f -- "${rc_file}"
   [[ "${rc}" =~ ^[0-9]+$ ]] || rc=1
+
+  filter_rc="${pipe_status[2]:-0}"
+  NIKOS_PROGRESS_LOG_RC="${filter_rc}"
+  if (( rc == 0 )) && (( filter_rc != 0 )); then
+    rc="${filter_rc}"
+  fi
   return "${rc}"
 }
