@@ -131,8 +131,8 @@ pre .p { color: var(--frost-bright); }
 }
 
 .copy-btn:focus-visible { outline: 2px solid var(--frost-bright); outline-offset: 2px; }
-.copy-btn.is-copied { color: var(--aurora-green); border-color: var(--aurora-green); }
-.copy-btn.is-failed { color: var(--aurora-amber); border-color: var(--aurora-amber); }
+.copy-btn[data-state="copied"] { color: var(--aurora-green); border-color: var(--aurora-green); }
+.copy-btn[data-state="failed"] { color: var(--aurora-amber); border-color: var(--aurora-amber); }
 
 @media (max-width: 620px) {
   .copy-btn { font-size: .72rem; padding: .32rem .55rem; }
