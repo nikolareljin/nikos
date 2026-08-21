@@ -354,7 +354,9 @@ _run_playbook_dialog() {
       _tee_rc="${NIKOS_PROGRESS_LOG_RC:-0}"
       # nikos_progress_run also folds that failure into its own exit status.
       # Hand it back through _tee_rc alone, so the caller prints the message
-      # that names the log instead of reporting a bare playbook failure.
+      # that names the log instead of reporting a bare playbook failure. The
+      # optional-bundle gate below tests _tee_rc as well, so masking the rc
+      # here does not let follow-on runs start on a host that lost its log.
       if (( _tee_rc != 0 )) && (( rc == _tee_rc )); then
         rc=0
       fi
@@ -1166,7 +1168,10 @@ else
   _tee_rc=${_pipe_status[1]}
 fi
 
-if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
+# _tee_rc guards the optional bundles too: once the install log is unwritable
+# the run is already in a fatal state, so there is nothing to gain from
+# starting another playbook that cannot be recorded either.
+if [[ "${_ansible_rc}" -eq 0 && "${_tee_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
   print_info "Installing selected optional bundles: ${EXPLICIT_OPTIONAL_TAGS#,}"
   OPTIONAL_PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --tags "${EXPLICIT_OPTIONAL_TAGS#,}")
   if [[ -n "${BECOME_PASSWORD_FILE:-}" ]]; then

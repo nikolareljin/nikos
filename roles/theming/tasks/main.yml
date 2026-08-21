@@ -399,8 +399,8 @@
 
 - name: Apply GTK and window manager themes live via xfconf-query
   # xfconf-query writes via D-Bus/xfconfd; changes take effect immediately in a
-  # running session. If no session is active the command fails silently - the
-  # file-level changes above ensure settings load on next login.
+  # running session. If no session is active the command fails silently, and
+  # the file-level changes above ensure the settings load on next login.
   ansible.builtin.shell: |
     set -o pipefail
     xfconf-query -c xsettings   -p /Net/ThemeName     -s "Nordic"        2>/dev/null || true
