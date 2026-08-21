@@ -157,15 +157,23 @@ nikos_vision_pip_packages:
   - pytesseract             # Python binding for the tesseract binary above
   - timm                    # pretrained vision backbones for torch
 
-llama_cpp_version: "b9151"
+# Deliberately not the newest build. llama.cpp tags several releases a day;
+# this one had a week to settle. Bump it to a tag that is a few days old rather
+# than whatever was cut this morning.
+llama_cpp_version: "b10444"
 mkcert_version: "v1.4.4"
-kubernetes_apt_version: "v1.35"
+kubernetes_apt_version: "v1.36"
 
 # Python / conda
-miniforge_version: "24.11.3-0"
+# 26.5.3-0 exists but is days old; 26.3.2-3 has been out for months.
+miniforge_version: "26.3.2-3"
 miniforge_url: "https://github.com/conda-forge/miniforge/releases/download/{{ miniforge_version }}/Miniforge3-{{ miniforge_version }}-Linux-x86_64.sh"
 nikos_conda_env: "nikos-ai"
-nikos_python_version: "3.11"
+# A conda version spec, operator included, not a bare version. A range lets
+# conda pick whichever 3.1x actually solves against the AI stack; pinning an
+# exact minor is what makes the environment unsolvable the moment one
+# dependency drops support for it. Set it to "=3.12" to pin hard.
+nikos_python_version: ">=3.11,<3.14"
 
 # VS Code extensions
 nikos_vscode_extensions:

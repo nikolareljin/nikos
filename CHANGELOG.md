@@ -86,6 +86,29 @@ All notable changes to NikOS are documented here.
   `xubuntu-artwork` depends on; NikOS keeps them installed and wins through the
   manually selected `default.plymouth` alternative instead.
 
+### Changed
+- **Pinned dependency versions moved forward**, deliberately not to the newest
+  release of each:
+
+  | | Was | Now |
+  |---|---|---|
+  | llama.cpp | `b9151` | `b10444` |
+  | Miniforge | `24.11.3-0` | `26.3.2-3` |
+  | Kubernetes apt | `v1.35` | `v1.36` |
+  | conda Python | `3.11` | `>=3.11,<3.14` |
+
+  llama.cpp cuts several releases a day and `b10549` was published the same
+  morning; `b10444` had a week to settle. Miniforge `26.5.3-0` was six days
+  old against `26.3.2-3`'s two and a half months. `mkcert` (`v1.4.4`) and the
+  Nordic theme (`v2.2.0`) are already on their latest releases and are
+  unchanged. Node stays on the 22.x LTS line and Java on 21 rather than
+  moving to Node 24 or JDK 25.
+
+  The conda Python pin becomes a range. An exact minor makes the environment
+  unsolvable the moment one dependency drops support for it, and nothing in
+  the AI stack needs a specific 3.1x. Set `nikos_python_version: "=3.12"` in
+  `vars/local.yml` to pin hard again.
+
 ### Added
 - **Ollama models grouped by capability.** `ollama_models_reasoning`,
   `_coding`, `_text`, `_vision` and `_embedding`, each with its own tag, so a
