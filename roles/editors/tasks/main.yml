@@ -48,12 +48,20 @@
     state: present
   become: true
 
+# No cache_valid_time here. The base role refreshes the apt cache at the start
+# of the play, so any window would consider the cache fresh and skip the update
+# that first fetches the repository added just above, leaving the install to
+# fail with "No package matching 'code' is available".
+- name: Refresh the apt cache for the VS Code repository
+  ansible.builtin.apt:
+    update_cache: true
+  become: true
+  when: not ansible_check_mode
+
 - name: Install VS Code
   ansible.builtin.apt:
     name: code
     state: present
-    update_cache: true
-    cache_valid_time: 3600
   become: true
   when: not ansible_check_mode
 

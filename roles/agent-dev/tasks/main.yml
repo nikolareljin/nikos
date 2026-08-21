@@ -17,11 +17,67 @@
   changed_when: false
   tags: [ai-local]
 
-- name: Install Claude Code globally via npm
+# ── Image analysis ──────────────────────────────────────────────────────────
+# OpenCV's wheels are dynamically linked; without these the import fails at
+# runtime with "libGL.so.1: cannot open shared object file" on a minimal host.
+- name: Install image analysis system libraries
   become: true
-  community.general.npm:
-    name: "@anthropic-ai/claude-code"
-    global: true
+  ansible.builtin.apt:
+    name: "{{ nikos_vision_apt_packages }}"
     state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: not ansible_check_mode
+  tags: [ai-vision]
+
+- name: Install Tesseract OCR engine
+  become: true
+  ansible.builtin.apt:
+    name:
+      - tesseract-ocr
+      - tesseract-ocr-osd
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: not ansible_check_mode
+  tags: [ai-vision]
+
+- name: Install Tesseract language data
+  become: true
+  ansible.builtin.apt:
+    name: >-
+      {{ ['tesseract-ocr-all'] if nikos_tesseract_languages == ['all']
+         else nikos_tesseract_languages | map('regex_replace', '^', 'tesseract-ocr-') | list }}
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: not ansible_check_mode
+  tags: [ai-vision]
+
+- name: Install Python image analysis libraries in nikos-ai env
+  ansible.builtin.command: >
+    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install
+    {{ nikos_vision_pip_packages | join(' ') }}
+  changed_when: false
+  tags: [ai-local, ai-vision]
+
+# Claude Code ships a standalone binary, so it needs no Node at all - which is
+# why it does not go through the npm path the other two CLIs use.
+#
+# Deliberately not become: true. The installer puts everything under $HOME and
+# refuses to run under sudo, because with sudo the binary lands in root's home
+# and the `claude` command is then missing from the user's own shell.
+- name: Download the Claude Code installer
+  ansible.builtin.get_url:
+    url: https://claude.ai/install.sh
+    dest: /tmp/claude-code-install.sh
+    mode: "0755"
+  when: not ansible_check_mode
+  tags: [ai-claude]
+
+- name: Install or upgrade Claude Code
+  ansible.builtin.command: bash /tmp/claude-code-install.sh
+  register: agent_dev_claude_install
+  changed_when: "'already' not in agent_dev_claude_install.stdout | lower"
   when: not ansible_check_mode
   tags: [ai-claude]

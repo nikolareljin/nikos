@@ -2,6 +2,234 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.5.0] — 2026-08-20
+
+### Fixed
+- **The installer could not update its own checkout** - installing a release
+  tag leaves `~/.local/share/nikos` on a detached HEAD. The next run began with
+  `git pull --ff-only` on that checkout, which has no upstream to merge, so it
+  failed with `You are not currently on a branch` and exited before reaching
+  the code that would have switched refs. Every install after a tag install
+  failed this way. The sync now fetches first, switches to the target ref, and
+  only fast-forwards when HEAD is on a branch with an upstream. The same guard
+  covers `nikos update`.
+- **`install.sh` guessed the version from its surrounding directory** - the ref
+  was inferred from whatever git checkout the script happened to sit in, so
+  `curl | bash` in a project directory could pick up an unrelated repository's
+  branch name. Version selection is now explicit.
+- **image-view was never built, silently** - the cargo version was read with
+  `regex_search('[0-9]+\\.[0-9]+\\.[0-9]+')`, and inside a folded YAML scalar
+  that backslash does not survive to the regex. The pattern never matched, the
+  version fell back to `0.0.0`, and `0.0.0` is below the 1.85 gate the build
+  requires - so the build was skipped on every run and reported as "cargo too
+  old" no matter which cargo was installed. Matching the dot with `[.]` needs
+  no escaping and cannot regress the same way.
+- **The cargo resolver returned three lines** - it used `command -v rustup
+  &>/dev/null`, and `ansible.builtin.shell` runs `/bin/sh`, which is dash on
+  Ubuntu. There `&>` means "run in the background, then redirect nothing", so
+  the probe printed the path it was meant to suppress. The multi-line result
+  was then passed to `command` as if it were one path, producing
+  `error: unexpected argument` where a version string was expected, an empty
+  version fact, and a hard failure from the `version` test. Now POSIX
+  redirection, and only the last line is used.
+- **The AI CLIs ran under the wrong Node** - the role added the NodeSource
+  repository and then installed `nodejs` with `state: present`, which does
+  nothing when a `nodejs` package is already there. Ubuntu 24.04 ships Node 18,
+  so the repository was configured and the package never moved: Gemini CLI then
+  failed with `EBADENGINE ... required: { node: '>=20' }, current: v18.19.1`.
+  Forcing the upgrade is not the fix either - the NodeSource package conflicts
+  with Ubuntu's `npm` and removes `eslint`, `webpack` and a dozen Debian
+  `node-*` packages with it. NikOS now uses the Node already on `PATH` when it
+  meets `nikos_node_min_version`, and otherwise installs nvm and a pinned Node
+  under the user's home, where the npm prefix needs no root.
+- **`npm` global installs could be blocked permanently** - npm stages an
+  upgrade by renaming the existing package aside, and an abandoned staging
+  directory from an interrupted run makes every later install fail with
+  `ENOTEMPTY`. One had been sitting in `/usr/local/lib/node_modules/@google`
+  since March. These are now cleared before the npm tasks run.
+- **The AI CLIs never upgraded** - Gemini CLI and Claude Code used
+  `state: present` and OpenClaw guarded on `creates: /usr/bin/openclaw`, so
+  each was resolved once at first install and then stayed frozen at that
+  version forever, `nikos update` included. All three now use
+  `state: latest`.
+- **`gh extension install github/gh-copilot` failed the play** - gh 2.98.0
+  promoted `copilot` to a built-in command, and `gh extension install` rejects
+  any extension whose name collides with one (`"copilot" matches the name of a
+  built-in command or alias`). Because `gh` is installed from GitHub's apt
+  repository and is not pinned, this began failing on its own. The role now
+  asks whether gh can already run `copilot` and installs the extension only
+  when it cannot, so it works either way.
+- **Stale repo sync helpers on upgrade** - the installer sourced
+  `scripts/repo-sync.sh` from `NIKOS_HOME`, which belongs to the *installed*
+  version. Upgrading from 0.4.2 would load a copy with none of the functions
+  this installer calls. Each candidate is now checked for what it must provide,
+  and a stale one is replaced from the remote.
+- **Wallpaper stayed on the Xubuntu default** - the Xubuntu session puts
+  `/etc/xdg/xdg-xubuntu` ahead of `/etc/xdg` in `XDG_CONFIG_DIRS`, so
+  `xubuntu-default-settings`' `xfce4-desktop.xml` shadowed the NikOS copy, and
+  xfdesktop seeded every connector-named backdrop
+  (`monitorHDMI-A-0`, `monitorDisplayPort-2`, ...) from its `image-path` values
+  at first login. The role's own fixups could not counter that: they edited a
+  user file that does not exist until a session has run, and called
+  `xfconf-query` at install time when no `xfconfd` is listening. NikOS now
+  repoints the Xubuntu defaults as well, and ships
+  `/usr/local/bin/nikos-apply-wallpaper` plus an `/etc/xdg/autostart` entry that
+  sets every backdrop once, inside the session, after xfdesktop has registered
+  the real monitors.
+- **Ubuntu hosts never switched to Xubuntu** - the desktop role probed a single
+  `gnome-session` package to decide whether it was migrating an Ubuntu install.
+  Ubuntu 24.04 ships `ubuntu-session`, `gnome-session-bin` and
+  `gnome-session-common` instead, so `dpkg-query` reported "not installed" and
+  the whole migration block was skipped. Detection now reads the full package
+  list through `package_facts`.
+- **Display manager handover** - the role only wrote
+  `/etc/X11/default-display-manager`, which systemd does not read.
+  `systemctl enable lightdm` cannot take the `display-manager.service` alias
+  while GDM3 owns it, so Ubuntu hosts kept booting into the GNOME greeter. The
+  role now pre-seeds the `shared/default-x-display-manager` debconf answer,
+  rewrites the `display-manager.service` symlink, disables `gdm3` without
+  removing it, and asserts the result before the play ends.
+- **Default session** - LightDM kept honouring the session recorded for an
+  existing account, dropping migrated users straight back into GNOME. The role
+  now writes `Session`/`XSession` to the AccountsService user file and ships
+  `/etc/lightdm/lightdm.conf.d/60-nikos.conf` with the seat defaults.
+- **llama.cpp install** - `unarchive` targeted `/tmp/llama-<version>` without
+  creating it first, failing with `dest must be an existing dir`. The directory
+  is created up front and the whole llama.cpp sequence now runs inside a
+  `block`/`rescue`, so a download or release-asset failure no longer aborts the
+  play and skips every role after `ai-stack`.
+- **llama.cpp archive layout** - the role expected `build/bin/llama-cli`, a path
+  that no longer exists in the b9151 release. The binaries are now located with
+  `find`, and because they carry `RUNPATH=$ORIGIN` and need `libllama.so` and
+  the `libggml*.so` set beside them, the release tree is installed whole under
+  `~/.local/lib/llama.cpp-<version>` and symlinked into `~/.local/bin`. The
+  install is keyed on the version directory, so a version bump reinstalls and a
+  rerun does not.
+- **VS Code install** - the task carried `cache_valid_time: 3600` while the
+  `base` role refreshes the apt cache at the start of the same play, so the
+  update that would first fetch the repository added moments earlier was always
+  skipped and the install failed with `No package matching 'code' is available`.
+  The cache refresh is now its own unconditional task.
+- **Plymouth theme note** - the role tried to purge `xubuntu-plymouth-theme`,
+  a package that does not exist on noble. The real themes are
+  `plymouth-theme-xubuntu-logo` and `plymouth-theme-xubuntu-text`, which
+  `xubuntu-artwork` depends on; NikOS keeps them installed and wins through the
+  manually selected `default.plymouth` alternative instead.
+
+### Changed
+- **Pinned dependency versions moved forward**, deliberately not to the newest
+  release of each:
+
+  | | Was | Now |
+  |---|---|---|
+  | llama.cpp | `b9151` | `b10444` |
+  | Miniforge | `24.11.3-0` | `26.3.2-3` |
+  | Kubernetes apt | `v1.35` | `v1.36` |
+  | conda Python | `3.11` | `>=3.11,<3.14` |
+
+  llama.cpp cuts several releases a day and `b10549` was published the same
+  morning; `b10444` had a week to settle. Miniforge `26.5.3-0` was six days
+  old against `26.3.2-3`'s two and a half months. `mkcert` (`v1.4.4`) and the
+  Nordic theme (`v2.2.0`) are already on their latest releases and are
+  unchanged. Node stays on the 22.x LTS line and Java on 21 rather than
+  moving to Node 24 or JDK 25.
+
+  The conda Python pin becomes a range. An exact minor makes the environment
+  unsolvable the moment one dependency drops support for it, and nothing in
+  the AI stack needs a specific 3.1x. Set `nikos_python_version: "=3.12"` in
+  `vars/local.yml` to pin hard again.
+
+### Changed
+- **Claude Code installs its native binary** rather than a global npm package.
+  It ships a standalone build that needs no Node at all, and its installer
+  refuses to run under sudo - with sudo the binary lands in root's home and the
+  `claude` command is missing from the user's shell.
+
+### Added
+- **Ollama models grouped by capability.** `ollama_models_reasoning`,
+  `_coding`, `_text`, `_vision` and `_embedding`, each with its own tag, so a
+  laptop can take one capability without pulling the rest:
+  `nikos add ollama-vision` (~13 GB) instead of `nikos add ollama-models`
+  (~93 GB). Every group lists its smallest usable model first;
+  `deepseek-r1:1.5b` runs on a 4 GB machine.
+- **Model refresh.** `codellama:7b`, `deepseek-coder:6.7b`, `gemma2:9b` and
+  `llava:7b` were all two years old and are replaced rather than kept:
+  Code Llama has no successor at all, since Meta discontinued the line, so its
+  role passes to `qwen2.5-coder:14b` and `deepseek-coder-v2:16b`;
+  `gemma2:9b` -> `gemma3:12b`; `llava:7b` -> `qwen2.5vl:7b`,
+  `minicpm-v:8b` and `granite3.2-vision:2b`. New additions cover reasoning
+  (`deepseek-r1`, `qwen3`), text generation (`granite4`, `llama3.1`,
+  `mistral`) and current embeddings (`embeddinggemma`,
+  `qwen3-embedding:0.6b`, replacing the two-year-old `nomic-embed-text`).
+  Nothing on the list is now older than about a year. The default stays
+  `qwen2.5-coder:7b`, because `qwen3-coder` publishes no tag below `30b`
+  (19 GB).
+- **Image analysis stack** (`ai-vision` tag) - `opencv-contrib-python`,
+  `pillow`, `scikit-image`, `imageio`, `pytesseract` and `timm` in the
+  `nikos-ai` environment, with the shared libraries OpenCV's wheels link
+  against (`libgl1`, `libglib2.0-0t64`, `libsm6`, `libxext6`, `ffmpeg`) so
+  `import cv2` also works on a minimal host.
+- **Tesseract OCR** with `osd` and nine language packs by default, selectable
+  through `nikos_tesseract_languages`; set it to `["all"]` for all 160+.
+- **Version selection.** With no options the installer resolves and installs the
+  newest release tag (`X.Y.Z`; pre-release and floating tags are ignored).
+  `--ref <branch-or-tag>` pins a specific ref, and `NIKOS_REPO_REF` is
+  equivalent. `install.sh --help` documents both.
+- **`--dev` mode.** Runs the checkout the script lives in, exactly as it stands,
+  including uncommitted changes. Nothing is cloned, fetched, pulled or stashed
+  and `~/.local/share/nikos` is left untouched, so testing a branch cannot
+  damage a working install. Refuses to run outside a NikOS checkout, and cannot
+  be combined with `--ref`.
+- **`nikos update --ref <branch-or-tag>`.** Bare `nikos update` now advances a
+  release install to the newest release and keeps a branch install on its
+  branch, so an update never downgrades.
+- `scripts/repo-sync.sh` is covered by the `shellcheck` gate and by 36 new tests
+  in `tests/test_version_select.py`, including a regression test that reproduces
+  the detached-HEAD failure.
+- **Xubuntu desktop packages** - `xubuntu-desktop-minimal`,
+  `xubuntu-default-settings` and `xubuntu-artwork` replace the bare `xfce4`
+  install, which is what provides the Xubuntu session and the Xubuntu login
+  form. `nikos_desktop_flavor` selects between `xubuntu-minimal` (default),
+  `xubuntu-full` and `xfce`.
+- **Desktop migration variables** - `nikos_remove_gnome` (default `false`,
+  GNOME stays selectable from the greeter), `nikos_disable_gdm`,
+  `nikos_default_session` and `nikos_gnome_packages`.
+- **Installer progress UI** - `scripts/nikos-progress.sh` renders the playbook
+  as a `dialog --mixedgauge`: one row per role with Succeeded/Failed/In
+  Progress, an overall percentage counted against
+  `ansible-playbook --list-tasks`, and the current task as the caption.
+- **NikOS menu button icon** - `assets/menu-icon.svg`, installed as
+  `nikos-menu` under `/usr/share/icons/hicolor/scalable/apps`. The Whisker Menu
+  button kept the Xubuntu mouse (`xubuntu-logo-menu`) because
+  `/etc/xdg/xdg-xubuntu/xfce4/whiskermenu/defaults.rc` shadows the NikOS
+  defaults the same way the wallpaper file did; that copy and any existing
+  per-user `whiskermenu-*.rc` are now pointed at the NikOS icon. The NikOS
+  defaults themselves named `/usr/share/nikos/wallpaper.png` as the button
+  icon, which is a 1920x1080 wallpaper, not an icon.
+- **Portrait wallpaper** - `assets/wallpaper-vertical.svg`, exported to
+  `/usr/share/nikos/wallpaper-vertical.png`. Monitors in vertical orientation
+  get the portrait cut; every other monitor gets the landscape one.
+- **Backdrop colour matches the artwork** - backdrops are Scaled rather than
+  Zoomed, so nothing is cropped, and `color-style`/`rgba1` are set to `#2e3440`,
+  the flat base colour of both wallpapers, so the area an aspect ratio does not
+  cover reads as part of the image.
+- **Wallpaper follows monitor changes** - the marker file records the monitor
+  layout the wallpaper was last applied to. Rotating, adding or removing a
+  monitor re-applies at the next login, but only over backdrops still holding a
+  NikOS wallpaper, so a wallpaper the user picked themselves is left alone.
+
+### Changed
+- **Installer no longer runs the playbook under a pty** - `script -qefc` forced
+  Ansible into colour mode and the escape sequences were rendered as literal
+  text by `dialog --progressbox`. The playbook now runs with colour disabled and
+  every stream is ANSI-stripped before it reaches dialog or the log.
+- **Log ANSI stripping** - the strip expressions run under `LC_ALL=C`; under a
+  UTF-8 locale the `[ -/]` and `[@-~]` ranges follow collation order and stop
+  matching escape sequences.
+- **Completion message** - the installer now says whether a reboot or a log-out
+  is needed, based on the session that is currently running.
+- Version bumped `0.4.2` -> `0.5.0`.
+
 ## [0.4.2] — 2026-05-22
 
 ### Fixed

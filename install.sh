@@ -3,11 +3,18 @@ set -euo pipefail
 
 [[ "${EUID}" -eq 0 ]] && { echo "ERROR: Do not run NikOS installer as root. Use a regular user account." >&2; exit 1; }
 
+# Options:
+# --dev            Run the checkout this script lives in, exactly as it stands,
+#                  including uncommitted changes. No clone, fetch or pull.
+# --ref <ref>      Install a specific branch or tag instead of the latest release.
+# --help           Show usage and exit.
+#
 # Environment variables:
 # NIKOS_REPO_URL: Custom Git repository URL to clone NikOS from
 #                  (default: https://github.com/nikolareljin/nikos)
 # NIKOS_REPO_REF: Branch/tag to check out in NIKOS_HOME before running the playbook
-#                 (default: inferred from the installer checkout when possible)
+#                 (default: the latest release tag; same as --ref)
+# NIKOS_DEV: Set to 1 for --dev
 # NIKOS_HOME: Base installation directory for NikOS
 #             (default: ${HOME}/.local/share/nikos)
 # NIKOS_USE_DIALOG: Use dialog-based prompts when available; set to 0 for plain mode
@@ -25,13 +32,80 @@ HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
 NIKOS_LOG_DIR="${NIKOS_CONFIG_DIR}/logs"
 INSTALL_LOG="${NIKOS_LOG_DIR}/install-$(date +%Y%m%d-%H%M%S).log"
 REPO_SYNC_HELPERS_REL="scripts/repo-sync.sh"
+PROGRESS_LIB_REL="scripts/nikos-progress.sh"
 USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
+# Read by _migrate_local_vars in scripts/repo-sync.sh, which is sourced at runtime.
+# shellcheck disable=SC2034
 MAIN_VARS_REL="vars/main.yml"
 LOCAL_VARS_REL="vars/local.yml"
 SKIP_REPO_SYNC="${NIKOS_SKIP_REPO_SYNC:-0}"
 ANSIBLE_REQUIREMENTS_REL="requirements.yml"
 MIN_ANSIBLE_VERSION="2.15.0"
 BECOME_PASSWORD_FILE=""
+DEV_MODE="${NIKOS_DEV:-0}"
+
+_usage() {
+  cat <<EOF
+NikOS installer
+
+Usage: install.sh [options]
+
+Options:
+  --dev            Run the checkout this script lives in, exactly as it stands,
+                   including uncommitted changes. Nothing is cloned, fetched or
+                   pulled, and ${HOME}/.local/share/nikos is left untouched.
+  --ref <ref>      Install a specific branch or tag instead of the latest release.
+  --help, -h       Show this message and exit.
+
+With no options, the latest release tag is installed.
+EOF
+}
+
+# Argument handling runs before any log, network or package work, so a bad
+# invocation costs nothing.
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dev)
+      DEV_MODE=1
+      shift
+      ;;
+    --ref)
+      [[ $# -ge 2 ]] || { echo "ERROR: --ref needs a branch or tag." >&2; exit 2; }
+      REPO_REF="$2"
+      shift 2
+      ;;
+    --ref=*)
+      REPO_REF="${1#--ref=}"
+      shift
+      ;;
+    --help | -h)
+      _usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: Unknown option '$1'." >&2
+      _usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ "${DEV_MODE}" == "1" ]]; then
+  if [[ -n "${REPO_REF}" ]]; then
+    echo "ERROR: --dev runs the current checkout, so it cannot be combined with --ref or NIKOS_REPO_REF." >&2
+    exit 2
+  fi
+  if [[ ! -f "${SCRIPT_DIR}/site.yml" ]]; then
+    echo "ERROR: --dev runs the checkout this script lives in, but ${SCRIPT_DIR} has no site.yml." >&2
+    echo "Run it from a NikOS checkout, or drop --dev to install the latest release." >&2
+    exit 2
+  fi
+  # Everything downstream keys off NIKOS_HOME, so pointing it at the checkout
+  # is the whole of dev mode.
+  NIKOS_HOME="${SCRIPT_DIR}"
+  HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
+  SKIP_REPO_SYNC=1
+fi
 
 # Returns 0 if dialog is enabled, the binary is present, and stdin/stdout are connected to a TTY.
 _can_use_dialog() {
@@ -67,9 +141,24 @@ _cleanup_install() {
   _restore_terminal_cursor
 }
 
-# Strip ANSI escape codes from the log after a tee'd run
+# Strip ANSI escape codes from a stream, for the fallback progress view.
+_strip_ansi_stream() {
+  LC_ALL=C sed -u \
+    -e 's|\x1b\][^\x07]*\x07||g' \
+    -e 's|\x1b\[[0-9;:<=>?]*[ -/]*[@-~]||g' \
+    -e 's|\x1b[()][A-Za-z0-9]||g' \
+    -e 's|\r$||'
+}
+
+# Strip ANSI escape codes from the log after a tee'd run.
+# LC_ALL=C keeps the [ -/] and [@-~] ranges byte-ordered; under a UTF-8 locale
+# they follow collation order and silently stop matching.
 _strip_ansi_from_log() {
-  sed -i 's/\x1b\[[0-9;:]*[a-zA-Z]//g' "${INSTALL_LOG}" 2>/dev/null || true
+  LC_ALL=C sed -i \
+    -e 's|\x1b\][^\x07]*\x07||g' \
+    -e 's|\x1b\[[0-9;:<=>?]*[ -/]*[@-~]||g' \
+    -e 's|\x1b[()][A-Za-z0-9]||g' \
+    "${INSTALL_LOG}" 2>/dev/null || true
 }
 
 _install_bootstrap_packages() {
@@ -109,65 +198,6 @@ _is_supported_ubuntu_system() {
   version_id="$(_os_release_value VERSION_ID || true)"
 
   [[ "${os_id}" == "ubuntu" && "${version_id}" == "24.04" ]]
-}
-
-_infer_repo_ref() {
-  local branch=""
-  local tag=""
-
-  if [[ -n "${REPO_REF}" ]]; then
-    printf '%s\n' "${REPO_REF}"
-    return 0
-  fi
-
-  if git -C "${SCRIPT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    branch="$(git -C "${SCRIPT_DIR}" branch --show-current 2>/dev/null || true)"
-    case "${branch}" in
-      ""|main|master)
-        ;;
-      *)
-        printf '%s\n' "${branch}"
-        return 0
-        ;;
-    esac
-    tag="$(git -C "${SCRIPT_DIR}" describe --tags --exact-match 2>/dev/null || true)"
-    if [[ -n "${tag}" ]]; then
-      printf '%s\n' "${tag}"
-    fi
-  fi
-
-  return 0
-}
-
-_checkout_repo_ref() {
-  local target_ref="$1"
-  local current_ref=""
-
-  [[ -z "${target_ref}" ]] && return 0
-
-  current_ref="$(git -C "${NIKOS_HOME}" branch --show-current 2>/dev/null || true)"
-  if [[ "${current_ref}" == "${target_ref}" ]]; then
-    return 0
-  fi
-
-  echo "Switching NikOS repo to ${target_ref}..."
-  _logfile "Switching repo at ${NIKOS_HOME} to ${target_ref}"
-  if git -C "${NIKOS_HOME}" show-ref --verify --quiet "refs/heads/${target_ref}"; then
-    git -C "${NIKOS_HOME}" switch "${target_ref}"
-  elif git -C "${NIKOS_HOME}" show-ref --verify --quiet "refs/remotes/origin/${target_ref}"; then
-    git -C "${NIKOS_HOME}" switch --track "origin/${target_ref}"
-  elif git -C "${NIKOS_HOME}" show-ref --verify --quiet "refs/tags/${target_ref}"; then
-    git -C "${NIKOS_HOME}" switch --detach "${target_ref}"
-  else
-    echo "ERROR: Requested NikOS ref '${target_ref}' was not found in ${NIKOS_HOME}." >&2
-    echo "Set NIKOS_REPO_REF to an existing branch/tag, or unset it to use the checkout's current branch." >&2
-    return 2
-  fi
-
-  if [[ "$(git -C "${NIKOS_HOME}" branch --show-current 2>/dev/null || true)" ]]; then
-    git -C "${NIKOS_HOME}" pull --ff-only
-  fi
-  git -C "${NIKOS_HOME}" submodule update --init --recursive
 }
 
 _ansible_playbook_version() {
@@ -296,6 +326,76 @@ _collect_become_password_dialog() {
   printf '%s\n' "${pw}"
 }
 
+# What the user has to do to land in the Xubuntu session. Switching the
+# display manager only takes effect once the current graphical session ends,
+# and a session started under GDM has to go all the way through a reboot.
+_session_next_step() {
+  local current="${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-unknown}}"
+  case "${current,,}" in
+    *xfce*|*xubuntu*)
+      echo "Log out and back in to pick up the NikOS Xubuntu session."
+      ;;
+    *)
+      echo "Reboot to finish switching to LightDM and the Xubuntu session (currently running ${current})."
+      ;;
+  esac
+}
+
+# Run ansible-playbook behind the dialog UI.
+#
+# Prefers the mixedgauge view from scripts/nikos-progress.sh: one row per role,
+# an overall percentage and the current task as the caption. Falls back to an
+# ANSI-stripped scrolling box when the library, dialog or the task list is
+# unavailable. Returns the playbook's own exit status.
+_run_playbook_dialog() {
+  local title="$1"
+  shift
+  local -a opts=("$@")
+  local -a pipe_status=()
+  local rc=0
+
+  _dialog_rc=0
+  _tee_rc=0
+
+  if [[ "${_PROGRESS_LIB_LOADED}" == "true" ]] && nikos_progress_supported; then
+    dialog_init
+    if nikos_progress_plan "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg" "${opts[@]}"; then
+      nikos_progress_run "${title}" "${INSTALL_LOG}" \
+        "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg" "${opts[@]}"
+      rc=$?
+      # Same treatment as a failing `tee` in the fallback path below: a run
+      # whose log could not be written is reported, not silently accepted.
+      _tee_rc="${NIKOS_PROGRESS_LOG_RC:-0}"
+      # nikos_progress_run also folds that failure into its own exit status.
+      # Hand it back through _tee_rc alone, so the caller prints the message
+      # that names the log instead of reporting a bare playbook failure. The
+      # optional-bundle gate below tests _tee_rc as well, so masking the rc
+      # here does not let follow-on runs start on a host that lost its log.
+      if (( _tee_rc != 0 )) && (( rc == _tee_rc )); then
+        rc=0
+      fi
+      _restore_terminal_cursor
+      return "${rc}"
+    fi
+    _safe_logfile "[WARNING] could not enumerate playbook tasks; using the plain progress view"
+  fi
+
+  (
+    cd "${NIKOS_HOME}" || exit 127
+    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
+      PYTHONUNBUFFERED=1 ansible-playbook "${opts[@]}"
+  ) 2>&1 \
+    | _strip_ansi_stream \
+    | tee -a "${INSTALL_LOG}" \
+    | dialog --title "${title}" \
+        --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
+  pipe_status=("${PIPESTATUS[@]}")
+  _restore_terminal_cursor
+  _tee_rc=${pipe_status[2]:-0}
+  _dialog_rc=${pipe_status[3]:-0}
+  return "${pipe_status[0]}"
+}
+
 # Parse Ansible PLAY RECAP and print a summary to screen + log
 _install_summary() {
   local rc="${1:-0}"
@@ -352,11 +452,13 @@ _install_summary() {
   Unreachable:   ${unreachable}"
     _dlg_body+="
 
+$(_session_next_step)
+
   Full log: ${INSTALL_LOG}"
     if [[ "${rc}" -eq 0 ]]; then
-      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 14 72 || true
+      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 17 76 || true
     else
-      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 14 72 || true
+      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 17 76 || true
     fi
   fi
 }
@@ -366,10 +468,18 @@ ln -sf "${INSTALL_LOG}" "${NIKOS_LOG_DIR}/install-latest.log"
 trap '_cleanup_install' EXIT
 trap '_cleanup_install; exit 130' INT
 trap '_cleanup_install; exit 143' TERM
-TARGET_REPO_REF="$(_infer_repo_ref)"
+# Resolved once the repo sync helpers are available: an explicit ref wins,
+# otherwise the newest release tag. Empty in dev mode.
+TARGET_REPO_REF="${REPO_REF}"
 _logfile "=== NikOS ${NIKOS_VERSION} install started ==="
 _logfile "User: $(id -un)   Host: $(hostname -s)"
-[[ -n "${TARGET_REPO_REF}" ]] && _logfile "Target repo ref: ${TARGET_REPO_REF}"
+if [[ "${DEV_MODE}" == "1" ]]; then
+  _logfile "Mode: dev (running ${NIKOS_HOME} in place, no repo sync)"
+elif [[ -n "${TARGET_REPO_REF}" ]]; then
+  _logfile "Mode: pinned ref ${TARGET_REPO_REF}"
+else
+  _logfile "Mode: latest release tag"
+fi
 
 if _can_use_dialog; then
   if ! dialog --title "NikOS ${NIKOS_VERSION}" \
@@ -432,26 +542,50 @@ fi
 
 _require_supported_ansible
 
-# Source repo sync helpers if available, to reuse the git stash/pop logic for smoother updates if the installer is re-run
+# Source the repo sync helpers.
+#
+# The copy at NIKOS_HOME belongs to the *installed* version, which can predate
+# this installer: upgrading from 0.4.2 would otherwise load a helper with no
+# _sync_repo_to_ref in it. Each candidate is checked for the functions this
+# installer actually needs, and a stale one is replaced from the remote rather
+# than having its logic duplicated here.
 _source_repo_sync_helpers() {
-  local helpers_path=""
-  local script_dir
+  local candidate=""
+  local fresh=""
+  local remote_head=""
 
-  if [[ -f "${NIKOS_HOME}/${REPO_SYNC_HELPERS_REL}" ]]; then
-    helpers_path="${NIKOS_HOME}/${REPO_SYNC_HELPERS_REL}"
-  else
-    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-    if [[ -f "${script_dir}/${REPO_SYNC_HELPERS_REL}" ]]; then
-      helpers_path="${script_dir}/${REPO_SYNC_HELPERS_REL}"
+  for candidate in "${NIKOS_HOME}/${REPO_SYNC_HELPERS_REL}" "${SCRIPT_DIR}/${REPO_SYNC_HELPERS_REL}"; do
+    [[ -f "${candidate}" ]] || continue
+    # shellcheck source=/dev/null
+    source "${candidate}" || continue
+    if declare -F _sync_repo_to_ref >/dev/null; then
+      return 0
     fi
-  fi
+  done
 
-  if [[ -z "${helpers_path}" ]]; then
-    return 1
-  fi
+  [[ -d "${NIKOS_HOME}/.git" ]] || return 1
 
-  # shellcheck source=/dev/null
-  source "${helpers_path}"
+  echo "Installed repo sync helpers are older than this installer; refreshing them..."
+  git -C "${NIKOS_HOME}" fetch --quiet --prune --tags --force origin || return 1
+
+  # Prefer the ref actually being installed, then the newest release, then the
+  # remote's default branch.
+  for remote_head in ${REPO_REF:+"${REPO_REF}"} \
+    "$(git -C "${NIKOS_HOME}" tag --list | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)" \
+    origin/HEAD origin/main origin/master; do
+    [[ -n "${remote_head}" ]] || continue
+    git -C "${NIKOS_HOME}" rev-parse --verify --quiet "${remote_head}" >/dev/null || continue
+    fresh="$(mktemp "${TMPDIR:-/tmp}/nikos-repo-sync.XXXXXX")"
+    if git -C "${NIKOS_HOME}" show "${remote_head}:${REPO_SYNC_HELPERS_REL}" > "${fresh}" 2>/dev/null; then
+      # shellcheck source=/dev/null
+      source "${fresh}"
+      rm -f "${fresh}"
+      declare -F _sync_repo_to_ref >/dev/null && return 0
+    fi
+    rm -f "${fresh}"
+  done
+
+  return 1
 }
 
 # Check if script-helpers is present, which indicates the repo and submodules are properly staged
@@ -501,18 +635,6 @@ _ensure_ansible_collections() {
     echo "Installing required Ansible collections..."
     ansible-galaxy collection install -r "${requirements_path}"
   fi
-}
-
-_print_bootstrap_stash_recovery() {
-  local stash_ref="$1"
-
-  [[ -z "${stash_ref}" ]] && return 0
-
-  echo "Your local changes were preserved in ${stash_ref}." >&2
-  echo "Recover them with:" >&2
-  echo "  git -C ${NIKOS_HOME} stash apply ${stash_ref}" >&2
-  echo "or:" >&2
-  echo "  git -C ${NIKOS_HOME} stash pop ${stash_ref}" >&2
 }
 
 _persist_skip_tags() {
@@ -647,56 +769,6 @@ _select_timezone_plain() {
   esac
 }
 
-# Pull repo updates with stashing if needed, for smoother experience when re-running the installer
-_pull_repo_updates_bootstrap() {
-  local stash_ref=""
-
-  if [[ -f "${NIKOS_HOME}/${LOCAL_VARS_REL}" ]]; then
-    :
-  elif ! git -C "${NIKOS_HOME}" diff --quiet -- "${MAIN_VARS_REL}" || \
-       ! git -C "${NIKOS_HOME}" diff --cached --quiet -- "${MAIN_VARS_REL}"; then
-    echo "Migrating local vars/main.yml customizations to vars/local.yml..."
-    cp "${NIKOS_HOME}/${MAIN_VARS_REL}" "${NIKOS_HOME}/${LOCAL_VARS_REL}"
-    git -C "${NIKOS_HOME}" restore --staged --worktree --source=HEAD -- "${MAIN_VARS_REL}"
-  fi
-
-  if ! git -C "${NIKOS_HOME}" diff --quiet || \
-     ! git -C "${NIKOS_HOME}" diff --cached --quiet || \
-     [[ -n "$(git -C "${NIKOS_HOME}" ls-files --others --exclude-standard)" ]]; then
-    echo "Temporarily stashing local changes before pulling updates..."
-    if ! git -C "${NIKOS_HOME}" stash push --include-untracked --message "nikos-install-autostash" >/dev/null; then
-      echo "ERROR: Failed to stash local changes in ${NIKOS_HOME} before pulling updates." >&2
-      echo "This can happen because of permission problems, an index.lock/git state issue, or another repository error." >&2
-      echo "Review the git output above, resolve the issue in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
-      exit 2
-    fi
-    stash_ref="stash@{0}"
-  fi
-
-  if ! git -C "${NIKOS_HOME}" pull --ff-only; then
-    echo "ERROR: Failed to pull updates for ${NIKOS_HOME}." >&2
-    echo "This can happen because of a non-fast-forward branch state, network/authentication issues, or a repository problem." >&2
-    _print_bootstrap_stash_recovery "${stash_ref}"
-    echo "Review the git output above, resolve the issue in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
-    exit 2
-  fi
-
-  if ! git -C "${NIKOS_HOME}" submodule update --init --recursive; then
-    echo "ERROR: Failed to update NikOS submodules in ${NIKOS_HOME}." >&2
-    _print_bootstrap_stash_recovery "${stash_ref}"
-    echo "Review the git output above, verify network access and repository state, then rerun the installer or 'nikos update'." >&2
-    exit 3
-  fi
-
-  if [[ -n "${stash_ref}" ]]; then
-    echo "Re-applying local changes..."
-    if ! git -C "${NIKOS_HOME}" stash pop --index "${stash_ref}" >/dev/null; then
-      echo "ERROR: Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'." >&2
-      exit 1
-    fi
-  fi
-}
-
 # Clone (or update) the repo with submodules to a persistent location
 mkdir -p "$(dirname "${NIKOS_HOME}")"
 if [[ "${SKIP_REPO_SYNC}" == "1" ]]; then
@@ -714,69 +786,10 @@ else
     fi
   fi
 
-  if [[ -d "${NIKOS_HOME}/.git" ]]; then
-    if _can_use_dialog; then
-      dialog --title "NikOS ${NIKOS_VERSION}" \
-        --infobox "Updating NikOS repo at ${NIKOS_HOME}..." 5 72 || true
-    else
-      echo "Updating NikOS repo at ${NIKOS_HOME}..."
-    fi
-    _logfile "Updating repo at ${NIKOS_HOME}"
-    if _source_repo_sync_helpers; then
-      update_rc=0
-      if _can_use_dialog; then
-        _pull_repo_updates "nikos-install-autostash" >> "${INSTALL_LOG}" 2>&1 || update_rc=$?
-      else
-        _pull_repo_updates "nikos-install-autostash" || update_rc=$?
-      fi
-      if [[ "${update_rc}" -eq 0 ]]; then
-        :
-      else
-        update_message=""
-        case "${update_rc}" in
-          1)
-            update_message="Updates were pulled, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'."
-            ;;
-          2)
-            update_message="Failed to pull updates for ${NIKOS_HOME}. Review the git output, resolve the issue, then rerun the installer or 'nikos update'."
-            ;;
-          3)
-            update_message="Failed to update NikOS submodules in ${NIKOS_HOME}. Review the git output, resolve the issue, then rerun the installer or 'nikos update'."
-            ;;
-          *)
-            update_message="Failed to update NikOS repo at ${NIKOS_HOME}. Review the git output, then rerun the installer or 'nikos update'."
-            ;;
-        esac
-        if _can_use_dialog; then
-          _show_logged_command_failure "${update_message}" "${update_rc}"
-        else
-          echo "ERROR: ${update_message}" >&2
-        fi
-        exit "${update_rc}"
-      fi
-    else
-      if _can_use_dialog; then
-        bootstrap_update_rc=0
-        _pull_repo_updates_bootstrap >> "${INSTALL_LOG}" 2>&1 || bootstrap_update_rc=$?
-        if [[ "${bootstrap_update_rc}" -ne 0 ]]; then
-          _show_logged_command_failure "Failed to update NikOS repository during bootstrap fallback." "${bootstrap_update_rc}"
-          exit "${bootstrap_update_rc}"
-        fi
-      else
-        _pull_repo_updates_bootstrap
-      fi
-    fi
-    checkout_rc=0
-    if _can_use_dialog; then
-      _checkout_repo_ref "${TARGET_REPO_REF}" >> "${INSTALL_LOG}" 2>&1 || checkout_rc=$?
-      if [[ "${checkout_rc}" -ne 0 ]]; then
-        _show_logged_command_failure "Failed to switch NikOS repository to ${TARGET_REPO_REF}." "${checkout_rc}"
-        exit "${checkout_rc}"
-      fi
-    else
-      _checkout_repo_ref "${TARGET_REPO_REF}"
-    fi
-  else
+  # A fresh install clones the default branch first. Both the repo sync helpers
+  # and the tag list live inside the clone, so the release to install cannot be
+  # resolved until it exists.
+  if [[ ! -d "${NIKOS_HOME}/.git" ]]; then
     if _can_use_dialog; then
       dialog --title "NikOS ${NIKOS_VERSION}" \
         --infobox "Cloning NikOS repo to ${NIKOS_HOME}..." 5 72 || true
@@ -784,10 +797,8 @@ else
       echo "Cloning NikOS repo to ${NIKOS_HOME}..."
     fi
     _logfile "Cloning repo from ${REPO_URL} to ${NIKOS_HOME}"
-    CLONE_ARGS=(--recurse-submodules)
-    [[ -n "${TARGET_REPO_REF}" ]] && CLONE_ARGS+=(--branch "${TARGET_REPO_REF}")
     if _can_use_dialog; then
-      if git clone "${CLONE_ARGS[@]}" "${REPO_URL}" "${NIKOS_HOME}" >> "${INSTALL_LOG}" 2>&1; then
+      if git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}" >> "${INSTALL_LOG}" 2>&1; then
         _logfile "Repo cloned OK"
       else
         clone_rc=$?
@@ -795,7 +806,7 @@ else
         exit "${clone_rc}"
       fi
     else
-      if git clone "${CLONE_ARGS[@]}" "${REPO_URL}" "${NIKOS_HOME}"; then
+      if git clone --recurse-submodules "${REPO_URL}" "${NIKOS_HOME}"; then
         _logfile "Repo cloned OK"
       else
         clone_rc=$?
@@ -803,8 +814,67 @@ else
         exit "${clone_rc}"
       fi
     fi
-    unset CLONE_ARGS
   fi
+
+  if ! _source_repo_sync_helpers; then
+    echo "ERROR: Repo sync helpers not found (${REPO_SYNC_HELPERS_REL}) in ${NIKOS_HOME} or ${SCRIPT_DIR}." >&2
+    echo "Move or remove ${NIKOS_HOME} so the installer can re-clone it, or rerun with --dev to use the current checkout." >&2
+    exit 1
+  fi
+
+  # An explicit --ref/NIKOS_REPO_REF wins; otherwise install the latest release.
+  if [[ -z "${TARGET_REPO_REF}" ]]; then
+    TARGET_REPO_REF="$(_resolve_release_ref "${REPO_URL}" "${NIKOS_HOME}")"
+    if [[ -z "${TARGET_REPO_REF}" ]]; then
+      echo "ERROR: No NikOS release tag could be found on ${REPO_URL} or in ${NIKOS_HOME}." >&2
+      echo "Check network access, or pick a ref explicitly with --ref, or rerun with --dev." >&2
+      exit 1
+    fi
+    echo "Latest NikOS release: ${TARGET_REPO_REF}"
+  fi
+  _logfile "Target repo ref: ${TARGET_REPO_REF}"
+
+  if _can_use_dialog; then
+    dialog --title "NikOS ${NIKOS_VERSION}" \
+      --infobox "Updating NikOS repo at ${NIKOS_HOME} to ${TARGET_REPO_REF}..." 5 72 || true
+  else
+    echo "Updating NikOS repo at ${NIKOS_HOME} to ${TARGET_REPO_REF}..."
+  fi
+  _logfile "Syncing repo at ${NIKOS_HOME} to ${TARGET_REPO_REF}"
+
+  update_rc=0
+  if _can_use_dialog; then
+    _sync_repo_to_ref "${TARGET_REPO_REF}" "nikos-install-autostash" >> "${INSTALL_LOG}" 2>&1 || update_rc=$?
+  else
+    _sync_repo_to_ref "${TARGET_REPO_REF}" "nikos-install-autostash" || update_rc=$?
+  fi
+  if [[ "${update_rc}" -ne 0 ]]; then
+    case "${update_rc}" in
+      1)
+        update_message="Updates were applied, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun the installer or 'nikos update'."
+        ;;
+      2)
+        update_message="Failed to move ${NIKOS_HOME} to ${TARGET_REPO_REF}. Review the git output, resolve the issue, then rerun the installer or 'nikos update'."
+        ;;
+      3)
+        update_message="Failed to update NikOS submodules in ${NIKOS_HOME}. Review the git output, resolve the issue, then rerun the installer or 'nikos update'."
+        ;;
+      *)
+        update_message="Failed to update NikOS repo at ${NIKOS_HOME}. Review the git output, then rerun the installer or 'nikos update'."
+        ;;
+    esac
+    if _can_use_dialog; then
+      _show_logged_command_failure "${update_message}" "${update_rc}"
+    else
+      echo "ERROR: ${update_message}" >&2
+    fi
+    exit "${update_rc}"
+  fi
+
+  # The banner so far reported the installer's own version. From here the
+  # checkout decides what is actually being installed.
+  NIKOS_VERSION="$(cat "${NIKOS_HOME}/VERSION" 2>/dev/null || echo "${NIKOS_VERSION}")"
+  _logfile "Installing NikOS ${NIKOS_VERSION} from ${TARGET_REPO_REF}"
 fi
 
 # Source script-helpers
@@ -822,6 +892,21 @@ else
   echo "ERROR: script-helpers is missing from ${NIKOS_HOME}. Check the git/submodule output above and rerun the installer." >&2
   exit 1
 fi
+
+# Progress rendering library. Optional: without it the installer falls back to
+# the plain scrolling view.
+_PROGRESS_LIB_LOADED=false
+for _progress_lib in "${NIKOS_HOME}/${PROGRESS_LIB_REL}" "${SCRIPT_DIR}/${PROGRESS_LIB_REL}"; do
+  if [[ -f "${_progress_lib}" ]]; then
+    # shellcheck source=scripts/nikos-progress.sh
+    source "${_progress_lib}"
+    _PROGRESS_LIB_LOADED=true
+    break
+  fi
+done
+unset _progress_lib
+[[ "${_PROGRESS_LIB_LOADED}" == "true" ]] || \
+  _safe_logfile "[WARNING] ${PROGRESS_LIB_REL} not found; using the plain progress view"
 
 _ensure_ansible_collections
 
@@ -1045,33 +1130,9 @@ if _can_use_dialog; then
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"
   set +e
-  if command -v script >/dev/null 2>&1; then
-    printf -v _script_cmd 'cd %q && ANSIBLE_CONFIG=%q ansible-playbook' "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg"
-    for _play_opt in "${PLAY_OPTS[@]}"; do
-      printf -v _script_cmd '%s %q' "${_script_cmd}" "${_play_opt}"
-    done
-    script -qefc "${_script_cmd}" /dev/null 2>&1 \
-      | tee -a "${INSTALL_LOG}" \
-      | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
-          --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
-    _pipe_status=("${PIPESTATUS[@]}")
-    unset _script_cmd
-    unset _play_opt
-  else
-    (
-      cd "${NIKOS_HOME}"
-      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
-    ) 2>&1 \
-      | tee -a "${INSTALL_LOG}" \
-      | dialog --title "NikOS ${NIKOS_VERSION} — Playbook" \
-          --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
-    _pipe_status=("${PIPESTATUS[@]}")
-  fi
+  _run_playbook_dialog "NikOS ${NIKOS_VERSION} — Installing" "${PLAY_OPTS[@]}"
+  _ansible_rc=$?
   set -e
-  _restore_terminal_cursor
-  _ansible_rc=${_pipe_status[0]}
-  _tee_rc=${_pipe_status[1]}
-  _dialog_rc=${_pipe_status[2]:-0}
 else
   echo "Running NikOS ${NIKOS_VERSION} playbook..."
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
@@ -1089,7 +1150,10 @@ else
   _tee_rc=${_pipe_status[1]}
 fi
 
-if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
+# _tee_rc guards the optional bundles too: once the install log is unwritable
+# the run is already in a fatal state, so there is nothing to gain from
+# starting another playbook that cannot be recorded either.
+if [[ "${_ansible_rc}" -eq 0 && "${_tee_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
   print_info "Installing selected optional bundles: ${EXPLICIT_OPTIONAL_TAGS#,}"
   OPTIONAL_PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --tags "${EXPLICIT_OPTIONAL_TAGS#,}")
   if [[ -n "${BECOME_PASSWORD_FILE:-}" ]]; then
@@ -1101,40 +1165,18 @@ if [[ "${_ansible_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
   _logfile "--- optional playbook output start ---"
   set +e
   if _can_use_dialog; then
-    if command -v script >/dev/null 2>&1; then
-      printf -v _script_cmd 'cd %q && ANSIBLE_CONFIG=%q ansible-playbook' "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg"
-      for _play_opt in "${OPTIONAL_PLAY_OPTS[@]}"; do
-        printf -v _script_cmd '%s %q' "${_script_cmd}" "${_play_opt}"
-      done
-      script -qefc "${_script_cmd}" /dev/null 2>&1 \
-        | tee -a "${INSTALL_LOG}" \
-        | dialog --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
-            --progressbox "Installing selected optional bundles..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
-      _pipe_status=("${PIPESTATUS[@]}")
-      unset _script_cmd
-      unset _play_opt
-    else
-      (
-        cd "${NIKOS_HOME}"
-        ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
-      ) 2>&1 \
-        | tee -a "${INSTALL_LOG}" \
-        | dialog --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
-            --progressbox "Installing selected optional bundles..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
-      _pipe_status=("${PIPESTATUS[@]}")
-    fi
-    _restore_terminal_cursor
-    _dialog_rc=${_pipe_status[2]:-0}
+    _run_playbook_dialog "NikOS ${NIKOS_VERSION} — Optional Bundles" "${OPTIONAL_PLAY_OPTS[@]}"
+    _ansible_rc=$?
   else
     (
       cd "${NIKOS_HOME}"
       ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
     ) 2>&1 | tee -a "${INSTALL_LOG}"
     _pipe_status=("${PIPESTATUS[@]}")
+    _ansible_rc=${_pipe_status[0]}
+    _tee_rc=${_pipe_status[1]}
   fi
   set -e
-  _ansible_rc=${_pipe_status[0]}
-  _tee_rc=${_pipe_status[1]}
   _logfile "--- optional playbook output end ---"
 fi
 
@@ -1158,7 +1200,7 @@ _install_summary "${_playbook_rc}"
 echo ""
 if [[ "${_playbook_rc}" -eq 0 ]]; then
   echo "NikOS ${NIKOS_VERSION} installation complete."
-  echo "Log out and back in to start Xfce."
+  _session_next_step
 else
   echo "NikOS ${NIKOS_VERSION} installation finished with errors (rc=${_playbook_rc})."
   echo "Review the log above or: cat ${INSTALL_LOG}"
