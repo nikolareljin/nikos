@@ -48,11 +48,18 @@
     state: directory
     mode: "0755"
 
+- name: Check whether this llama.cpp release is already installed
+  ansible.builtin.stat:
+    path: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/llama-server"
+  register: ai_stack_llama_installed
+
 # llama.cpp ships prebuilt binaries from GitHub releases. A missing asset or a
 # network failure used to abort the whole play, taking every role after
 # ai-stack with it, so the whole download/extract/install sequence is rescued.
 - name: Install llama.cpp CPU binaries
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - not ai_stack_llama_installed.stat.exists
   block:
     - name: Create llama.cpp extraction directory
       ansible.builtin.file:
@@ -71,23 +78,51 @@
         src: "/tmp/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
         dest: "/tmp/llama-{{ llama_cpp_version }}"
         remote_src: true
-        creates: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-server"
 
-    - name: Install llama.cpp CLI
-      ansible.builtin.copy:
-        src: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-cli"
-        dest: "{{ nikos_home }}/.local/bin/llama-cli"
-        mode: "0755"
-        remote_src: true
-        force: false
+    # The archive layout is not stable across releases: older builds nested the
+    # binaries under build/bin, b9151 puts them at the root of a single
+    # top-level directory. Find them instead of assuming a path.
+    - name: Locate the llama.cpp server binary
+      ansible.builtin.find:
+        paths: "/tmp/llama-{{ llama_cpp_version }}"
+        patterns: llama-server
+        recurse: true
+        file_type: file
+      register: ai_stack_llama_server
 
-    - name: Install llama.cpp server
+    - name: Fail when the llama.cpp archive layout is unrecognised
+      ansible.builtin.fail:
+        msg: >-
+          llama-server was not found anywhere in the extracted
+          llama-{{ llama_cpp_version }} archive.
+      when: (ai_stack_llama_server.matched | default(0)) | int == 0
+
+    - name: Record the llama.cpp binary directory
+      ansible.builtin.set_fact:
+        ai_stack_llama_bin_dir: "{{ (ai_stack_llama_server.files | map(attribute='path') | first) | dirname }}"
+
+    # The binaries are linked with RUNPATH=$ORIGIN and need libllama.so and the
+    # libggml*.so set beside them, so the release tree is installed whole rather
+    # than copying two executables into ~/.local/bin.
+    - name: Install the llama.cpp release tree
       ansible.builtin.copy:
-        src: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-server"
-        dest: "{{ nikos_home }}/.local/bin/llama-server"
-        mode: "0755"
+        src: "{{ ai_stack_llama_bin_dir }}/"
+        dest: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/"
         remote_src: true
-        force: false
+        mode: preserve
+        directory_mode: "0755"
+
+    # $ORIGIN resolves against the symlink target, so linking into ~/.local/bin
+    # keeps the libraries reachable.
+    - name: Link llama.cpp binaries into the local bin directory
+      ansible.builtin.file:
+        src: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/{{ item }}"
+        dest: "{{ nikos_home }}/.local/bin/{{ item }}"
+        state: link
+        force: true
+      loop:
+        - llama-cli
+        - llama-server
   rescue:
     - name: Warn that llama.cpp could not be installed
       ansible.builtin.debug:

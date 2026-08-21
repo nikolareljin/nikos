@@ -27,6 +27,18 @@ All notable changes to NikOS are documented here.
   is created up front and the whole llama.cpp sequence now runs inside a
   `block`/`rescue`, so a download or release-asset failure no longer aborts the
   play and skips every role after `ai-stack`.
+- **llama.cpp archive layout** - the role expected `build/bin/llama-cli`, a path
+  that no longer exists in the b9151 release. The binaries are now located with
+  `find`, and because they carry `RUNPATH=$ORIGIN` and need `libllama.so` and
+  the `libggml*.so` set beside them, the release tree is installed whole under
+  `~/.local/lib/llama.cpp-<version>` and symlinked into `~/.local/bin`. The
+  install is keyed on the version directory, so a version bump reinstalls and a
+  rerun does not.
+- **VS Code install** - the task carried `cache_valid_time: 3600` while the
+  `base` role refreshes the apt cache at the start of the same play, so the
+  update that would first fetch the repository added moments earlier was always
+  skipped and the install failed with `No package matching 'code' is available`.
+  The cache refresh is now its own unconditional task.
 - **Plymouth theme note** - the role tried to purge `xubuntu-plymouth-theme`,
   a package that does not exist on noble. The real themes are
   `plymouth-theme-xubuntu-logo` and `plymouth-theme-xubuntu-text`, which
