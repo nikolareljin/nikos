@@ -8,27 +8,193 @@ nikos_version: "{{ lookup('file', playbook_dir + '/VERSION') | trim }}"
 nikos_timezone: "Europe/London"
 nikos_locale: "en_US.UTF-8"
 
+# ── Desktop environment ──────────────────────────────────────────────────────
+# nikos_desktop_flavor selects the package set installed by the desktop role:
+#   xubuntu-minimal — Xubuntu session, artwork and greeter without the full
+#                     Xubuntu application suite (default)
+#   xubuntu-full    — the complete xubuntu-desktop metapackage
+#   xfce            — bare Xfce, no Xubuntu branding (pre-0.5.0 behaviour)
+nikos_desktop_flavor: "xubuntu-minimal"
+
+nikos_desktop_packages:
+  xubuntu-minimal:
+    - xubuntu-desktop-minimal
+    - xubuntu-default-settings
+    - xubuntu-artwork
+  xubuntu-full:
+    - xubuntu-desktop
+    - xubuntu-default-settings
+    - xubuntu-artwork
+  xfce:
+    - xfce4
+
+nikos_desktop_extra_packages:
+  - xfce4-goodies
+  - xfce4-terminal
+  - lightdm
+  - lightdm-gtk-greeter
+  - lightdm-gtk-greeter-settings
+
+# GNOME packages the desktop role looks for when detecting an Ubuntu host.
+nikos_gnome_packages:
+  - ubuntu-desktop
+  - ubuntu-desktop-minimal
+  - ubuntu-session
+  - gnome-session
+  - gnome-session-bin
+  - gnome-session-common
+  - gnome-shell
+
+# Leave GNOME installed by default so it stays selectable from the greeter.
+# Set to true to purge it during the Ubuntu -> Xubuntu migration.
+nikos_remove_gnome: false
+
+# Disable the GDM3 service without removing the package, so LightDM owns the
+# display-manager.service alias.
+nikos_disable_gdm: true
+
+# Default session written to AccountsService and the LightDM seat config.
+# "auto" resolves to xubuntu when /usr/share/xsessions/xubuntu.desktop exists,
+# otherwise xfce.
+nikos_default_session: "auto"
+
 # Theme
 nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/Nordic.tar.xz"
 nordic_grub_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/Nordic.tar.xz"
 
-# Ollama
-ollama_default_model: "qwen2.5-coder:7b"
-ollama_optional_models:
-  - "phi4:14b"
-  - "codellama:7b"
-  - "deepseek-coder:6.7b"
-  - "gemma2:9b"
-  - "llava:7b"
-llama_cpp_version: "b9151"
+# ── Ollama models ────────────────────────────────────────────────────────────
+# Sizes are the download size of the default quantisation, checked against the
+# Ollama library. Models load on demand, so none of this counts against the
+# idle RAM target — it is disk and bandwidth.
+#
+# The default stays on Qwen2.5-Coder: qwen3-coder publishes no tag below 30b
+# (19 GB), which is not a sensible default for a laptop. qwen2.5-coder:7b is
+# still the best small code model that fits comfortably.
+ollama_default_model: "qwen2.5-coder:7b"          # 4.7 GB
+
+# Optional models, grouped by what they are for. Each group has its own tag, so
+# a laptop can take one capability without pulling all of them:
+#
+#   nikos add ollama-reasoning   nikos add ollama-coding
+#   nikos add ollama-text        nikos add ollama-vision
+#   nikos add ollama-embedding   nikos add ollama-models   (everything, ~93 GB)
+#
+# Within each group the smallest usable model is listed first. Sizes are the
+# download size of the default quantisation. Models load on demand, so this is
+# disk and bandwidth, not idle RAM.
+
+# General purpose reasoning. deepseek-r1:1.5b runs on a 4 GB machine.
+ollama_models_reasoning:            # ~23 GB
+  - "deepseek-r1:1.5b"       # 1.1 GB  fits the smallest laptops
+  - "qwen3:4b"               # 2.5 GB
+  - "deepseek-r1:8b"         # 5.2 GB
+  - "qwen3:8b"               # 5.2 GB  thinking mode
+  - "phi4:14b"               # 9.1 GB  desktop-class
+
+# Code models. qwen3-coder publishes no tag below 30b, so the small and mid
+# tiers are covered by Qwen2.5-Coder and DeepSeek-Coder-V2.
+ollama_models_coding:               # ~34 GB
+  - "deepseek-coder-v2:16b"  # 6.4 GB  mid-size
+  - "qwen2.5-coder:14b"      # 9.0 GB  same family as the default, one size up
+  - "qwen3-coder:30b"        # 19 GB   current generation, workstation-class
+
+# Text generation and general chat.
+ollama_models_text:                 # ~22 GB
+  - "granite4:micro"         # 2.1 GB  small enough to keep resident
+  - "llama3.1:8b"            # 3.2 GB
+  - "gemma3:4b"              # 4.0 GB
+  - "mistral:7b"             # 4.4 GB
+  - "gemma3:12b"             # 8.1 GB  multimodal
+
+# Image analysis. Pair these with the Python vision stack in the agent-dev role.
+ollama_models_vision:               # ~13 GB
+  - "granite3.2-vision:2b"   # 2.4 GB  smallest, laptop-friendly
+  - "minicpm-v:8b"           # 4.1 GB
+  - "qwen2.5vl:7b"           # 6.0 GB  vision and document understanding
+
+# Embeddings for the chromadb / qdrant / sentence-transformers stack.
+ollama_models_embedding:            # ~1.3 GB
+  - "embeddinggemma"         # 622 MB
+  - "qwen3-embedding:0.6b"   # 639 MB
+
+# `nikos add ollama-models` pulls every group; about 93 GB in full.
+# Override any individual group in vars/local.yml to take a subset.
+ollama_optional_models: >-
+  {{ ollama_models_reasoning + ollama_models_coding + ollama_models_text
+     + ollama_models_vision + ollama_models_embedding }}
+
+# ── Node.js for the npm-only CLIs ────────────────────────────────────────────
+# Gemini CLI and OpenClaw publish through npm only - the Gemini release carries
+# macOS binaries and a JS bundle, nothing native for Linux - so a Node new
+# enough for them has to exist somewhere. Claude Code no longer needs one; it
+# ships a standalone binary.
+#
+# NikOS does not install Node from apt. Ubuntu 24.04 ships Node 18, and the
+# NodeSource package Conflicts with Ubuntu's `npm`, so upgrading in place
+# removes npm and drags out eslint, webpack, node-tap and roughly fifteen
+# Debian node-* library packages with it. That is a large, surprising change to
+# make to a developer's machine in order to install two CLIs.
+#
+# Instead: use the system Node when it is already new enough, and otherwise
+# install nvm and a pinned Node under the user's home, where a global npm
+# install needs no root and cannot collide with the distribution's packages.
+# A full version, not a major. OpenClaw requires >=22.22.3, and a major-only
+# check would accept 22.22.2 and then fail at install time.
+nikos_node_min_version: "22.22.3"
+nikos_node_version: "22.23.2"      # installed through nvm when the system Node is too old
+nikos_nvm_version: "v0.40.7"
+
+# ── Image analysis ───────────────────────────────────────────────────────────
+# Shared object dependencies of the opencv-python wheels, plus video I/O.
+# A desktop install already carries most of these; naming them keeps the stack
+# working on a minimal or headless host too.
+nikos_vision_apt_packages:
+  - libgl1
+  - libglib2.0-0t64
+  - libsm6
+  - libxext6
+  - ffmpeg
+
+# Tesseract OCR. tesseract-ocr-osd handles orientation and script detection.
+# nikos_tesseract_languages selects which language data to install; set it to
+# ["all"] to pull tesseract-ocr-all (every one of the 160+ language packs).
+nikos_tesseract_languages:
+  - eng
+  - fra
+  - deu
+  - spa
+  - ita
+  - por
+  - rus
+  - ell
+  - srp
+
+# Python image analysis packages, installed into the nikos-ai conda env.
+nikos_vision_pip_packages:
+  - opencv-contrib-python   # OpenCV with the contrib modules
+  - pillow
+  - scikit-image
+  - imageio
+  - pytesseract             # Python binding for the tesseract binary above
+  - timm                    # pretrained vision backbones for torch
+
+# Deliberately not the newest build. llama.cpp tags several releases a day;
+# this one had a week to settle. Bump it to a tag that is a few days old rather
+# than whatever was cut this morning.
+llama_cpp_version: "b10444"
 mkcert_version: "v1.4.4"
-kubernetes_apt_version: "v1.35"
+kubernetes_apt_version: "v1.36"
 
 # Python / conda
-miniforge_version: "24.11.3-0"
+# 26.5.3-0 exists but is days old; 26.3.2-3 has been out for months.
+miniforge_version: "26.3.2-3"
 miniforge_url: "https://github.com/conda-forge/miniforge/releases/download/{{ miniforge_version }}/Miniforge3-{{ miniforge_version }}-Linux-x86_64.sh"
 nikos_conda_env: "nikos-ai"
-nikos_python_version: "3.11"
+# A conda version spec, operator included, not a bare version. A range lets
+# conda pick whichever 3.1x actually solves against the AI stack; pinning an
+# exact minor is what makes the environment unsolvable the moment one
+# dependency drops support for it. Set it to "=3.12" to pin hard.
+nikos_python_version: ">=3.11,<3.14"
 
 # VS Code extensions
 nikos_vscode_extensions:

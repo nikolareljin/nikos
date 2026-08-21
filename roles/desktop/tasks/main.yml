@@ -1,44 +1,87 @@
 ---
 # ── Detect base OS variant ────────────────────────────────────────────────────
-# On Xubuntu: xfce4 is pre-installed, gnome-session is absent — nothing to remove.
-# On Ubuntu (GNOME): gnome-session is present — we remove it and install Xfce.
+# Ubuntu 24.04 ships `ubuntu-session` / `gnome-session-bin` / `gnome-session-common`;
+# there is no `gnome-session` metapackage, so probing that single name reports
+# "not installed" on a stock Ubuntu desktop and silently skips the migration.
+# Read the real package list instead.
 
-- name: Check if GNOME session is installed
-  ansible.builtin.command: dpkg-query -W -f='${Status}' gnome-session
-  register: desktop_gnome_check
-  changed_when: false
-  failed_when: false
+- name: Gather installed package facts
+  ansible.builtin.package_facts:
+    manager: apt
 
-- name: Remove GNOME desktop (Ubuntu → Xfce migration)
-  when: desktop_gnome_check.rc == 0 and 'install ok installed' in desktop_gnome_check.stdout
-  block:
-    - name: Purge gnome-session and ubuntu-desktop meta-packages
-      ansible.builtin.apt:
-        name:
-          - gnome-session
-          - ubuntu-desktop
-          - ubuntu-desktop-minimal
-        state: absent
-        purge: true
+- name: Record which GNOME desktop packages are present
+  ansible.builtin.set_fact:
+    desktop_gnome_packages: >-
+      {{ nikos_gnome_packages | select('in', ansible_facts.packages) | list }}
+    desktop_gdm_present: "{{ 'gdm3' in ansible_facts.packages }}"
 
-    - name: Autoremove GNOME dependencies
-      ansible.builtin.apt:
-        autoremove: true
+- name: Report detected GNOME desktop packages
+  ansible.builtin.debug:
+    msg: >-
+      GNOME packages detected: {{ desktop_gnome_packages | join(', ') if desktop_gnome_packages
+      else 'none' }}. GDM3 present: {{ desktop_gdm_present }}.
 
-# ── Xfce + LightDM (idempotent — safe to run on Xubuntu too) ─────────────────
+# ── Optional GNOME removal ───────────────────────────────────────────────────
+# Off by default. NikOS switches the display manager and default session to
+# Xubuntu but leaves GNOME installed and selectable from the greeter, so the
+# migration stays reversible.
 
-- name: Install Xfce desktop environment
+- name: Remove GNOME desktop packages
   ansible.builtin.apt:
-    name:
-      - xfce4
-      - xfce4-goodies
-      - xfce4-terminal
-      - lightdm
-      - lightdm-gtk-greeter
-      - lightdm-gtk-greeter-settings
-    state: present
+    name: "{{ desktop_gnome_packages }}"
+    state: absent
+    purge: true
+    autoremove: true
+  when:
+    - nikos_remove_gnome | bool
+    - desktop_gnome_packages | length > 0
 
-- name: Set LightDM as default display manager
+# ── Xubuntu desktop ──────────────────────────────────────────────────────────
+# xubuntu-desktop-minimal pulls in xubuntu-artwork, xubuntu-default-settings,
+# lightdm and lightdm-gtk-greeter, which is what provides the Xubuntu session
+# and the Xubuntu login form. Installing bare `xfce4` does not.
+# force-confold keeps apt non-interactive when it meets the greeter conffile
+# the theming role rewrites later in this play.
+
+- name: Check the desktop flavor is one this role knows
+  ansible.builtin.assert:
+    that:
+      - nikos_desktop_flavor in nikos_desktop_packages
+    fail_msg: >-
+      nikos_desktop_flavor is '{{ nikos_desktop_flavor }}', which has no package
+      list. Set it to one of:
+      {{ nikos_desktop_packages.keys() | list | join(', ') }}.
+    success_msg: "Installing the {{ nikos_desktop_flavor }} desktop package set."
+
+- name: Install Xubuntu desktop packages
+  ansible.builtin.apt:
+    name: "{{ nikos_desktop_packages[nikos_desktop_flavor] + nikos_desktop_extra_packages }}"
+    state: present
+    dpkg_options: force-confdef,force-confold
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+# ── Display manager handover ─────────────────────────────────────────────────
+# Four things decide which greeter boots. Writing only
+# /etc/X11/default-display-manager (as NikOS did before 0.5.0) changes none of
+# the ones systemd actually reads, so GDM kept winning on Ubuntu hosts.
+
+- name: Pre-seed LightDM as the debconf default display manager
+  ansible.builtin.debconf:
+    name: lightdm
+    question: shared/default-x-display-manager
+    value: lightdm
+    vtype: select
+
+- name: Pre-seed LightDM as the debconf default display manager for GDM3
+  ansible.builtin.debconf:
+    name: gdm3
+    question: shared/default-x-display-manager
+    value: lightdm
+    vtype: select
+  when: desktop_gdm_present | bool
+
+- name: Set LightDM in /etc/X11/default-display-manager
   ansible.builtin.copy:
     content: "/usr/sbin/lightdm\n"
     dest: /etc/X11/default-display-manager
@@ -51,6 +94,130 @@
     name: lightdm
     enabled: true
   when: not ansible_check_mode
+
+- name: Locate the LightDM systemd unit
+  ansible.builtin.find:
+    paths:
+      - /usr/lib/systemd/system
+      - /lib/systemd/system
+    patterns: lightdm.service
+    file_type: any
+  register: desktop_lightdm_unit
+
+- name: Record the LightDM unit path
+  ansible.builtin.set_fact:
+    desktop_lightdm_unit_path: "{{ (desktop_lightdm_unit.files | map(attribute='path') | first) }}"
+  when: (desktop_lightdm_unit.matched | default(0)) | int > 0
+
+- name: Fail when the LightDM unit cannot be found
+  ansible.builtin.fail:
+    msg: >-
+      lightdm.service was not found under /usr/lib/systemd/system or
+      /lib/systemd/system, so the display manager cannot be switched.
+  when:
+    - not ansible_check_mode
+    - desktop_lightdm_unit_path is not defined
+
+# `systemctl enable lightdm` cannot claim display-manager.service while GDM3
+# already owns that alias; it exits 0 and leaves the old symlink in place.
+# Rewriting the symlink is the only deterministic handover.
+- name: Point display-manager.service at LightDM
+  ansible.builtin.file:
+    src: "{{ desktop_lightdm_unit_path }}"
+    dest: /etc/systemd/system/display-manager.service
+    state: link
+    force: true
+  register: desktop_dm_symlink
+  when:
+    - not ansible_check_mode
+    - desktop_lightdm_unit_path is defined
+
+- name: Reload systemd after display manager change
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - not ansible_check_mode
+    - desktop_dm_symlink.changed
+  # noqa: no-handler — must run before the verification task below
+
+- name: Disable GDM3 without removing it
+  ansible.builtin.systemd:
+    name: gdm3
+    enabled: false
+  when:
+    - not ansible_check_mode
+    - desktop_gdm_present | bool
+    - nikos_disable_gdm | bool
+
+# ── Default session ──────────────────────────────────────────────────────────
+# Even under LightDM, an existing account keeps its recorded session. Without
+# these writes an Ubuntu user lands straight back in GNOME.
+
+- name: Look for the Xubuntu session desktop entry
+  ansible.builtin.stat:
+    path: /usr/share/xsessions/xubuntu.desktop
+  register: desktop_xubuntu_session
+
+- name: Select the default session name
+  ansible.builtin.set_fact:
+    desktop_session_name: >-
+      {{ 'xubuntu' if (nikos_default_session == 'auto' and desktop_xubuntu_session.stat.exists)
+         else ('xfce' if nikos_default_session == 'auto' else nikos_default_session) }}
+
+# accountsservice ships this directory itself, 0700 root:root. Only create it
+# when it is genuinely missing, and with those permissions: managing it
+# unconditionally would rewrite the mode the distribution chose, and the 0775
+# this role used before 0.5.0 made a root-owned system directory group-writable.
+- name: Check for the AccountsService user directory
+  ansible.builtin.stat:
+    path: /var/lib/AccountsService/users
+  register: desktop_accountsservice_users_dir
+
+- name: Create the AccountsService user directory
+  ansible.builtin.file:
+    path: /var/lib/AccountsService/users
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: not desktop_accountsservice_users_dir.stat.exists
+
+# site.yml always sets nikos_user, but default it here so the role can be run
+# on its own: an unset login name skips the write instead of failing the play
+# on an undefined variable.
+- name: Set the default session in AccountsService
+  community.general.ini_file:
+    path: "/var/lib/AccountsService/users/{{ nikos_user | default('') }}"
+    section: User
+    option: "{{ item }}"
+    value: "{{ desktop_session_name }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - Session
+    - XSession
+  when: (nikos_user | default('')) | length > 0
+
+- name: Ensure LightDM drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/lightdm/lightdm.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Deploy NikOS LightDM seat defaults
+  ansible.builtin.copy:
+    content: |
+      # Managed by NikOS — do not edit by hand.
+      [Seat:*]
+      greeter-session=lightdm-gtk-greeter
+      user-session={{ desktop_session_name }}
+    dest: /etc/lightdm/lightdm.conf.d/60-nikos.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+# ── Xfce system-wide defaults ────────────────────────────────────────────────
 
 - name: Create system-wide Xfce4 xfconf directory
   ansible.builtin.file:
@@ -79,3 +246,66 @@
     owner: root
     group: root
     mode: "0644"
+
+# Same shadowing as the wallpaper: the Xubuntu session reads
+# /etc/xdg/xdg-xubuntu before /etc/xdg, so xubuntu-default-settings' whiskermenu
+# defaults win and the menu button keeps the Xubuntu mouse icon
+# (`xubuntu-logo-menu`). Point that copy at the NikOS icon too.
+- name: Check for Xubuntu whiskermenu defaults
+  ansible.builtin.stat:
+    path: /etc/xdg/xdg-xubuntu/xfce4/whiskermenu/defaults.rc
+  register: desktop_xubuntu_whiskermenu_defaults
+
+- name: Point the Xubuntu whiskermenu defaults at the NikOS menu icon
+  ansible.builtin.lineinfile:
+    path: /etc/xdg/xdg-xubuntu/xfce4/whiskermenu/defaults.rc
+    regexp: "^button-icon="
+    line: "button-icon=nikos-menu"
+  when: desktop_xubuntu_whiskermenu_defaults.stat.exists
+
+# Whisker Menu only writes a per-plugin rc once its settings are changed, so
+# most installs have none and the defaults above are enough. Where one exists it
+# outranks every default, and still carries the mouse icon.
+- name: Find existing user whiskermenu configs
+  ansible.builtin.find:
+    paths: "{{ nikos_home }}/.config/xfce4/panel"
+    patterns: "whiskermenu-*.rc"
+    file_type: file
+  register: desktop_user_whiskermenu_configs
+  become: false
+
+- name: Point existing user whiskermenu configs at the NikOS menu icon
+  ansible.builtin.lineinfile:
+    path: "{{ item.path }}"
+    regexp: "^button-icon="
+    line: "button-icon=nikos-menu"
+  loop: "{{ desktop_user_whiskermenu_configs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: false
+
+# ── Verify the handover ──────────────────────────────────────────────────────
+
+- name: Read the active display-manager.service target
+  ansible.builtin.stat:
+    path: /etc/systemd/system/display-manager.service
+  register: desktop_dm_state
+  when: not ansible_check_mode
+
+- name: Fail when the display manager was not switched to LightDM
+  ansible.builtin.assert:
+    that:
+      - desktop_dm_state.stat.exists
+      - "'lightdm' in (desktop_dm_state.stat.lnk_target | default(desktop_dm_state.stat.path))"
+    fail_msg: >-
+      display-manager.service still points at
+      {{ desktop_dm_state.stat.lnk_target | default('an unknown unit') }}.
+      LightDM was not activated; the Xubuntu login form will not appear.
+    success_msg: "LightDM is the active display manager."
+  when: not ansible_check_mode
+
+- name: Record that a reboot is needed to enter the Xubuntu session
+  ansible.builtin.debug:
+    msg: >-
+      Display manager switched to LightDM and the default session is
+      '{{ desktop_session_name }}'. Reboot to land in Xubuntu.

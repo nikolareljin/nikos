@@ -8,6 +8,8 @@
   vars:
     # lookup runs on the controller before privilege escalation — gives the real user's home
     nikos_home: "{{ lookup('env', 'HOME') }}"
+    # same reason: the login name that owns the desktop session being configured
+    nikos_user: "{{ lookup('env', 'USER') }}"
   pre_tasks:
     - name: Check whether local override vars exist
       ansible.builtin.stat:

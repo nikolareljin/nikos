@@ -20,6 +20,24 @@
     creates: /usr/share/nikos/wallpaper.png
   when: not ansible_check_mode
 
+# Portrait cut of the same artwork, for monitors rotated into vertical
+# orientation. Scaling the landscape image onto a 9:16 screen leaves most of
+# the screen empty; this keeps the marks readable at the same size.
+- name: Copy portrait wallpaper SVG
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/wallpaper-vertical.svg"
+    dest: /usr/share/nikos/wallpaper-vertical.svg
+    mode: "0644"
+
+- name: Export portrait wallpaper SVG to PNG
+  ansible.builtin.command: >
+    inkscape /usr/share/nikos/wallpaper-vertical.svg
+    --export-filename=/usr/share/nikos/wallpaper-vertical.png
+    --export-width=1080 --export-height=1920
+  args:
+    creates: /usr/share/nikos/wallpaper-vertical.png
+  when: not ansible_check_mode
+
 - name: Install Papirus icon theme
   ansible.builtin.apt:
     name: papirus-icon-theme
@@ -152,6 +170,28 @@
     dest: /usr/share/nikos/logo.svg
     mode: "0644"
 
+# Panel menu button icon. Installed under hicolor as `nikos-menu` so the
+# Whisker Menu can reference it by icon name and GTK scales the SVG per panel
+# size, instead of pointing at an absolute path that only fits one size.
+- name: Copy NikOS menu icon to system asset directory
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/menu-icon.svg"
+    dest: /usr/share/nikos/menu-icon.svg
+    mode: "0644"
+
+- name: Ensure the scalable hicolor app icon directory exists
+  ansible.builtin.file:
+    path: /usr/share/icons/hicolor/scalable/apps
+    state: directory
+    mode: "0755"
+
+- name: Install the NikOS menu icon into the hicolor theme
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/assets/menu-icon.svg"
+    dest: /usr/share/icons/hicolor/scalable/apps/nikos-menu.svg
+    mode: "0644"
+  notify: Theming_update_icon_cache
+
 - name: Create NikOS Plymouth theme directory
   ansible.builtin.file:
     path: /usr/share/plymouth/themes/nikos
@@ -179,11 +219,11 @@
     mode: "0644"
   notify: Theming_update_initramfs
 
-- name: Remove xubuntu-plymouth-theme (prevents postinst from resetting default)
-  ansible.builtin.apt:
-    name: xubuntu-plymouth-theme
-    state: absent
-    purge: true
+# xubuntu-artwork depends on plymouth-theme-xubuntu-logo and
+# plymouth-theme-xubuntu-text, so those cannot be purged without dragging out
+# the Xubuntu desktop with them. Selecting the NikOS theme through the
+# default.plymouth alternative below puts that link in manual mode, which
+# outranks anything the Xubuntu theme postinst configures afterwards.
 
 - name: Set NikOS as default Plymouth theme in plymouthd.conf
   community.general.ini_file:
@@ -277,6 +317,31 @@
     dest: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
     mode: "0644"
 
+# The Xubuntu session puts /etc/xdg/xdg-xubuntu ahead of /etc/xdg in
+# XDG_CONFIG_DIRS, so xubuntu-default-settings' xfce4-desktop.xml shadows the
+# NikOS copy written above. xfdesktop also seeds every newly detected monitor
+# from the `image-path` values in that file, which is how connector-named
+# backdrops (monitorHDMI-A-0, monitorDisplayPort-2, ...) end up on the Xubuntu
+# wallpaper. Repoint those values instead of replacing the whole conffile.
+- name: Check for Xubuntu system-wide desktop defaults
+  ansible.builtin.stat:
+    path: /etc/xdg/xdg-xubuntu/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+  register: theming_xubuntu_desktop_defaults
+
+- name: Repoint Xubuntu backdrop defaults at the NikOS wallpaper
+  ansible.builtin.replace:
+    path: /etc/xdg/xdg-xubuntu/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+    regexp: '(property name="(?:image-path|last-image)" type="string" value=")[^"]*(")'
+    replace: '\g<1>/usr/share/nikos/wallpaper.png\g<2>'
+  when: theming_xubuntu_desktop_defaults.stat.exists
+
+- name: Set Xubuntu backdrop image-style defaults to Scaled
+  ansible.builtin.replace:
+    path: /etc/xdg/xdg-xubuntu/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+    regexp: '(property name="image-style" type="int" value=")[^"]*(")'
+    replace: '\g<1>4\g<2>'
+  when: theming_xubuntu_desktop_defaults.stat.exists
+
 - name: Deploy LightDM GTK greeter config
   ansible.builtin.copy:
     src: lightdm-gtk-greeter.conf
@@ -320,39 +385,72 @@
   become: false
   failed_when: false  # file may not exist on first login; system-wide default covers that
 
-- name: Set wallpaper image-style to Zoomed for all configured monitors
+- name: Set wallpaper image-style to Scaled for all configured monitors
   # image-style int values: 0=None 1=Centered 2=Tiled 3=Stretched 4=Scaled 5=Zoomed
   # Some monitors default to 0 (None), which hides the wallpaper entirely.
+  # Scaled keeps the whole image on screen whatever the monitor aspect ratio is;
+  # the solid backdrop colour set below fills what is left over.
   ansible.builtin.replace:
     path: "{{ nikos_home }}/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml"
     regexp: '(property name="image-style" type="int" value=")[^"]*(")'
-    replace: '\g<1>5\g<2>'
+    replace: '\g<1>4\g<2>'
   become: false
   failed_when: false
 
-- name: Apply theme settings live via xfconf-query (if Xfce session is running)
+- name: Apply GTK and window manager themes live via xfconf-query
   # xfconf-query writes via D-Bus/xfconfd; changes take effect immediately in a
-  # running session. If no session is active the command fails silently — the
-  # file-level changes above ensure settings load on next login.
+  # running session. If no session is active the command fails silently, and
+  # the file-level changes above ensure the settings load on next login.
   ansible.builtin.shell: |
     set -o pipefail
     xfconf-query -c xsettings   -p /Net/ThemeName     -s "Nordic"        2>/dev/null || true
     xfconf-query -c xsettings   -p /Net/IconThemeName -s "Papirus-Dark"  2>/dev/null || true
     xfconf-query -c xfwm4       -p /general/theme     -s "Nordic"        2>/dev/null || true
-    for p in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep '/last-image$'); do
-      xfconf-query -c xfce4-desktop -p "${p}" -s "/usr/share/nikos/wallpaper.png" 2>/dev/null || true
-      xfconf-query -c xfce4-desktop -p "${p%/last-image}/image-style" \
-        --create --type int -s 5 2>/dev/null || true
-    done
-    # Ensure a canonical default path exists for newly created workspaces
-    xfconf-query -c xfce4-desktop \
-      -p /backdrop/screen0/monitor0/workspace0/last-image \
-      --create --type string -s "/usr/share/nikos/wallpaper.png" 2>/dev/null || true
-    xfconf-query -c xfce4-desktop \
-      -p /backdrop/screen0/monitor0/workspace0/image-style \
-      --create --type int -s 5 2>/dev/null || true
   args:
     executable: /bin/bash
+  become: false
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+# ── First-login wallpaper pass ───────────────────────────────────────────────
+# xfdesktop creates the per-connector backdrop properties only once a session
+# is running, so neither the file edits nor the xfconf-query calls above can
+# reach the monitors this machine actually has. A one-shot autostart entry
+# closes that gap on the first login after installation.
+
+- name: Install the NikOS wallpaper helper
+  ansible.builtin.copy:
+    src: nikos-apply-wallpaper.sh
+    dest: /usr/local/bin/nikos-apply-wallpaper
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure the XDG autostart directory exists
+  ansible.builtin.file:
+    path: /etc/xdg/autostart
+    state: directory
+    mode: "0755"
+
+- name: Register the NikOS wallpaper helper as an autostart entry
+  ansible.builtin.copy:
+    src: nikos-apply-wallpaper.desktop
+    dest: /etc/xdg/autostart/nikos-apply-wallpaper.desktop
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Clear the wallpaper marker so the helper runs after this install
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.local/state/nikos/wallpaper-applied"
+    state: absent
+  become: false
+
+- name: Apply the wallpaper now when an Xfce session is already running
+  # No-op when the installer runs outside a session: the helper exits without
+  # writing its marker, so the autostart entry retries at the next login.
+  ansible.builtin.command: /usr/local/bin/nikos-apply-wallpaper
   become: false
   changed_when: false
   failed_when: false

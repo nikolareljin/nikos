@@ -6,9 +6,9 @@
 [![Dry-run Test](https://github.com/nikolareljin/nikos/actions/workflows/test.yml/badge.svg)](https://github.com/nikolareljin/nikos/actions/workflows/test.yml)
 
 A curated Xubuntu / Ubuntu 24.04 LTS setup for AI coding and development.  
-One command turns a fresh Ubuntu install into a fully configured AI workstation — Xfce desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
+One command turns a fresh Ubuntu install into a fully configured AI workstation — Xubuntu desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
 
-**Version:** 0.4.2 · **License:** MIT · **Author:** Nikola Reljin
+**Version:** 0.5.0 · **License:** MIT · **Author:** Nikola Reljin
 
 <img src="./assets/logo.png" />
 
@@ -20,18 +20,29 @@ One command turns a fresh Ubuntu install into a fully configured AI workstation 
 curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos/main/install.sh | bash
 ```
 
-The installer clones the full repo (with submodules) to `~/.local/share/nikos`, presents a
-`dialog`-based TUI to select optional bundles, then runs the Ansible playbook.
+The installer clones the full repo (with submodules) to `~/.local/share/nikos`, moves it to
+the **newest release tag**, presents a `dialog`-based TUI to select optional bundles, then
+runs the Ansible playbook behind a per-role progress gauge.
 Set `NIKOS_USE_DIALOG=0` to force the plain-prompt fallback.
-Log out and back in when done — Xfce starts on the next login.
+
+Pass `--ref <branch-or-tag>` to install something other than the latest release.
+
+Coming from Xubuntu, log out and back in. Coming from Ubuntu, reboot: the installer moves
+the display manager from GDM3 to LightDM and sets the default session to Xubuntu, and
+neither applies while the GNOME session that started the installer is running. The
+installer tells you which one you need when it finishes.
 
 **Clone locally (for development or offline use):**
 
 ```bash
 git clone --recurse-submodules https://github.com/nikolareljin/nikos
 cd nikos
-bash install.sh
+bash install.sh          # installs the latest release tag, not this checkout
+bash install.sh --dev    # installs this checkout, uncommitted changes included
 ```
+
+`--dev` runs the tree it was launched from and never touches
+`~/.local/share/nikos`, so testing a branch cannot break a working install.
 
 At the end, you should end up with something like: 
 
@@ -45,7 +56,7 @@ At the end, you should end up with something like:
 ### Desktop
 | Component | Choice |
 |---|---|
-| Desktop environment | Xfce 4 |
+| Desktop environment | Xubuntu (Xfce 4) |
 | GTK theme | Nordic (Nord palette) |
 | Icon theme | Papirus-Dark |
 | Login screen | LightDM + Nordic greeter |

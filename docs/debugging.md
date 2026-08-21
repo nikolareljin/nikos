@@ -104,6 +104,37 @@ sudo update-initramfs -u -k all
 
 Then reboot and check the early boot splash again.
 
+### Still booting into GNOME after installing on Ubuntu
+
+The switch only takes effect after a reboot. If a reboot did not help, check
+which unit owns the display manager alias:
+
+```bash
+readlink -f /etc/systemd/system/display-manager.service
+```
+
+It must resolve to `lightdm.service`. If it still points at `gdm3.service`:
+
+```bash
+sudo systemctl disable gdm3
+sudo ln -sf /usr/lib/systemd/system/lightdm.service \
+  /etc/systemd/system/display-manager.service
+sudo systemctl daemon-reload
+```
+
+If the greeter is LightDM but the desktop is still GNOME, the account has a
+session recorded from before the migration:
+
+```bash
+grep -i session /var/lib/AccountsService/users/"$USER"
+ls /usr/share/xsessions
+```
+
+Both `Session` and `XSession` should name an entry from `/usr/share/xsessions`,
+normally `xubuntu`. `/etc/lightdm/lightdm.conf.d/60-nikos.conf` holds the
+system-wide default. You can also pick the session from the gear menu on the
+login screen.
+
 ### git-lantern / lantern not found
 
 ```bash
@@ -112,6 +143,38 @@ ls /usr/local/bin/lantern
 # Reinstall if missing:
 sudo ~/Projects/git-lantern/install --prefix /opt/git-lantern --bin-link /usr/local/bin/lantern
 ```
+
+### Installer or `nikos update` cannot move the checkout
+
+```
+You are not currently on a branch.
+Please specify which branch you want to merge with.
+Failed to pull updates in /home/you/.local/share/nikos
+```
+
+Installing a release tag leaves `~/.local/share/nikos` on a detached HEAD,
+which is normal. Versions before 0.5.0 then tried to `git pull` it on the next
+run; a detached HEAD has no upstream to merge, so the installer exited before
+it reached the code that would have switched refs.
+
+0.5.0 fetches first and only fast-forwards when HEAD is on a branch with an
+upstream, so this resolves itself. On an installer older than that, move the
+checkout onto a branch by hand:
+
+```bash
+git -C ~/.local/share/nikos switch --track origin/main
+```
+
+### Checking which version is installed
+
+```bash
+cat ~/.local/share/nikos/VERSION
+git -C ~/.local/share/nikos describe --tags --exact-match   # release installs
+git -C ~/.local/share/nikos branch --show-current           # branch installs
+```
+
+An empty `branch --show-current` with a tag from `describe` is a release
+install and is expected.
 
 ## Ansible logs
 

@@ -6,3 +6,8 @@
 - name: Theming_update_initramfs
   ansible.builtin.command: update-initramfs -u -k all
   changed_when: true
+
+- name: Theming_update_icon_cache
+  ansible.builtin.command: gtk-update-icon-cache -f -t /usr/share/icons/hicolor
+  changed_when: true
+  failed_when: false
