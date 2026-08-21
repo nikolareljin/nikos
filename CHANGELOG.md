@@ -2,6 +2,23 @@
 
 All notable changes to NikOS are documented here.
 
+## [Unreleased]
+
+### Fixed
+- **Tagged releases were never published, so the repository advertised 0.4.2 as
+  the latest** - `release.yml` triggers on a tag push, but the tag is created by
+  the Auto Tag Release workflow, which pushes it with `GITHUB_TOKEN`. GitHub
+  does not run workflows for pushes made with that token, so the trigger never
+  fired: 0.5.0 and 0.6.0 were tagged with no GitHub Release behind them.
+  ci-helpers documents the restriction in `auto-tag-release.yml`. The release is
+  now built in the same run as the tag, by calling `release-build.yml` with the
+  version the tag job reports, which keeps `install.sh` attached and needs no
+  `actions: write`.
+- **The manual tag path could not have worked either** - `release.yml` declared
+  no permissions, so the reusable workflow it calls had no `contents: write` to
+  create a release with. It now declares them, and takes a `workflow_dispatch`
+  input so a release can be published for a tag that already exists.
+
 ## [0.6.0] — 2026-08-21
 
 ### Fixed
