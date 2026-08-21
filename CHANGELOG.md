@@ -17,6 +17,11 @@ All notable changes to NikOS are documented here.
   was inferred from whatever git checkout the script happened to sit in, so
   `curl | bash` in a project directory could pick up an unrelated repository's
   branch name. Version selection is now explicit.
+- **Stale repo sync helpers on upgrade** - the installer sourced
+  `scripts/repo-sync.sh` from `NIKOS_HOME`, which belongs to the *installed*
+  version. Upgrading from 0.4.2 would load a copy with none of the functions
+  this installer calls. Each candidate is now checked for what it must provide,
+  and a stale one is replaced from the remote.
 - **Wallpaper stayed on the Xubuntu default** - the Xubuntu session puts
   `/etc/xdg/xdg-xubuntu` ahead of `/etc/xdg` in `XDG_CONFIG_DIRS`, so
   `xubuntu-default-settings`' `xfce4-desktop.xml` shadowed the NikOS copy, and
@@ -82,7 +87,7 @@ All notable changes to NikOS are documented here.
 - **`nikos update --ref <branch-or-tag>`.** Bare `nikos update` now advances a
   release install to the newest release and keeps a branch install on its
   branch, so an update never downgrades.
-- `scripts/repo-sync.sh` is covered by the `shellcheck` gate and by 32 new tests
+- `scripts/repo-sync.sh` is covered by the `shellcheck` gate and by 36 new tests
   in `tests/test_version_select.py`, including a regression test that reproduces
   the detached-HEAD failure.
 - **Xubuntu desktop packages** - `xubuntu-desktop-minimal`,

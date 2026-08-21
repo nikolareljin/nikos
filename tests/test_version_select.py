@@ -377,3 +377,97 @@ class TestResolveUpdateRef:
         git("checkout", "-q", "--detach", "HEAD", cwd=repo)
         result = run_sourced(f'_resolve_update_ref "{tmp_path}/gone.git" "{repo}"')
         assert result.stdout.strip() == ""
+
+
+class TestStaleHelperRecovery:
+    """Upgrading from a release whose repo-sync.sh predates _sync_repo_to_ref.
+
+    install.sh sources the helper from NIKOS_HOME, which belongs to the
+    *installed* version. On every 0.4.2 install that copy has no
+    _sync_repo_to_ref, and the installer would die on `command not found`.
+    """
+
+    @staticmethod
+    def _drive_sourcing(nikos_home, script_dir, repo_ref=""):
+        """Run install.sh's _source_repo_sync_helpers in isolation."""
+        func = subprocess.run(
+            ["sed", "-n", "/^_source_repo_sync_helpers() {/,/^}/p", str(INSTALLER)],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        snippet = f"""
+set -euo pipefail
+NIKOS_HOME='{nikos_home}'
+SCRIPT_DIR='{script_dir}'
+REPO_REF='{repo_ref}'
+REPO_SYNC_HELPERS_REL='scripts/repo-sync.sh'
+{func}
+if _source_repo_sync_helpers && declare -F _sync_repo_to_ref >/dev/null; then
+  echo HELPERS_OK
+else
+  echo HELPERS_MISSING
+fi
+"""
+        return subprocess.run(
+            ["bash", "-c", snippet], capture_output=True, text=True
+        )
+
+    @pytest.fixture
+    def upgrade_scenario(self, tmp_path):
+        """An origin carrying the current helper, and a clone stuck on an old one."""
+        work = tmp_path / "origin-work"
+        (work / "scripts").mkdir(parents=True)
+        git("init", "-q", "-b", "main", ".", cwd=work)
+
+        # The old release: a helper without _sync_repo_to_ref.
+        (work / "scripts" / "repo-sync.sh").write_text(
+            "_pull_repo_updates() { :; }\n"
+        )
+        git("add", "-A", cwd=work)
+        git("commit", "-q", "-m", "old release", cwd=work)
+        git("tag", "0.4.2", cwd=work)
+
+        bare = tmp_path / "origin.git"
+        git("clone", "-q", "--bare", str(work), str(bare), cwd=tmp_path)
+        git("remote", "add", "origin", str(bare), cwd=work)
+
+        # A machine installed at that old release.
+        installed = tmp_path / "installed"
+        git("clone", "-q", str(bare), str(installed), cwd=tmp_path)
+        git("switch", "-q", "--detach", "0.4.2", cwd=installed)
+
+        # The new release lands on the remote afterwards.
+        (work / "scripts" / "repo-sync.sh").write_text(
+            REPO_SYNC.read_text()
+        )
+        git("add", "-A", cwd=work)
+        git("commit", "-q", "-m", "new release", cwd=work)
+        git("tag", "0.5.0", cwd=work)
+        git("push", "-q", "origin", "main", cwd=work)
+        git("push", "-q", "origin", "0.5.0", cwd=work)
+
+        return {"installed": installed, "empty": tmp_path / "no-checkout"}
+
+    def test_the_installed_helper_really_is_too_old(self, upgrade_scenario):
+        stale = upgrade_scenario["installed"] / "scripts" / "repo-sync.sh"
+        assert "_sync_repo_to_ref" not in stale.read_text()
+
+    def test_refreshes_a_stale_helper_from_the_remote(self, upgrade_scenario):
+        result = self._drive_sourcing(
+            upgrade_scenario["installed"], upgrade_scenario["empty"]
+        )
+        assert result.stdout.strip().splitlines()[-1] == "HELPERS_OK", (
+            result.stdout + result.stderr
+        )
+
+    def test_prefers_a_local_checkout_that_is_current(self, tmp_path, upgrade_scenario):
+        """A checkout beside install.sh is used without any network access."""
+        result = self._drive_sourcing(tmp_path / "gone", REPO_ROOT)
+        assert result.stdout.strip().splitlines()[-1] == "HELPERS_OK", (
+            result.stdout + result.stderr
+        )
+
+    def test_reports_failure_when_no_source_can_supply_it(self, tmp_path):
+        result = self._drive_sourcing(tmp_path / "gone", tmp_path / "also-gone")
+        assert result.stdout.strip().splitlines()[-1] == "HELPERS_MISSING"
