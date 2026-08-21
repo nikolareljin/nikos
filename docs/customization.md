@@ -188,6 +188,29 @@ Run `nikos update` to apply. The playbook sets the timezone and enables NTP via
 3. Test locally with `ansible-playbook site.yml --check --tags my-role`
 4. Run: `nikos update`
 
+## Choosing which version to install
+
+The installer defaults to the newest release tag. Two ways to override it:
+
+```bash
+bash install.sh --ref release/0.6.0   # a specific branch or tag
+bash install.sh --dev                 # the checkout you launched it from
+```
+
+| Option | Env var | Effect |
+|---|---|---|
+| `--ref <ref>` | `NIKOS_REPO_REF` | Install that branch or tag instead of the latest release |
+| `--dev` | `NIKOS_DEV=1` | Run the current checkout in place, uncommitted changes included; nothing is cloned, fetched or pulled, and `~/.local/share/nikos` is untouched |
+| — | `NIKOS_HOME` | Where the persistent checkout lives (default `~/.local/share/nikos`) |
+| — | `NIKOS_SKIP_REPO_SYNC=1` | Use whatever is already staged at `NIKOS_HOME`, without syncing it |
+
+`--dev` and `--ref` are mutually exclusive: dev mode installs the tree in front
+of it, so there is no ref to resolve.
+
+Only bare `X.Y.Z` tags count as releases. A pre-release (`0.6.0-rc1`) or a
+floating tag (`production`) is never picked automatically — install one with
+`--ref`.
+
 ## Using your own fork
 
 Fork `nikolareljin/nikos` on GitHub, then install from your fork:
