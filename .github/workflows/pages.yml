@@ -1,0 +1,56 @@
+name: Pages
+
+# Publishes site/ to GitHub Pages.
+#
+# The site is hand-written HTML with one stylesheet, so there is no build step:
+# the ci-helpers preset publishes a directory that is already in the repository
+# when build_command is empty. Nothing is installed, so no toolchain version is
+# pinned here either.
+#
+# Pull requests run the workflow without deploying, which is what catches a
+# broken path or an empty site/ before it reaches the published site rather
+# than after.
+#
+# There is deliberately no `concurrency:` block. The preset declares its own
+# (`ci-helpers-pages-<ref>`), and a caller that adds a second group leaves the
+# called jobs queued behind the run that started them.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - site/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+# Read-only at the workflow level, so anything added to this file later starts
+# with no write scope and has to ask for it. The elevated grant sits on the one
+# job that cannot run without it.
+permissions:
+  contents: read
+
+jobs:
+  pages:
+    uses: nikolareljin/ci-helpers/.github/workflows/pages.yml@production
+    # pages and id-token are required even on pull-request runs where nothing
+    # is deployed: GitHub validates a called workflow's declared permissions at
+    # startup, before any job-level condition is evaluated, so `deploy: false`
+    # does not excuse the caller from granting them.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      # Nothing reads git history to build this site.
+      fetch_depth: 1
+      pages_path: "site"
+      # Both halves matter. Excluding pull requests keeps a proposed change from
+      # publishing itself; requiring main keeps a workflow_dispatch run started
+      # from a feature branch from doing the same thing by hand. `push` is
+      # already filtered to main above, so the ref test exists for the dispatch
+      # case.
+      deploy: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
