@@ -23,10 +23,10 @@ nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/..."
 # ── Ollama ────────────────────────────────────────────
 ollama_default_model: "qwen2.5-coder:7b"
 ollama_optional_models:
-  - "phi4:14b"
-  - "codellama:7b"
-  - "deepseek-coder:6.7b"
-# Other good choices: llama3.2, mistral, codellama, phi3
+  - "qwen3-coder:30b"
+  - "deepseek-coder-v2:16b"
+  - "deepseek-r1:8b"
+# Other good choices: gemma3, mistral-small3.2, devstral, granite4
 llama_cpp_version: "b9151"
 
 # ── Python ────────────────────────────────────────────
@@ -77,21 +77,122 @@ without reinstalling those packages.
 `nikos_disable_gdm: false` leaves the `gdm3` service enabled. LightDM still owns
 `display-manager.service`, so this only matters if you plan to switch back.
 
-## Changing the Ollama model
+## Changing the Ollama models
 
 Edit `vars/local.yml`:
 
 ```yaml
-ollama_default_model: "llama3.2"
+ollama_default_model: "qwen3:8b"
 ```
 
-Then run `nikos update`. The new model will be pulled on the next playbook run.
+Then run `nikos update`. The new model is pulled on the next playbook run.
+
+### The default
+
+`qwen2.5-coder:7b` (4.7 GB). It stays on the 2.5 generation deliberately:
+`qwen3-coder` publishes no tag below `30b` (19 GB), which is too large to pull
+onto every machine by default.
+
+### The optional bundles
+
+Models are grouped by what they are for, and each group has its own tag, so a
+laptop can take one capability without pulling all of them:
+
+```bash
+nikos add ollama-reasoning   # ~23 GB  general purpose reasoning
+nikos add ollama-coding      # ~34 GB  code models
+nikos add ollama-text        # ~22 GB  text generation and chat
+nikos add ollama-vision      # ~13 GB  image analysis
+nikos add ollama-embedding   # ~1.3 GB embeddings for the RAG stack
+nikos add ollama-models      # ~93 GB  every group
+```
+
+Nothing here is pulled unless you ask for the tag. Override any group in
+`vars/local.yml` to take a subset.
+
+| Group | Model | Size | Notes |
+|---|---|---|---|
+| reasoning | `deepseek-r1:1.5b` | 1.1 GB | Runs on a 4 GB machine |
+| reasoning | `qwen3:4b` | 2.5 GB | |
+| reasoning | `deepseek-r1:8b` | 5.2 GB | |
+| reasoning | `qwen3:8b` | 5.2 GB | Thinking mode |
+| reasoning | `phi4:14b` | 9.1 GB | Desktop-class |
+| coding | `deepseek-coder-v2:16b` | 6.4 GB | Mid-size |
+| coding | `qwen2.5-coder:14b` | 9.0 GB | One size up from the default |
+| coding | `qwen3-coder:30b` | 19 GB | Current generation, workstation-class |
+| text | `granite4:micro` | 2.1 GB | Small enough to keep resident |
+| text | `llama3.1:8b` | 3.2 GB | |
+| text | `gemma3:4b` | 4.0 GB | |
+| text | `mistral:7b` | 4.4 GB | |
+| text | `gemma3:12b` | 8.1 GB | Multimodal |
+| vision | `granite3.2-vision:2b` | 2.4 GB | Smallest, laptop-friendly |
+| vision | `minicpm-v:8b` | 4.1 GB | |
+| vision | `qwen2.5vl:7b` | 6.0 GB | Vision and document understanding |
+| embedding | `embeddinggemma` | 622 MB | |
+| embedding | `qwen3-embedding:0.6b` | 639 MB | |
+
+Models load on demand, so none of this counts against the idle RAM target — it
+is disk and bandwidth only.
+
+### Models that were retired in 0.5.0
+
+`codellama:7b`, `deepseek-coder:6.7b`, `gemma2:9b` and `llava:7b` were all two
+years old and are no longer pulled. Each capability is covered by a newer model
+above; Code Llama in particular has no successor, because Meta discontinued the
+line, so its role passes to Qwen2.5-Coder and DeepSeek-Coder-V2. Any of them can
+still be pulled by hand with `ollama pull`, or added back through
+`ollama_models_coding` / `ollama_models_vision` in `vars/local.yml`.
+
+## Image analysis and OCR
+
+The `agent-dev` role installs an image analysis stack into the `nikos-ai` conda
+environment, under the `ai-vision` tag:
+
+| Package | Purpose |
+|---|---|
+| `opencv-contrib-python` | OpenCV with the contrib modules |
+| `pillow` | Image loading and basic manipulation |
+| `scikit-image` | Classical image processing algorithms |
+| `imageio` | Image and video I/O |
+| `pytesseract` | Python binding for the Tesseract engine |
+| `timm` | Pretrained vision backbones for torch |
+
+`numpy`, `pandas`, `scikit-learn` and `matplotlib` are already installed by the
+`ai-stack` role.
+
+OpenCV's wheels are dynamically linked, so `libgl1`, `libglib2.0-0t64`,
+`libsm6`, `libxext6` and `ffmpeg` are installed alongside them — without those,
+`import cv2` fails with `libGL.so.1: cannot open shared object file` on a
+minimal host.
+
+### Tesseract languages
+
+Tesseract performs OCR — it reads text out of images. It does not translate;
+pair it with a language model for that.
+
+English, French, German, Spanish, Italian, Portuguese, Russian, Greek and
+Serbian are installed by default, plus `osd` for orientation and script
+detection. Change the set in `vars/local.yml`:
+
+```yaml
+nikos_tesseract_languages:
+  - eng
+  - jpn
+  - chi-sim
+```
+
+Ubuntu ships over 160 language packs; `apt-cache search '^tesseract-ocr-'`
+lists them. To install every one:
+
+```yaml
+nikos_tesseract_languages: ["all"]   # pulls tesseract-ocr-all
+```
 
 You can also pull models manually at any time:
 
 ```bash
-ollama pull codellama
-ollama pull phi3:mini
+ollama pull gemma3:4b
+ollama pull granite4:micro
 ollama list
 ```
 
@@ -120,7 +221,7 @@ nikos add bitnet     # BitNet.cpp 1-bit LLM inference
 nikos add mistral-rs # mistral.rs Rust LLM server
 nikos add monitoring # Netdata monitoring dashboard
 nikos add openclaw   # OpenClaw LLM gateway CLI
-nikos add ollama-models # Pull optional Ollama models; about 26 GB
+nikos add ollama-models # Pull every optional Ollama model; about 93 GB
 ```
 
 ## Changing the wallpaper

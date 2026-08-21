@@ -24,11 +24,13 @@
   when: not ansible_check_mode
   tags: [ai-node]
 
-- name: Install Gemini CLI
+# state: present installs once and never moves again; these CLIs ship often
+# enough that a `nikos update` should carry them forward.
+- name: Install or upgrade Gemini CLI
   community.general.npm:
     name: "@google/gemini-cli"
     global: true
-    state: present
+    state: latest
   become: true
   when: not ansible_check_mode
   tags: [ai-gemini]

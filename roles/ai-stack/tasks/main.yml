@@ -29,18 +29,75 @@
   delay: 10
   ignore_errors: true
 
-- name: Pull optional Ollama models when requested - about 26 GB total
+# Each capability group carries its own tag as well as the shared
+# `ollama-models` one, so a laptop can take a single group without pulling the
+# whole set. `never` keeps them all off a default install.
+
+- name: Pull general purpose reasoning Ollama models when requested - about 23 GB
   ansible.builtin.command: ollama pull {{ item }}
-  loop: "{{ ollama_optional_models }}"
-  register: ai_stack_optional_ollama_pull
+  loop: "{{ ollama_models_reasoning }}"
+  register: ai_stack_reasoning_ollama_pull
   changed_when: >-
-    'pulling' in ai_stack_optional_ollama_pull.stdout or
-    'success' in ai_stack_optional_ollama_pull.stdout
-  until: ai_stack_optional_ollama_pull.rc == 0
+    'pulling' in ai_stack_reasoning_ollama_pull.stdout or
+    'success' in ai_stack_reasoning_ollama_pull.stdout
+  until: ai_stack_reasoning_ollama_pull.rc == 0
   retries: 3
   delay: 10
   ignore_errors: true
-  tags: [never, ollama-models]
+  tags: [never, ollama-models, ollama-reasoning]
+
+- name: Pull code Ollama models when requested - about 33 GB
+  ansible.builtin.command: ollama pull {{ item }}
+  loop: "{{ ollama_models_coding }}"
+  register: ai_stack_coding_ollama_pull
+  changed_when: >-
+    'pulling' in ai_stack_coding_ollama_pull.stdout or
+    'success' in ai_stack_coding_ollama_pull.stdout
+  until: ai_stack_coding_ollama_pull.rc == 0
+  retries: 3
+  delay: 10
+  ignore_errors: true
+  tags: [never, ollama-models, ollama-coding]
+
+- name: Pull text generation Ollama models when requested - about 22 GB
+  ansible.builtin.command: ollama pull {{ item }}
+  loop: "{{ ollama_models_text }}"
+  register: ai_stack_text_ollama_pull
+  changed_when: >-
+    'pulling' in ai_stack_text_ollama_pull.stdout or
+    'success' in ai_stack_text_ollama_pull.stdout
+  until: ai_stack_text_ollama_pull.rc == 0
+  retries: 3
+  delay: 10
+  ignore_errors: true
+  tags: [never, ollama-models, ollama-text]
+
+- name: Pull image analysis Ollama models when requested - about 15 GB
+  ansible.builtin.command: ollama pull {{ item }}
+  loop: "{{ ollama_models_vision }}"
+  register: ai_stack_vision_ollama_pull
+  changed_when: >-
+    'pulling' in ai_stack_vision_ollama_pull.stdout or
+    'success' in ai_stack_vision_ollama_pull.stdout
+  until: ai_stack_vision_ollama_pull.rc == 0
+  retries: 3
+  delay: 10
+  ignore_errors: true
+  tags: [never, ollama-models, ollama-vision]
+
+- name: Pull embedding Ollama models when requested - about 0.3 GB
+  ansible.builtin.command: ollama pull {{ item }}
+  loop: "{{ ollama_models_embedding }}"
+  register: ai_stack_embedding_ollama_pull
+  changed_when: >-
+    'pulling' in ai_stack_embedding_ollama_pull.stdout or
+    'success' in ai_stack_embedding_ollama_pull.stdout
+  until: ai_stack_embedding_ollama_pull.rc == 0
+  retries: 3
+  delay: 10
+  ignore_errors: true
+  tags: [never, ollama-models, ollama-embedding]
+
 
 - name: Ensure local bin directory exists
   ansible.builtin.file:
