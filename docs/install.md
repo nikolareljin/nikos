@@ -44,7 +44,7 @@ The script will:
 | `github-setup` | gh CLI, first-login wizard (SSH key, git identity) |
 | `ai-stack` | Ollama + qwen2.5-coder:7b, llama.cpp, Miniforge, nikos-ai conda env, aider, uv |
 | `editors` | VS Code + AI extensions + Nord theme + JetBrains Mono |
-| `cloud-ai-cli` | Node.js 22, Gemini CLI, GitHub Copilot CLI extension, shell-gpt, glances |
+| `cloud-ai-cli` | Node (system or nvm-pinned), Gemini CLI, GitHub Copilot CLI extension, shell-gpt, glances |
 | `agent-dev` | LangChain, LlamaIndex, ML/data libraries, Claude Code |
 | `dev-tools` | distrodeck tools, image-view, git-lantern, mkcert, ai-runner |
 | `optional/*` | network / music / education / neovim / java / podman / bun / databases / LLM tools / monitoring (opt-in) |

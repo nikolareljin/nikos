@@ -61,13 +61,23 @@
   changed_when: false
   tags: [ai-local, ai-vision]
 
-# state: present would pin Claude Code to whatever shipped on the day of the
-# first install; state: latest lets `nikos update` move it forward.
-- name: Install or upgrade Claude Code globally via npm
-  become: true
-  community.general.npm:
-    name: "@anthropic-ai/claude-code"
-    global: true
-    state: latest
+# Claude Code ships a standalone binary, so it needs no Node at all - which is
+# why it does not go through the npm path the other two CLIs use.
+#
+# Deliberately not become: true. The installer puts everything under $HOME and
+# refuses to run under sudo, because with sudo the binary lands in root's home
+# and the `claude` command is then missing from the user's own shell.
+- name: Download the Claude Code installer
+  ansible.builtin.get_url:
+    url: https://claude.ai/install.sh
+    dest: /tmp/claude-code-install.sh
+    mode: "0755"
+  when: not ansible_check_mode
+  tags: [ai-claude]
+
+- name: Install or upgrade Claude Code
+  ansible.builtin.command: bash /tmp/claude-code-install.sh
+  register: agent_dev_claude_install
+  changed_when: "'already' not in agent_dev_claude_install.stdout | lower"
   when: not ansible_check_mode
   tags: [ai-claude]
