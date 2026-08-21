@@ -1,4 +1,4 @@
-favorites=xfce4-terminal-emulator.desktop,code.desktop,thunar.desktop,xfce4-settings-manager.desktop
+favorites=xfce4-terminal-emulator.desktop,code.desktop,thunar.desktop,xfce-settings-manager.desktop
 button-title=NikOS
 button-icon=nikos-menu
 show-button-title=false

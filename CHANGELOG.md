@@ -2,6 +2,162 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.6.0] — 2026-08-21
+
+### Fixed
+- **The menu editor entry pointed at software that was never installed** - both
+  the Xubuntu whiskermenu defaults and the NikOS ones set
+  `command-menueditor=menulibre` with the button shown, and menulibre is a
+  Recommends of the full `xubuntu-desktop` only. On `xubuntu-desktop-minimal` it
+  is absent, so the entry failed the same way "Edit Profile" did. menulibre is
+  now installed with the other desktop packages. Found by auditing every menu
+  command after the mugshot report, rather than by another click.
+- **A menu favourite silently never appeared** - the favourites list named
+  `xfce4-settings-manager.desktop`, but the file `xfce4-settings` ships is
+  `xfce-settings-manager.desktop`, with no `4` after `xfce`. The binary *is*
+  `xfce4-settings-manager`, which is what makes the wrong id easy to write and
+  hard to notice: nothing errors, the favourite is just missing.
+- **Tests now cover the whole class** - `tests/test_desktop_menu.py` checks that
+  every displayed menu command has something installing its binary, that no
+  shown button lacks a command, and that favourites are well-formed desktop ids.
+  Verified against both defects above: removing menulibre from the package list
+  or restoring the wrong desktop id fails the suite.
+- **The install summary printed broken numbers and hid a real failure** - an
+  install runs the playbook twice, once for the main run and once for the
+  optional bundles, and each prints its own `PLAY RECAP`. The summary read them
+  with a bare `grep`, which returns one line per recap, so `ok` became `177` and
+  `10` on separate lines and the dialog box wrapped the remainder onto its own
+  row. The same values fed `[[ "${failed}" -gt 0 ]]`, and bash raises a syntax
+  error on a multi-line operand and evaluates it false, so a bundle that failed
+  was reported as a clean install. The counts are now totalled across every
+  recap, so they stay integers however many times the playbook ran.
+- **`bitnet-cli` resolved its libraries through the build tree it was compiled
+  in** - the CLI was installed by copying `llama-cli` into `~/.local/bin`, but
+  that binary links against shared libraries produced by BitNet's build and
+  carries a `RUNPATH` with that directory's absolute path baked in. `ldd` on the
+  installed file pointed back into `Projects/bitnet.cpp/build/bin`, so the
+  command worked only while the build tree stayed where it was built, under the
+  home it was built with; a machine with more than one `Projects` tree resolved
+  the wrong one. The binary and every `*.so*` beside it are now copied into
+  `/usr/local/lib/nikos/bitnet`, with `/usr/local/bin/bitnet-cli` as the entry
+  point, so the command is self-contained and the build tree is only needed to
+  rebuild. Every library travels rather than just the ones `ldd` reports,
+  because ggml loads its backends with `dlopen` and a dependency-only copy
+  passes `ldd` and then fails when a backend is loaded. `cp -a` preserves the
+  symlink chains, which a copy loop would dereference and triple in size. The
+  earlier per-user `~/.local/bin/bitnet-cli` is removed, since that directory
+  precedes `/usr/local/bin` on a default `PATH` and would otherwise keep
+  shadowing the new entry point.
+- **BitNet.cpp built no CLI, and the install step failed on the missing file** -
+  the role built only shared libraries, then failed with `Source
+  .../build/bin/llama-cli not found`. BitNet adds llama.cpp with
+  `add_subdirectory`, which leaves `LLAMA_STANDALONE` off, and llama.cpp
+  defaults `LLAMA_BUILD_COMMON` and `LLAMA_BUILD_TOOLS` to that value while
+  guarding `add_subdirectory(tools)` on both. The configure step now sets them
+  explicitly, and re-runs on an existing build tree rather than being skipped by
+  a `creates:` guard, so a machine that already has the old cache is repaired
+  instead of failing forever.
+- **The menu's "Help" entry opened a file that was never installed** - Xubuntu's
+  `xfhelp4.desktop` runs `exo-open` on `/usr/share/xubuntu-docs/index.html`, which
+  comes from the `xubuntu-docs` package. The full `xubuntu-desktop` metapackage
+  Recommends it; NikOS installs `xubuntu-desktop-minimal`, which does not, so Help
+  opened a dead `file://` URL. Rather than pull in 78 MB of documentation that is
+  still at version 22.04, Help now opens the NikOS help page, which links out to the
+  current Xubuntu and Xfce documentation and says how to install the offline
+  handbook. The override is installed to `/usr/share/xfce4/applications`, which
+  `XDG_DATA_DIRS` resolves ahead of `/usr/share/xubuntu`, so nothing belonging to
+  `xubuntu-default-settings` is modified.
+- **Whisker Menu's "Edit Profile" failed with "Failed to execute child process
+  `mugshot`"** - the menu shows that button by default and runs `mugshot` for
+  it, but the plugin only *Suggests* mugshot, and Suggests are never installed.
+  A stock Xubuntu has it because the full `xubuntu-desktop` metapackage
+  Recommends it; NikOS installs `xubuntu-desktop-minimal`, which does not, so
+  the button pointed at a binary that was never there. mugshot is now installed
+  with the other desktop packages, and the post-install checklist probes for it.
+- **The Whisker Menu button drew a missing-image placeholder** - the icon was
+  installed under hicolor, the icon cache was current, and `GtkIconTheme`
+  resolved the name, but gdk-pixbuf refused the file with
+  `Unrecognized image file format (3)`. gdk-pixbuf picks a loader by matching
+  the head of a file against each loader's signature, and the SVG signature is
+  the literal `<svg`. `menu-icon.svg` opened with a comment block between the
+  XML declaration and the root element, which pushed `<svg` past the window
+  gdk-pixbuf looks at. `logo.svg` and `wallpaper.svg` carry `<svg` on line 2,
+  so only the menu icon was affected. The comment now sits inside the root
+  element. `assets/wallpaper-vertical.svg` had the same defect, latent, since
+  nothing loads it through gdk-pixbuf.
+- **The wallpaper read as a framed panel on wide monitors** - both wallpapers
+  filled their background with a diagonal gradient and a centre glow, while
+  xfdesktop paints a flat `#2e3440` behind them. The image is drawn Scaled, so
+  on a 3440x1440 screen it covers 2560px and the lighter gradient region ended
+  visibly where the flat colour began. Both now use the same flat `#2e3440`.
+  Marks, wordmark, taglines and every coordinate are unchanged.
+- **Artwork changes never reached an existing install** - both wallpaper PNG
+  exports were guarded by `creates:`, so a machine that already had a PNG kept
+  the artwork it was first installed with, `nikos update` included. They now
+  re-export when the SVG changes or the PNG is missing.
+- **A re-rendered wallpaper needed a logout to appear** - the backdrop path
+  does not change between releases, so re-setting it to the same value emits no
+  xfconf signal and xfdesktop keeps serving the image it cached at session
+  start. `xfdesktop --reload` now runs after the wallpaper pass.
+- **A reinstall could not fix the menu icon on an affected machine** - GTK
+  searches `~/.icons` and `~/.local/share/icons` ahead of `/usr/share/icons`, so
+  a copy of `nikos-menu.svg` in either shadows the one the role installs and
+  rewriting the system icon changes nothing on screen. Earlier NikOS builds left
+  one behind. The theming role now removes the user-level copies and rebuilds
+  the icon cache that listed them, so the system icon is the only one left.
+
+### Documentation
+- **The `bitnet` bundle never named the command it installs** - `bitnet-cli` was
+  not mentioned in the README, the customization guide or the site, so the only
+  way to discover it was to read the role. All three now name it, and
+  `docs/debugging.md` gains an entry covering where it is installed, the copy an
+  older NikOS may have left in `~/.local/bin` shadowing it, and why a build
+  configured by an older NikOS produced no CLI.
+- **Nothing explained the install summary** - `docs/debugging.md` now describes
+  it, including why `ok=` does not match any single `PLAY RECAP` in the log: an
+  install runs the playbook twice and the counts are totalled. It also records
+  how a failed optional bundle could be reported as a clean install before
+  0.6.0, and how to check the log on an older version.
+
+### Licensing
+- **The Plymouth boot splash is GPL-3.0-or-later, not MIT** - `nikos.script`
+  was written by working from Xubuntu's `xubuntu-logo.script` and kept part of
+  its implementation: `strlen()` is identical, `atoi()` differs only by a
+  variable rename, and the status parsing loop is line-for-line identical apart
+  from two more renames. That file is GPL-3-or-later, copyright The Xubuntu
+  Community and Canonical, and those terms do not permit MIT redistribution.
+  The upstream copyright and GPL notice are restored on the file, a full copy
+  of the licence is included at `LICENSES/GPL-3.0-or-later.txt`, and the
+  exception is recorded in `THIRD-PARTY-NOTICES.md`. Everything else in NikOS
+  stays MIT.
+
+### Added
+- **A full boot splash, including passphrase entry** - the Plymouth theme
+  shipped one image, the colour logo, and a script that pulsed it. No password
+  handler was registered and no dialog existed to draw, so a machine with an
+  encrypted root sat on a static logo while it waited for a passphrase, with
+  nothing on screen to say so. `nikos.script` now registers refresh, boot
+  progress, password, normal, message, status and quit handlers, covering
+  passphrase entry, boot progress, fsck progress and shutdown.
+- **Boot chrome rendered from the existing artwork** -
+  `scripts/render-plymouth-assets.py` generates the greyscale set the splash
+  needs: the mark and wordmark from `plymouth-logo.svg`, and the spinner and
+  passphrase bullet from `menu-icon.svg`, which is the cut of the mark drawn to
+  survive icon sizes. Progress meters and the passphrase dialog are drawn to
+  match. Everything is transparent and desaturated, because the splash sets its
+  own background and the mark's blue reads as a colour cast on a dim
+  framebuffer. The output is committed, so nothing is rendered on the target
+  machine.
+- **Tests for the artwork and the splash** - `tests/test_assets.py` requires
+  every asset SVG to expose its root element inside the gdk-pixbuf sniff
+  window, and the wallpaper backdrop to stay a flat colour matching the `rgba1`
+  value in `xfce4-desktop.xml`. `tests/test_plymouth_theme.py` checks that the
+  splash registers every handler it needs, that every image it loads is
+  committed, that the spinner sequence has no gaps, and that the artwork stays
+  transparent and desaturated. The splash cannot be exercised locally:
+  `plymouthd` takes exclusive control of the framebuffer and Ubuntu ships no
+  X11 renderer for it, so anything past these checks needs a reboot or a VM.
+
 ## [0.5.0] — 2026-08-20
 
 ### Fixed

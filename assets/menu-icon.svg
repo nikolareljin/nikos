@@ -1,22 +1,104 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Panel menu button icon: the NikOS "N" drawn as the logo's node graph, with
-  the same #2196F3 / #90a4ae pairing. Transparent background so it sits on any
-  panel colour, and no detail below stroke width, so it stays legible at 16px.
--->
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="26">
-    <!-- Left stem -->
-    <line x1="62" y1="196" x2="62" y2="60" stroke="#2196F3"/>
-    <!-- Diagonal -->
-    <line x1="62" y1="60" x2="194" y2="196" stroke="#2196F3"/>
-    <!-- Right stem, muted, mirroring the logo's second-colour marks -->
-    <line x1="194" y1="196" x2="194" y2="60" stroke="#90a4ae"/>
-  </g>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="256"
+   height="256"
+   viewBox="0 0 256 256"
+   version="1.1"
+   id="svg6"
+   sodipodi:docname="menu-icon.svg"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <!--
+    Panel menu button icon: the NikOS "N" drawn as the logo's node graph, with
+    the same #2196F3 / #90a4ae pairing. Transparent background so it sits on any
+    panel colour, and no detail below stroke width, so it stays legible at 16px.
 
+    Keep <svg> as the first element after the XML declaration. gdk-pixbuf picks
+    a loader by sniffing the head of the file for "<svg"; a comment block ahead
+    of the root element pushes it out of that window, gdk-pixbuf reports
+    "Unrecognized image file format", and the Whisker Menu button draws a
+    missing-image placeholder instead of this icon.
+  -->
+  <defs
+     id="defs6" />
+  <sodipodi:namedview
+     id="namedview6"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="4.5859375"
+     inkscape:cx="127.89097"
+     inkscape:cy="128"
+     inkscape:window-width="3440"
+     inkscape:window-height="1377"
+     inkscape:window-x="0"
+     inkscape:window-y="31"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg6" />
+  <g
+     fill="none"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     stroke-width="26"
+     id="g3">
+    <!-- Left stem -->
+    <line
+       x1="62"
+       y1="196"
+       x2="62"
+       y2="60"
+       stroke="#2196F3"
+       id="line1" />
+    <!-- Diagonal -->
+    <line
+       x1="62"
+       y1="60"
+       x2="194"
+       y2="196"
+       stroke="#2196F3"
+       id="line2" />
+    <!-- Right stem, muted, mirroring the logo's second-colour marks -->
+    <line
+       x1="194"
+       y1="196"
+       x2="194"
+       y2="60"
+       stroke="#90a4ae"
+       id="line3" />
+  </g>
   <!-- Nodes on the vertices, as on the wallpaper mark -->
-  <circle cx="62"  cy="60"  r="24" fill="#2196F3"/>
-  <circle cx="194" cy="196" r="20" fill="#2196F3"/>
-  <circle cx="194" cy="60"  r="18" fill="#90a4ae"/>
-  <circle cx="62"  cy="196" r="18" fill="#90a4ae"/>
+  <circle
+     cx="62"
+     cy="60"
+     r="27.485519"
+     fill="#2196F3"
+     id="circle3" />
+  <circle
+     cx="194"
+     cy="196"
+     r="27.485519"
+     fill="#2196F3"
+     id="circle4" />
+  <circle
+     cx="62"
+     cy="196"
+     fill="#90a4ae"
+     id="circle6"
+     r="27.485519"
+     style="stroke-width:1" />
+  <circle
+     cx="194"
+     cy="60"
+     fill="#90a4ae"
+     id="circle6-6"
+     r="27.485519"
+     style="stroke-width:1" />
 </svg>

@@ -34,6 +34,15 @@ nikos_desktop_extra_packages:
   - lightdm
   - lightdm-gtk-greeter
   - lightdm-gtk-greeter-settings
+  # Whisker Menu's "Edit Profile" button runs mugshot, but only Suggests it,
+  # and Suggests are not installed. The full xubuntu-desktop Recommends it, so
+  # a stock Xubuntu has it; NikOS installs xubuntu-desktop-minimal, which does
+  # not, and the button then fails with "Failed to execute child process".
+  - mugshot
+  # Same gap, same failure: both the Xubuntu whiskermenu defaults and the NikOS
+  # ones set command-menueditor=menulibre with the button shown, and menulibre
+  # is a Recommends of the full xubuntu-desktop only.
+  - menulibre
 
 # GNOME packages the desktop role looks for when detecting an Ubuntu host.
 nikos_gnome_packages:
