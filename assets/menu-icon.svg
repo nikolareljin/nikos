@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Panel menu button icon: the NikOS "N" drawn as the logo's node graph, with
+  the same #2196F3 / #90a4ae pairing. Transparent background so it sits on any
+  panel colour, and no detail below stroke width, so it stays legible at 16px.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="26">
+    <!-- Left stem -->
+    <line x1="62" y1="196" x2="62" y2="60" stroke="#2196F3"/>
+    <!-- Diagonal -->
+    <line x1="62" y1="60" x2="194" y2="196" stroke="#2196F3"/>
+    <!-- Right stem, muted, mirroring the logo's second-colour marks -->
+    <line x1="194" y1="196" x2="194" y2="60" stroke="#90a4ae"/>
+  </g>
+
+  <!-- Nodes on the vertices, as on the wallpaper mark -->
+  <circle cx="62"  cy="60"  r="24" fill="#2196F3"/>
+  <circle cx="194" cy="196" r="20" fill="#2196F3"/>
+  <circle cx="194" cy="60"  r="18" fill="#90a4ae"/>
+  <circle cx="62"  cy="196" r="18" fill="#90a4ae"/>
+</svg>
