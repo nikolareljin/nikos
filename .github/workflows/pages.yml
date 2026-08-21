@@ -2,10 +2,10 @@ name: Pages
 
 # Publishes site/ to GitHub Pages.
 #
-# The site is hand-written HTML with one stylesheet, so there is no build step:
-# the preset publishes a directory that is already in the repository when
-# build_command is empty. Nothing is installed, so no toolchain version is
-# pinned here either.
+# The site is hand-written HTML with one stylesheet, so there is no build step.
+# pages-build.yml only builds when it is given a build_command; this file passes
+# none, so it validates site/ and uploads it as it stands. Nothing is installed,
+# which is why no toolchain version is pinned below.
 #
 # Build and deploy are two jobs rather than the combined pages.yml preset, so a
 # pull-request run holds no write scope at all. GitHub validates a called
