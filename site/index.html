@@ -80,7 +80,15 @@
       </tr>
       <tr>
         <td><strong>Adds apt repositories</strong></td>
-        <td>GitHub CLI, Microsoft (VS Code) and NodeSource, each with its own keyring.</td>
+        <td>GitHub CLI and Microsoft (VS Code), each with its own keyring. Node is not installed from apt - see below.</td>
+      </tr>
+      <tr>
+        <td><strong>Provides Node without touching apt</strong></td>
+        <td>Two CLIs are published only through npm. Rather than replacing the
+        distribution's Node - which would remove <code>npm</code>, <code>eslint</code>,
+        <code>webpack</code> and a dozen Debian <code>node-*</code> packages - NikOS uses your
+        Node when it is new enough, and otherwise installs a pinned one under your home
+        with nvm.</td>
       </tr>
       <tr>
         <td><strong>Installs Ollama</strong></td>

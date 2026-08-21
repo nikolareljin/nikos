@@ -312,6 +312,38 @@ Only bare `X.Y.Z` tags count as releases. A pre-release (`0.6.0-rc1`) or a
 floating tag (`production`) is never picked automatically — install one with
 `--ref`.
 
+## Node.js for the npm-only CLIs
+
+Gemini CLI and OpenClaw are published through npm only, so a Node new enough
+for them has to exist. Claude Code no longer needs one - it installs a
+standalone binary.
+
+NikOS does **not** install Node from apt. Ubuntu 24.04 ships Node 18, and the
+NodeSource package conflicts with Ubuntu's `npm`, so upgrading in place removes
+`npm` and takes `eslint`, `webpack`, `node-tap` and around fifteen Debian
+`node-*` packages with it. That is a large and surprising change to make to a
+developer's machine in order to install two CLIs.
+
+Instead:
+
+1. The Node first on your `PATH` is checked against `nikos_node_min_version`.
+2. If it qualifies, it is used as-is.
+3. If not, nvm is installed (when missing) and `nikos_node_version` is
+   installed and set as the default.
+
+When the nvm path is taken, the global npm prefix sits under your home, so the
+CLIs install without root and cannot collide with the distribution's packages.
+
+```yaml
+nikos_node_min_version: "22.22.3"   # OpenClaw's floor; anything at or above this is accepted
+nikos_node_version: "22.23.2"       # installed through nvm when the check fails
+nikos_nvm_version: "v0.40.7"
+```
+
+The minimum is a full version rather than a major on purpose: OpenClaw requires
+`>=22.22.3`, and a major-only test would accept 22.22.2 and then fail at
+install time.
+
 ## Using your own fork
 
 Fork `nikolareljin/nikos` on GitHub, then install from your fork:

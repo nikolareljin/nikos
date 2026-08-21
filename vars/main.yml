@@ -123,6 +123,27 @@ ollama_optional_models: >-
   {{ ollama_models_reasoning + ollama_models_coding + ollama_models_text
      + ollama_models_vision + ollama_models_embedding }}
 
+# ── Node.js for the npm-only CLIs ────────────────────────────────────────────
+# Gemini CLI and OpenClaw publish through npm only - the Gemini release carries
+# macOS binaries and a JS bundle, nothing native for Linux - so a Node new
+# enough for them has to exist somewhere. Claude Code no longer needs one; it
+# ships a standalone binary.
+#
+# NikOS does not install Node from apt. Ubuntu 24.04 ships Node 18, and the
+# NodeSource package Conflicts with Ubuntu's `npm`, so upgrading in place
+# removes npm and drags out eslint, webpack, node-tap and roughly fifteen
+# Debian node-* library packages with it. That is a large, surprising change to
+# make to a developer's machine in order to install two CLIs.
+#
+# Instead: use the system Node when it is already new enough, and otherwise
+# install nvm and a pinned Node under the user's home, where a global npm
+# install needs no root and cannot collide with the distribution's packages.
+# A full version, not a major. OpenClaw requires >=22.22.3, and a major-only
+# check would accept 22.22.2 and then fail at install time.
+nikos_node_min_version: "22.22.3"
+nikos_node_version: "22.23.2"      # installed through nvm when the system Node is too old
+nikos_nvm_version: "v0.40.7"
+
 # ── Image analysis ───────────────────────────────────────────────────────────
 # Shared object dependencies of the opencv-python wheels, plus video I/O.
 # A desktop install already carries most of these; naming them keeps the stack

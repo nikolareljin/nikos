@@ -17,6 +17,21 @@ All notable changes to NikOS are documented here.
   was inferred from whatever git checkout the script happened to sit in, so
   `curl | bash` in a project directory could pick up an unrelated repository's
   branch name. Version selection is now explicit.
+- **The AI CLIs ran under the wrong Node** - the role added the NodeSource
+  repository and then installed `nodejs` with `state: present`, which does
+  nothing when a `nodejs` package is already there. Ubuntu 24.04 ships Node 18,
+  so the repository was configured and the package never moved: Gemini CLI then
+  failed with `EBADENGINE ... required: { node: '>=20' }, current: v18.19.1`.
+  Forcing the upgrade is not the fix either - the NodeSource package conflicts
+  with Ubuntu's `npm` and removes `eslint`, `webpack` and a dozen Debian
+  `node-*` packages with it. NikOS now uses the Node already on `PATH` when it
+  meets `nikos_node_min_version`, and otherwise installs nvm and a pinned Node
+  under the user's home, where the npm prefix needs no root.
+- **`npm` global installs could be blocked permanently** - npm stages an
+  upgrade by renaming the existing package aside, and an abandoned staging
+  directory from an interrupted run makes every later install fail with
+  `ENOTEMPTY`. One had been sitting in `/usr/local/lib/node_modules/@google`
+  since March. These are now cleared before the npm tasks run.
 - **The AI CLIs never upgraded** - Gemini CLI and Claude Code used
   `state: present` and OpenClaw guarded on `creates: /usr/bin/openclaw`, so
   each was resolved once at first install and then stayed frozen at that
@@ -108,6 +123,12 @@ All notable changes to NikOS are documented here.
   unsolvable the moment one dependency drops support for it, and nothing in
   the AI stack needs a specific 3.1x. Set `nikos_python_version: "=3.12"` in
   `vars/local.yml` to pin hard again.
+
+### Changed
+- **Claude Code installs its native binary** rather than a global npm package.
+  It ships a standalone build that needs no Node at all, and its installer
+  refuses to run under sudo - with sudo the binary lands in root's home and the
+  `claude` command is missing from the user's shell.
 
 ### Added
 - **Ollama models grouped by capability.** `ollama_models_reasoning`,

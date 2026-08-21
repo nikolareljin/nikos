@@ -1,37 +1,148 @@
 ---
-- name: Download NodeSource setup script
-  ansible.builtin.get_url:
-    url: https://deb.nodesource.com/setup_22.x
-    dest: /tmp/nodesource_setup.sh
-    mode: "0755"
-  become: true
-  tags: [ai-node]
+# ── Node.js ─────────────────────────────────────────────────────────────────
+# See vars/main.yml for why this does not install Node from apt. Short version:
+# the NodeSource package Conflicts with Ubuntu's npm, so an in-place upgrade
+# removes npm along with eslint, webpack and a pile of Debian node-* packages.
+#
+# Use the system Node when it is already new enough; otherwise put a pinned
+# Node under the user's home with nvm, where a global npm install needs no root.
+- name: Locate the Node on PATH
+  ansible.builtin.command:
+    argv:
+      - which
+      - node
+  register: cloud_ai_cli_node_path
+  changed_when: false
+  failed_when: false
+  tags: [ai-node, ai-gemini, openclaw]
 
-- name: Run NodeSource setup
-  ansible.builtin.command: bash /tmp/nodesource_setup.sh
+- name: Read that Node's version
+  ansible.builtin.command: "{{ cloud_ai_cli_node_path.stdout | trim }} --version"
+  register: cloud_ai_cli_system_node
+  changed_when: false
+  failed_when: false
+  when: cloud_ai_cli_node_path.rc == 0
+  tags: [ai-node, ai-gemini, openclaw]
+
+# Resolve the version against the Node that is actually first on PATH, not
+# against an assumed /usr/bin/node. On a machine where the user already runs
+# nvm, those are different binaries with different versions, and picking the
+# wrong one is what put Node 18 under a CLI that needs 22.
+- name: Decide whether that Node is new enough
+  ansible.builtin.set_fact:
+    cloud_ai_cli_system_node_ok: >-
+      {{ cloud_ai_cli_node_path.rc == 0
+         and cloud_ai_cli_system_node.rc | default(1) == 0
+         and (cloud_ai_cli_system_node.stdout | default('v0') | regex_replace('^v', ''))
+             is version(nikos_node_min_version, '>=') }}
+  tags: [ai-node, ai-gemini, openclaw]
+
+- name: Report the Node that will be used
+  ansible.builtin.debug:
+    msg: >-
+      Node {{ cloud_ai_cli_system_node.stdout | default('absent') }}
+      at {{ cloud_ai_cli_node_path.stdout | default('-') | trim }}
+      {{ 'meets the ' ~ nikos_node_min_version ~ ' minimum; using it.'
+         if cloud_ai_cli_system_node_ok
+         else 'is below ' ~ nikos_node_min_version ~ '; installing Node '
+              ~ nikos_node_version ~ ' with nvm instead.' }}
+  tags: [ai-node, ai-gemini, openclaw]
+
+- name: Install nvm when the system Node is too old
+  when:
+    - not cloud_ai_cli_system_node_ok
+    - not ansible_check_mode
+  tags: [ai-node, ai-gemini, openclaw]
+  block:
+    - name: Download the nvm install script
+      ansible.builtin.get_url:
+        url: "https://raw.githubusercontent.com/nvm-sh/nvm/{{ nikos_nvm_version }}/install.sh"
+        dest: /tmp/nvm-install.sh
+        mode: "0755"
+
+    # PROFILE=/dev/null stops the script appending its shell snippet on every
+    # run; the profile lines are written once by the task below instead.
+    - name: Run the nvm install script
+      ansible.builtin.command: bash /tmp/nvm-install.sh
+      args:
+        creates: "{{ nikos_home }}/.nvm/nvm.sh"
+      environment:
+        PROFILE: /dev/null
+
+    - name: Install the pinned Node version through nvm
+      ansible.builtin.shell: |
+        set -e
+        . "{{ nikos_home }}/.nvm/nvm.sh"
+        nvm install "{{ nikos_node_version }}"
+        nvm alias default "{{ nikos_node_version }}"
+      args:
+        creates: "{{ nikos_home }}/.nvm/versions/node/v{{ nikos_node_version }}/bin/node"
+      # nvm is a shell function, so this needs a shell that has sourced it.
+      # noqa: command-instead-of-module
+
+    - name: Make nvm available in interactive shells
+      ansible.builtin.blockinfile:
+        path: "{{ nikos_home }}/.bashrc"
+        create: true
+        mode: "0644"
+        marker: "# {mark} NIKOS NVM"
+        block: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
+
+- name: Record the Node used for npm installs
+  ansible.builtin.set_fact:
+    cloud_ai_cli_node_bin: >-
+      {{ (cloud_ai_cli_node_path.stdout | trim | dirname)
+         if cloud_ai_cli_system_node_ok
+         else nikos_home ~ '/.nvm/versions/node/v' ~ nikos_node_version ~ '/bin' }}
+  tags: [ai-node, ai-gemini, openclaw]
+
+# The npm shim runs whichever `node` it finds on PATH, not the one beside
+# itself, so without this it reports the prefix of a different Node entirely -
+# which is the same mix-up that put Node 18 under a CLI needing 22.
+- name: Read that Node's global npm prefix
+  ansible.builtin.command: "{{ cloud_ai_cli_node_bin }}/npm prefix -g"
+  register: cloud_ai_cli_npm_prefix
+  changed_when: false
+  failed_when: false
+  environment:
+    PATH: "{{ cloud_ai_cli_node_bin }}:{{ ansible_env.PATH }}"
+  tags: [ai-node, ai-gemini, openclaw]
+
+# Root is needed only when the prefix sits outside the user's home. An nvm
+# install puts it under ~/.nvm, so those runs need no privilege at all.
+- name: Decide whether npm needs root
+  ansible.builtin.set_fact:
+    cloud_ai_cli_npm_needs_root: >-
+      {{ not (cloud_ai_cli_npm_prefix.stdout | default('/usr/local', true) | trim)
+             .startswith(nikos_home) }}
+  tags: [ai-node, ai-gemini, openclaw]
+
+# npm stages a global upgrade by renaming the existing package to
+# .<name>-<suffix> and fails with ENOTEMPTY if an abandoned staging directory
+# from an interrupted run is already sitting there. That state survives
+# forever and breaks every later install, so clear it before installing.
+- name: Remove abandoned npm staging directories
+  ansible.builtin.shell: >-
+    find /usr/lib/node_modules /usr/local/lib/node_modules
+    "{{ nikos_home }}/.nvm/versions" -maxdepth 3 -type d -name '.*-*'
+    -prune -exec rm -rf {} + 2>/dev/null || true
   become: true
   changed_when: false
   when: not ansible_check_mode
-  tags: [ai-node]
+  tags: [ai-node, ai-gemini, openclaw]
 
-- name: Install Node.js
-  ansible.builtin.apt:
-    name: nodejs
-    state: present
-    update_cache: true
-    cache_valid_time: 3600
-  become: true
-  when: not ansible_check_mode
-  tags: [ai-node]
-
-# state: present installs once and never moves again; these CLIs ship often
-# enough that a `nikos update` should carry them forward.
 - name: Install or upgrade Gemini CLI
   community.general.npm:
     name: "@google/gemini-cli"
     global: true
     state: latest
-  become: true
+    executable: "{{ cloud_ai_cli_node_bin }}/npm"
+  become: "{{ cloud_ai_cli_npm_needs_root }}"
+  environment:
+    PATH: "{{ cloud_ai_cli_node_bin }}:{{ ansible_env.PATH }}"
   when: not ansible_check_mode
   tags: [ai-gemini]
 
