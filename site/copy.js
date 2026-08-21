@@ -10,6 +10,19 @@
   var blocks = document.querySelectorAll("main pre");
   if (!blocks.length || !document.body) return;
 
+  // ⌘C on Apple platforms, Ctrl+C everywhere else. navigator.platform is
+  // deprecated but still the most widely supported signal; the modern
+  // userAgentData.platform is preferred when the browser exposes it.
+  function copyShortcut() {
+    var platform = "";
+    if (navigator.userAgentData && navigator.userAgentData.platform) {
+      platform = navigator.userAgentData.platform;
+    } else if (navigator.platform) {
+      platform = navigator.platform;
+    }
+    return /mac|iphone|ipad|ipod/i.test(platform) ? "\u2318C" : "Ctrl+C";
+  }
+
   function copyText(text) {
     if (navigator.clipboard && window.isSecureContext) {
       return navigator.clipboard.writeText(text);
@@ -67,11 +80,16 @@
 
     var revert;
     button.addEventListener("click", function () {
-      copyText(pre.innerText).then(function () {
+      // textContent, not innerText: innerText is the *rendered* text, so it
+      // forces a reflow and can renormalise whitespace. Code must survive a
+      // round trip byte for byte, and the <code> child is the code itself
+      // without any wrapper the block might grow later.
+      var source = pre.querySelector("code") || pre;
+      copyText(source.textContent).then(function () {
         button.textContent = "Copied";
         button.classList.add("is-copied");
       }, function () {
-        button.textContent = selectBlock() ? "Selected — press Ctrl+C" : "Copy failed";
+        button.textContent = selectBlock() ? "Selected — press " + copyShortcut() : "Copy failed";
         button.classList.add("is-failed");
       }).then(function () {
         clearTimeout(revert);
