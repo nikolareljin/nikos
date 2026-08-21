@@ -30,6 +30,12 @@ All notable changes to NikOS are documented here.
   does not change between releases, so re-setting it to the same value emits no
   xfconf signal and xfdesktop keeps serving the image it cached at session
   start. `xfdesktop --reload` now runs after the wallpaper pass.
+- **A reinstall could not fix the menu icon on an affected machine** - GTK
+  searches `~/.icons` and `~/.local/share/icons` ahead of `/usr/share/icons`, so
+  a copy of `nikos-menu.svg` in either shadows the one the role installs and
+  rewriting the system icon changes nothing on screen. Earlier NikOS builds left
+  one behind. The theming role now removes the user-level copies and rebuilds
+  the icon cache that listed them, so the system icon is the only one left.
 
 ### Added
 - **A full boot splash, including passphrase entry** - the Plymouth theme
