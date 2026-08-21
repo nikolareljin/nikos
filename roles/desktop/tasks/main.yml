@@ -182,9 +182,12 @@
     mode: "0700"
   when: not desktop_accountsservice_users_dir.stat.exists
 
+# site.yml always sets nikos_user, but default it here so the role can be run
+# on its own: an unset login name skips the write instead of failing the play
+# on an undefined variable.
 - name: Set the default session in AccountsService
   community.general.ini_file:
-    path: "/var/lib/AccountsService/users/{{ nikos_user }}"
+    path: "/var/lib/AccountsService/users/{{ nikos_user | default('') }}"
     section: User
     option: "{{ item }}"
     value: "{{ desktop_session_name }}"
@@ -194,7 +197,7 @@
   loop:
     - Session
     - XSession
-  when: nikos_user | length > 0
+  when: (nikos_user | default('')) | length > 0
 
 - name: Ensure LightDM drop-in directory exists
   ansible.builtin.file:
