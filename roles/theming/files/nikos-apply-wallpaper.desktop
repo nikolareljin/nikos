@@ -6,4 +6,3 @@ Comment=Apply the NikOS wallpaper to every monitor on first login
 Exec=/usr/local/bin/nikos-apply-wallpaper
 OnlyShowIn=XFCE;
 NoDisplay=true
-X-GNOME-Autostart-enabled=false
