@@ -11,6 +11,12 @@ clobbering your machine-specific settings.
 nikos_timezone: "Europe/London"     # set interactively during install; any tz from timedatectl list-timezones
 nikos_locale: "en_US.UTF-8"
 
+# ── Desktop ───────────────────────────────────────────
+nikos_desktop_flavor: "xubuntu-minimal"  # xubuntu-minimal | xubuntu-full | xfce
+nikos_remove_gnome: false                # true purges GNOME during an Ubuntu migration
+nikos_disable_gdm: true                  # disable gdm3 without removing the package
+nikos_default_session: "auto"            # auto | xubuntu | xfce | any /usr/share/xsessions entry
+
 # ── Theme ─────────────────────────────────────────────
 nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/..."
 
@@ -40,6 +46,36 @@ nikos_vscode_extensions:
   - "ms-azuretools.vscode-docker"
   - "humao.rest-client"
 ```
+
+## Choosing the desktop package set
+
+`nikos_desktop_flavor` selects what the `desktop` role installs:
+
+| Value | Packages | Notes |
+|---|---|---|
+| `xubuntu-minimal` (default) | `xubuntu-desktop-minimal`, `xubuntu-default-settings`, `xubuntu-artwork` | Xubuntu session, greeter and artwork without the full Xubuntu application suite |
+| `xubuntu-full` | `xubuntu-desktop` and the above | The complete Xubuntu metapackage, including its default apps |
+| `xfce` | `xfce4` | Bare Xfce with no Xubuntu branding; the pre-0.5.0 behaviour |
+
+NikOS theming (Nordic, Papirus-Dark, the NikOS wallpaper and Plymouth theme)
+runs after the desktop role in every case, so it layers on top of whichever set
+you pick.
+
+## Keeping or removing GNOME
+
+Migrating from Ubuntu leaves GNOME installed and selectable from the LightDM
+session menu. To purge it instead:
+
+```yaml
+nikos_remove_gnome: true
+```
+
+That removes `ubuntu-desktop`, `ubuntu-desktop-minimal`, `ubuntu-session`,
+`gnome-session*` and `gnome-shell` with `autoremove`. It is not reversible
+without reinstalling those packages.
+
+`nikos_disable_gdm: false` leaves the `gdm3` service enabled. LightDM still owns
+`display-manager.service`, so this only matters if you plan to switch back.
 
 ## Changing the Ollama model
 

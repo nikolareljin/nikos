@@ -11,9 +11,10 @@ nikos/
 ├── inventory/local                 # localhost ansible_connection=local
 ├── assets/wallpaper.svg            # Nord-palette wallpaper (exported to PNG on install)
 ├── scripts/nikos                   # nikos CLI (installed to /usr/local/bin/nikos)
+├── scripts/nikos-progress.sh       # dialog mixedgauge rendering for playbook runs
 ├── roles/
 │   ├── base/                       # apt, locale, timezone, flatpak
-│   ├── desktop/                    # Xfce 4, LightDM
+│   ├── desktop/                    # Xubuntu desktop, LightDM, display manager handover
 │   ├── theming/                    # Nordic GTK, icons, GRUB, LightDM greeter, wallpaper
 │   ├── github-setup/               # gh CLI, first-login wizard
 │   ├── ai-stack/                   # Ollama, Miniforge, conda env, aider
