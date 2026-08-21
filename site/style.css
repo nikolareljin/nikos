@@ -141,7 +141,6 @@ pre .p { color: var(--frost-bright); }
 /* ── Layout ───────────────────────────────────────────────────────────── */
 
 .wrap { max-width: 940px; margin: 0 auto; padding: 0 1.4rem; }
-.narrow { max-width: 760px; }
 
 header.site {
   border-bottom: 1px solid var(--rule);
