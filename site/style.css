@@ -261,6 +261,15 @@ tbody tr:hover { background: var(--paper-raised); }
 
 figure { margin: 2rem 0; }
 figure svg { width: 100%; height: auto; display: block; }
+
+figure img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 10px;
+  border: 1px solid var(--rule);
+  box-shadow: var(--shadow);
+}
 figcaption { font-size: .87rem; color: var(--ink-soft); margin-top: .7rem; text-align: center; }
 
 .repo-grid { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); margin: 1.2rem 0 0; }
