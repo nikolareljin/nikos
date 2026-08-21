@@ -29,11 +29,22 @@
     }
     // Pages is served over HTTPS, so this path is for local file:// previews.
     return new Promise(function (resolve, reject) {
+      // Off-screen on both axes, not just vertically: a positive inline offset
+      // on one axis can still widen the scroll area for the frame this exists.
+      // tabindex -1 keeps it out of tab order.
+      //
+      // Deliberately not aria-hidden. select() below moves focus here, and
+      // focusing an aria-hidden element is exactly the state that rule forbids.
+      // The element is created, read and removed inside one synchronous block,
+      // so it is never present at a point where assistive tech could reach it.
       var scratch = document.createElement("textarea");
       scratch.value = text;
       scratch.setAttribute("readonly", "");
+      scratch.setAttribute("tabindex", "-1");
       scratch.style.position = "fixed";
       scratch.style.top = "-1000px";
+      scratch.style.left = "-1000px";
+      scratch.style.opacity = "0";
       document.body.appendChild(scratch);
       scratch.select();
       var ok = false;
