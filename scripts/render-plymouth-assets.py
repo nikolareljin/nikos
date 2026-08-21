@@ -196,14 +196,26 @@ def build_spinner_frame(frame: int) -> str:
         f'    <path d="{path}" fill="none" stroke="{DIM}" stroke-width="{stroke}" '
         'stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>\n'
     )
-    # The bright dash wraps at the end of the path, so the loop has no seam.
-    for offset in (phase, phase - MARK_LENGTH):
-        parts.append(
+    # The highlight is one run of length `dash` starting at `phase`, and the
+    # part that overruns the end restarts at the beginning, so the loop has no
+    # seam. It has to be drawn as two explicit runs: the stroke path is open,
+    # not closed, so a dash pattern does not wrap round it by itself, and a
+    # second copy offset by one pattern period would land on the same pixels
+    # rather than on the wrapped remainder.
+    def run(start: float, length: float) -> str:
+        if length <= 0:
+            return ""
+        # dash 0, gap up to the start, the visible run, then a gap past the end.
+        return (
             f'    <path d="{path}" fill="none" stroke="{BRIGHT}" stroke-width="{stroke}" '
             'stroke-linecap="round" stroke-linejoin="round" '
-            f'stroke-dasharray="{dash:.2f} {MARK_LENGTH - dash:.2f}" '
-            f'stroke-dashoffset="{-offset:.2f}" opacity="0.9"/>\n'
+            f'stroke-dasharray="0 {start:.2f} {length:.2f} {MARK_LENGTH:.2f}" '
+            'opacity="0.9"/>\n'
         )
+
+    head = min(dash, MARK_LENGTH - phase)
+    parts.append(run(phase, head))
+    parts.append(run(0.0, phase + dash - MARK_LENGTH))
 
     for cx, cy, radius in MARK_NODES:
         along = node_distance_along_path(cx, cy)

@@ -168,6 +168,20 @@ fun atoi(str) {
     return value;
 }
 
+fun int_prefix(str) {
+    digits = "";
+    for (i = 0; String(str).CharAt(i) != ""; i++) {
+        c = String(str).CharAt(i);
+        if (c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
+            c == "5" || c == "6" || c == "7" || c == "8" || c == "9") {
+            digits += c;
+        } else {
+            break;
+        }
+    }
+    return atoi(digits);
+}
+
 fun set_progress(meter_sprite, fade_sprite, fade_image, meter_image, fraction) {
     if (fraction < 0) {
         fraction = 0;
@@ -246,9 +260,12 @@ fun display_password_callback(prompt, bullets) {
     }
 
     # Centre the row of bullets inside the dialog rather than left-aligning it,
-    # so a short passphrase does not sit against the left edge.
+    # so a short passphrase does not sit against the left edge. The row ends at
+    # the right edge of the last bullet, so it spans the gaps between bullets
+    # plus one bullet width; counting a gap after the last one would push every
+    # row off centre by half a gap.
     spacing = 18;
-    row_width = shown * spacing;
+    row_width = ((shown - 1) * spacing) + bullet_image.GetWidth();
     row_x = screen_x + Math.Int((screen_width - row_width) / 2);
 
     for (i = 0; i < shown; i++) {
@@ -365,9 +382,11 @@ fun status_callback(status) {
         }
     }
 
-    # systemd-fsckd reports the whole run: fsckd:<devices>:<progress>:<string>.
-    # The progress field carries a decimal fraction that atoi cannot read, so
-    # the ",x" tail is cut before the lookup.
+    # systemd-fsckd reports the whole run: fsckd:<devices>:<progress>:<string>,
+    # the field layout every shipped Plymouth theme documents. The progress
+    # field carries a fractional part that atoi cannot read; its separator and
+    # digit count depend on systemd's format string and the locale, so take the
+    # leading integer rather than trimming a fixed number of characters.
     if (status_array[0] == "fsckd") {
         if (fsck_running == 0) {
             fsck_running = 1;
@@ -375,8 +394,7 @@ fun status_callback(status) {
             progress_fade_sprite.SetOpacity(0);
         }
 
-        progress_string = status_array[2];
-        progress = atoi(progress_string.SubString(0, strlen(progress_string) - 2));
+        progress = int_prefix(status_array[2]);
 
         if (progress >= 0) {
             set_progress(fsck_meter_sprite, fsck_fade_sprite,
