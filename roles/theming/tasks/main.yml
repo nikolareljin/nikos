@@ -10,15 +10,25 @@
     src: "{{ playbook_dir }}/assets/wallpaper.svg"
     dest: /usr/share/nikos/wallpaper.svg
     mode: "0644"
+  register: theming_wallpaper_svg
 
+- name: Check for the exported wallpaper PNG
+  ansible.builtin.stat:
+    path: /usr/share/nikos/wallpaper.png
+  register: theming_wallpaper_png
+
+# Export whenever the SVG moved, not just when the PNG is missing. A `creates:`
+# guard would leave every existing install on the PNG rendered by the version
+# it was first installed with, so artwork changes would never reach an upgrade.
 - name: Export wallpaper SVG to PNG
   ansible.builtin.command: >
     inkscape /usr/share/nikos/wallpaper.svg
     --export-filename=/usr/share/nikos/wallpaper.png
     --export-width=1920 --export-height=1080
-  args:
-    creates: /usr/share/nikos/wallpaper.png
-  when: not ansible_check_mode
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - theming_wallpaper_svg is changed or not theming_wallpaper_png.stat.exists
 
 # Portrait cut of the same artwork, for monitors rotated into vertical
 # orientation. Scaling the landscape image onto a 9:16 screen leaves most of
@@ -28,15 +38,23 @@
     src: "{{ playbook_dir }}/assets/wallpaper-vertical.svg"
     dest: /usr/share/nikos/wallpaper-vertical.svg
     mode: "0644"
+  register: theming_wallpaper_vertical_svg
+
+- name: Check for the exported portrait wallpaper PNG
+  ansible.builtin.stat:
+    path: /usr/share/nikos/wallpaper-vertical.png
+  register: theming_wallpaper_vertical_png
 
 - name: Export portrait wallpaper SVG to PNG
   ansible.builtin.command: >
     inkscape /usr/share/nikos/wallpaper-vertical.svg
     --export-filename=/usr/share/nikos/wallpaper-vertical.png
     --export-width=1080 --export-height=1920
-  args:
-    creates: /usr/share/nikos/wallpaper-vertical.png
-  when: not ansible_check_mode
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - theming_wallpaper_vertical_svg is changed
+      or not theming_wallpaper_vertical_png.stat.exists
 
 - name: Install Papirus icon theme
   ansible.builtin.apt:
@@ -451,6 +469,17 @@
   # No-op when the installer runs outside a session: the helper exits without
   # writing its marker, so the autostart entry retries at the next login.
   ansible.builtin.command: /usr/local/bin/nikos-apply-wallpaper
+  become: false
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+# The backdrop path does not change between releases, so re-setting it to the
+# same value emits no xfconf signal and xfdesktop keeps serving the image it
+# cached at session start. Reload it explicitly, so a re-rendered wallpaper
+# appears without logging out.
+- name: Reload xfdesktop so a re-rendered wallpaper is picked up
+  ansible.builtin.command: xfdesktop --reload
   become: false
   changed_when: false
   failed_when: false
