@@ -104,6 +104,37 @@ sudo update-initramfs -u -k all
 
 Then reboot and check the early boot splash again.
 
+### Still booting into GNOME after installing on Ubuntu
+
+The switch only takes effect after a reboot. If a reboot did not help, check
+which unit owns the display manager alias:
+
+```bash
+readlink -f /etc/systemd/system/display-manager.service
+```
+
+It must resolve to `lightdm.service`. If it still points at `gdm3.service`:
+
+```bash
+sudo systemctl disable gdm3
+sudo ln -sf /usr/lib/systemd/system/lightdm.service \
+  /etc/systemd/system/display-manager.service
+sudo systemctl daemon-reload
+```
+
+If the greeter is LightDM but the desktop is still GNOME, the account has a
+session recorded from before the migration:
+
+```bash
+grep -i session /var/lib/AccountsService/users/"$USER"
+ls /usr/share/xsessions
+```
+
+Both `Session` and `XSession` should name an entry from `/usr/share/xsessions`,
+normally `xubuntu`. `/etc/lightdm/lightdm.conf.d/60-nikos.conf` holds the
+system-wide default. You can also pick the session from the gear menu on the
+login screen.
+
 ### git-lantern / lantern not found
 
 ```bash

@@ -179,11 +179,11 @@
     mode: "0644"
   notify: Theming_update_initramfs
 
-- name: Remove xubuntu-plymouth-theme (prevents postinst from resetting default)
-  ansible.builtin.apt:
-    name: xubuntu-plymouth-theme
-    state: absent
-    purge: true
+# xubuntu-artwork depends on plymouth-theme-xubuntu-logo and
+# plymouth-theme-xubuntu-text, so those cannot be purged without dragging out
+# the Xubuntu desktop with them. Selecting the NikOS theme through the
+# default.plymouth alternative below puts that link in manual mode, which
+# outranks anything the Xubuntu theme postinst configures afterwards.
 
 - name: Set NikOS as default Plymouth theme in plymouthd.conf
   community.general.ini_file:

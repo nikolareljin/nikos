@@ -39,7 +39,7 @@ The script will:
 | Role | What it installs |
 |---|---|
 | `base` | apt update, nala, core build deps, flatpak, tmux, pipx, sqlite3, locale, timezone, NTP sync |
-| `desktop` | Xfce 4, LightDM, xfce4-terminal |
+| `desktop` | Xubuntu desktop, LightDM, xfce4-terminal, display manager and default session handover |
 | `theming` | Nordic GTK theme, Papirus-Dark icons, GRUB theme, LightDM greeter, wallpaper |
 | `github-setup` | gh CLI, first-login wizard (SSH key, git identity) |
 | `ai-stack` | Ollama + qwen2.5-coder:7b, llama.cpp, Miniforge, nikos-ai conda env, aider, uv |
@@ -51,7 +51,13 @@ The script will:
 
 ## First login
 
-After install, log out and back in. Xfce starts automatically via LightDM.
+Coming from Xubuntu, log out and back in; the NikOS session starts through
+LightDM.
+
+Coming from Ubuntu, **reboot**. The installer switches the display manager from
+GDM3 to LightDM and sets the default session to Xubuntu, and neither takes
+effect while the GNOME session that launched the installer is still running.
+The installer prints which of the two you need at the end of the run.
 
 On the first terminal session, NikOS shows a short one-time command hint, then the
 GitHub setup wizard runs:
@@ -82,7 +88,7 @@ To force the persistent checkout to a specific branch or tag before the
 playbook runs:
 
 ```bash
-NIKOS_REPO_REF=release/0.4.2 bash install.sh
+NIKOS_REPO_REF=release/0.5.0 bash install.sh
 ```
 
 ## Manual run (without curl | bash)
@@ -96,15 +102,37 @@ ansible-playbook site.yml -i inventory/local --ask-become-pass
 
 ## Offline / air-gapped installs
 
-Not supported in 0.4.2. The playbook downloads theme files, Ollama, Miniforge, and selected tool binaries at install time.
+Not supported in 0.5.0. The playbook downloads theme files, Ollama, Miniforge, and selected tool binaries at install time.
 
 ## Base OS choice
 
 **Recommended: Xubuntu 24.04 LTS** (~3 GB ISO, Xfce pre-installed, minimal footprint)
 
-Also supported: **Ubuntu 24.04 LTS** — the playbook detects GNOME and removes it before installing Xfce. Use the standard Ubuntu desktop ISO.
+Also supported: **Ubuntu 24.04 LTS**. Use the standard Ubuntu desktop ISO.
 
-Starting from Ubuntu adds a GNOME purge step and takes a few extra minutes, but the end state is identical.
+### Ubuntu to Xubuntu migration
+
+On an Ubuntu host the `desktop` role does four things a plain `apt install
+xfce4` does not:
+
+1. Installs `xubuntu-desktop-minimal`, `xubuntu-default-settings` and
+   `xubuntu-artwork`, which provide the Xubuntu session and the Xubuntu login
+   form. Bare `xfce4` provides neither.
+2. Pre-seeds the `shared/default-x-display-manager` debconf answer and rewrites
+   `/etc/systemd/system/display-manager.service` to point at LightDM. This is
+   the setting systemd actually reads; `/etc/X11/default-display-manager` alone
+   changes nothing, and `systemctl enable lightdm` cannot take the alias while
+   GDM3 holds it.
+3. Disables the `gdm3` service without removing the package.
+4. Writes the default session to the AccountsService user file and to
+   `/etc/lightdm/lightdm.conf.d/60-nikos.conf`, so an existing account does not
+   get dropped back into its previously recorded GNOME session.
+
+GNOME stays installed by default and remains selectable from the greeter's
+session menu, so the migration is reversible. Set `nikos_remove_gnome: true` in
+`vars/local.yml` to purge it instead.
+
+Reboot once the install finishes.
 
 ## Testing with VirtualBox
 

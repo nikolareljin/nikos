@@ -8,6 +8,56 @@ nikos_version: "{{ lookup('file', playbook_dir + '/VERSION') | trim }}"
 nikos_timezone: "Europe/London"
 nikos_locale: "en_US.UTF-8"
 
+# ── Desktop environment ──────────────────────────────────────────────────────
+# nikos_desktop_flavor selects the package set installed by the desktop role:
+#   xubuntu-minimal — Xubuntu session, artwork and greeter without the full
+#                     Xubuntu application suite (default)
+#   xubuntu-full    — the complete xubuntu-desktop metapackage
+#   xfce            — bare Xfce, no Xubuntu branding (pre-0.5.0 behaviour)
+nikos_desktop_flavor: "xubuntu-minimal"
+
+nikos_desktop_packages:
+  xubuntu-minimal:
+    - xubuntu-desktop-minimal
+    - xubuntu-default-settings
+    - xubuntu-artwork
+  xubuntu-full:
+    - xubuntu-desktop
+    - xubuntu-default-settings
+    - xubuntu-artwork
+  xfce:
+    - xfce4
+
+nikos_desktop_extra_packages:
+  - xfce4-goodies
+  - xfce4-terminal
+  - lightdm
+  - lightdm-gtk-greeter
+  - lightdm-gtk-greeter-settings
+
+# GNOME packages the desktop role looks for when detecting an Ubuntu host.
+nikos_gnome_packages:
+  - ubuntu-desktop
+  - ubuntu-desktop-minimal
+  - ubuntu-session
+  - gnome-session
+  - gnome-session-bin
+  - gnome-session-common
+  - gnome-shell
+
+# Leave GNOME installed by default so it stays selectable from the greeter.
+# Set to true to purge it during the Ubuntu -> Xubuntu migration.
+nikos_remove_gnome: false
+
+# Disable the GDM3 service without removing the package, so LightDM owns the
+# display-manager.service alias.
+nikos_disable_gdm: true
+
+# Default session written to AccountsService and the LightDM seat config.
+# "auto" resolves to xubuntu when /usr/share/xsessions/xubuntu.desktop exists,
+# otherwise xfce.
+nikos_default_session: "auto"
+
 # Theme
 nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/Nordic.tar.xz"
 nordic_grub_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/Nordic.tar.xz"

@@ -48,38 +48,53 @@
     state: directory
     mode: "0755"
 
-- name: Download llama.cpp CPU binary archive
-  ansible.builtin.get_url:
-    url: "https://github.com/ggml-org/llama.cpp/releases/download/{{ llama_cpp_version }}/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
-    dest: "/tmp/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
-    mode: "0644"
+# llama.cpp ships prebuilt binaries from GitHub releases. A missing asset or a
+# network failure used to abort the whole play, taking every role after
+# ai-stack with it, so the whole download/extract/install sequence is rescued.
+- name: Install llama.cpp CPU binaries
   when: not ansible_check_mode
+  block:
+    - name: Create llama.cpp extraction directory
+      ansible.builtin.file:
+        path: "/tmp/llama-{{ llama_cpp_version }}"
+        state: directory
+        mode: "0755"
 
-- name: Extract llama.cpp CPU binaries
-  ansible.builtin.unarchive:
-    src: "/tmp/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
-    dest: "/tmp/llama-{{ llama_cpp_version }}"
-    remote_src: true
-    creates: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-server"
-  when: not ansible_check_mode
+    - name: Download llama.cpp CPU binary archive
+      ansible.builtin.get_url:
+        url: "https://github.com/ggml-org/llama.cpp/releases/download/{{ llama_cpp_version }}/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
+        dest: "/tmp/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
+        mode: "0644"
 
-- name: Install llama.cpp CLI
-  ansible.builtin.copy:
-    src: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-cli"
-    dest: "{{ nikos_home }}/.local/bin/llama-cli"
-    mode: "0755"
-    remote_src: true
-    force: false
-  when: not ansible_check_mode
+    - name: Extract llama.cpp CPU binaries
+      ansible.builtin.unarchive:
+        src: "/tmp/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
+        dest: "/tmp/llama-{{ llama_cpp_version }}"
+        remote_src: true
+        creates: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-server"
 
-- name: Install llama.cpp server
-  ansible.builtin.copy:
-    src: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-server"
-    dest: "{{ nikos_home }}/.local/bin/llama-server"
-    mode: "0755"
-    remote_src: true
-    force: false
-  when: not ansible_check_mode
+    - name: Install llama.cpp CLI
+      ansible.builtin.copy:
+        src: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-cli"
+        dest: "{{ nikos_home }}/.local/bin/llama-cli"
+        mode: "0755"
+        remote_src: true
+        force: false
+
+    - name: Install llama.cpp server
+      ansible.builtin.copy:
+        src: "/tmp/llama-{{ llama_cpp_version }}/build/bin/llama-server"
+        dest: "{{ nikos_home }}/.local/bin/llama-server"
+        mode: "0755"
+        remote_src: true
+        force: false
+  rescue:
+    - name: Warn that llama.cpp could not be installed
+      ansible.builtin.debug:
+        msg: >-
+          llama.cpp {{ llama_cpp_version }} could not be installed
+          ({{ ansible_failed_result.msg | default('unknown error') }}).
+          Continuing with the rest of the NikOS install; Ollama is unaffected.
 
 - name: Check if Miniforge is already installed
   ansible.builtin.stat:

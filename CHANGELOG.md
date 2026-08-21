@@ -2,6 +2,63 @@
 
 All notable changes to NikOS are documented here.
 
+## [0.5.0] — 2026-08-20
+
+### Fixed
+- **Ubuntu hosts never switched to Xubuntu** - the desktop role probed a single
+  `gnome-session` package to decide whether it was migrating an Ubuntu install.
+  Ubuntu 24.04 ships `ubuntu-session`, `gnome-session-bin` and
+  `gnome-session-common` instead, so `dpkg-query` reported "not installed" and
+  the whole migration block was skipped. Detection now reads the full package
+  list through `package_facts`.
+- **Display manager handover** - the role only wrote
+  `/etc/X11/default-display-manager`, which systemd does not read.
+  `systemctl enable lightdm` cannot take the `display-manager.service` alias
+  while GDM3 owns it, so Ubuntu hosts kept booting into the GNOME greeter. The
+  role now pre-seeds the `shared/default-x-display-manager` debconf answer,
+  rewrites the `display-manager.service` symlink, disables `gdm3` without
+  removing it, and asserts the result before the play ends.
+- **Default session** - LightDM kept honouring the session recorded for an
+  existing account, dropping migrated users straight back into GNOME. The role
+  now writes `Session`/`XSession` to the AccountsService user file and ships
+  `/etc/lightdm/lightdm.conf.d/60-nikos.conf` with the seat defaults.
+- **llama.cpp install** - `unarchive` targeted `/tmp/llama-<version>` without
+  creating it first, failing with `dest must be an existing dir`. The directory
+  is created up front and the whole llama.cpp sequence now runs inside a
+  `block`/`rescue`, so a download or release-asset failure no longer aborts the
+  play and skips every role after `ai-stack`.
+- **Plymouth theme note** - the role tried to purge `xubuntu-plymouth-theme`,
+  a package that does not exist on noble. The real themes are
+  `plymouth-theme-xubuntu-logo` and `plymouth-theme-xubuntu-text`, which
+  `xubuntu-artwork` depends on; NikOS keeps them installed and wins through the
+  manually selected `default.plymouth` alternative instead.
+
+### Added
+- **Xubuntu desktop packages** - `xubuntu-desktop-minimal`,
+  `xubuntu-default-settings` and `xubuntu-artwork` replace the bare `xfce4`
+  install, which is what provides the Xubuntu session and the Xubuntu login
+  form. `nikos_desktop_flavor` selects between `xubuntu-minimal` (default),
+  `xubuntu-full` and `xfce`.
+- **Desktop migration variables** - `nikos_remove_gnome` (default `false`,
+  GNOME stays selectable from the greeter), `nikos_disable_gdm`,
+  `nikos_default_session` and `nikos_gnome_packages`.
+- **Installer progress UI** - `scripts/nikos-progress.sh` renders the playbook
+  as a `dialog --mixedgauge`: one row per role with Succeeded/Failed/In
+  Progress, an overall percentage counted against
+  `ansible-playbook --list-tasks`, and the current task as the caption.
+
+### Changed
+- **Installer no longer runs the playbook under a pty** - `script -qefc` forced
+  Ansible into colour mode and the escape sequences were rendered as literal
+  text by `dialog --progressbox`. The playbook now runs with colour disabled and
+  every stream is ANSI-stripped before it reaches dialog or the log.
+- **Log ANSI stripping** - the strip expressions run under `LC_ALL=C`; under a
+  UTF-8 locale the `[ -/]` and `[@-~]` ranges follow collation order and stop
+  matching escape sequences.
+- **Completion message** - the installer now says whether a reboot or a log-out
+  is needed, based on the session that is currently running.
+- Version bumped `0.4.2` -> `0.5.0`.
+
 ## [0.4.2] — 2026-05-22
 
 ### Fixed
