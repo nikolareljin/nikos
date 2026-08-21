@@ -17,6 +17,13 @@ All notable changes to NikOS are documented here.
   was inferred from whatever git checkout the script happened to sit in, so
   `curl | bash` in a project directory could pick up an unrelated repository's
   branch name. Version selection is now explicit.
+- **`gh extension install github/gh-copilot` failed the play** - gh 2.98.0
+  promoted `copilot` to a built-in command, and `gh extension install` rejects
+  any extension whose name collides with one (`"copilot" matches the name of a
+  built-in command or alias`). Because `gh` is installed from GitHub's apt
+  repository and is not pinned, this began failing on its own. The role now
+  asks whether gh can already run `copilot` and installs the extension only
+  when it cannot, so it works either way.
 - **Stale repo sync helpers on upgrade** - the installer sourced
   `scripts/repo-sync.sh` from `NIKOS_HOME`, which belongs to the *installed*
   version. Upgrading from 0.4.2 would load a copy with none of the functions

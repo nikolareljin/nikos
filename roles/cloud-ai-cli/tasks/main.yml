@@ -51,6 +51,19 @@
   when: cloud_ai_cli_gh_installed.rc == 0
   tags: [ai-copilot-cli]
 
+# gh 2.98.0 promoted `copilot` to a built-in command, and `gh extension install`
+# refuses any extension whose name collides with one:
+#   "copilot" matches the name of a built-in command or alias
+# Ask whether gh can already run `copilot` rather than testing the gh version,
+# so this holds whether the command arrives built in or as the extension.
+- name: Check whether gh already provides a copilot command
+  ansible.builtin.command: gh copilot --help
+  register: cloud_ai_cli_gh_copilot
+  changed_when: false
+  failed_when: false
+  when: cloud_ai_cli_gh_installed.rc == 0
+  tags: [ai-copilot-cli]
+
 - name: Install GitHub Copilot CLI extension
   ansible.builtin.command: gh extension install github/gh-copilot
   args:
@@ -59,6 +72,7 @@
     - not ansible_check_mode
     - cloud_ai_cli_gh_installed.rc == 0
     - cloud_ai_cli_gh_auth.rc == 0
+    - cloud_ai_cli_gh_copilot.rc | default(1) != 0
   tags: [ai-copilot-cli]
 
 - name: Install shell-gpt via pipx
