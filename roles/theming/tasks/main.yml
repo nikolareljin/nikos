@@ -210,6 +210,51 @@
     mode: "0644"
   notify: Theming_update_icon_cache
 
+# GTK searches ~/.icons and ~/.local/share/icons ahead of /usr/share/icons, so
+# a copy of nikos-menu in either shadows the one installed above and a
+# reinstall silently changes nothing. Earlier NikOS builds left one behind, and
+# it is why a machine could keep drawing the missing-image placeholder after
+# the icon itself had been fixed. NikOS owns this icon name, so removing the
+# user-level copies is safe: there is no user artwork to lose.
+- name: Look for user-level copies of the NikOS menu icon
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  become: false
+  loop:
+    - "{{ nikos_home }}/.icons/hicolor/scalable/apps/nikos-menu.svg"
+    - "{{ nikos_home }}/.local/share/icons/hicolor/scalable/apps/nikos-menu.svg"
+  register: theming_user_menu_icons
+
+- name: Record which user-level copies are shadowing the system icon
+  ansible.builtin.set_fact:
+    theming_shadowing_menu_icons: >-
+      {{ theming_user_menu_icons.results
+         | selectattr('stat.exists')
+         | map(attribute='item')
+         | list }}
+
+- name: Remove user-level copies of the NikOS menu icon
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  become: false
+  loop: "{{ theming_shadowing_menu_icons }}"
+
+# A cache that still lists the icon is as good as the file itself: GTK trusts
+# the cache and keeps resolving a name with nothing behind it. These
+# directories carry no index.theme, so the cache is rebuilt without one. The
+# loop is empty when nothing was shadowing, so this does not run on a clean
+# machine.
+- name: Refresh the user icon caches the removed copies were listed in
+  ansible.builtin.command: >
+    gtk-update-icon-cache --force --ignore-theme-index
+    {{ item | dirname | dirname | dirname }}
+  become: false
+  changed_when: true
+  failed_when: false
+  loop: "{{ theming_shadowing_menu_icons }}"
+  when: not ansible_check_mode
+
 - name: Create NikOS Plymouth theme directory
   ansible.builtin.file:
     path: /usr/share/plymouth/themes/nikos
