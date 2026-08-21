@@ -349,6 +349,9 @@ _run_playbook_dialog() {
       nikos_progress_run "${title}" "${INSTALL_LOG}" \
         "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg" "${opts[@]}"
       rc=$?
+      # Same treatment as a failing `tee` in the fallback path below: a run
+      # whose log could not be written is reported, not silently accepted.
+      _tee_rc="${NIKOS_PROGRESS_LOG_RC:-0}"
       _restore_terminal_cursor
       return "${rc}"
     fi

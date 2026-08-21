@@ -43,6 +43,16 @@
 # force-confold keeps apt non-interactive when it meets the greeter conffile
 # the theming role rewrites later in this play.
 
+- name: Check the desktop flavor is one this role knows
+  ansible.builtin.assert:
+    that:
+      - nikos_desktop_flavor in nikos_desktop_packages
+    fail_msg: >-
+      nikos_desktop_flavor is '{{ nikos_desktop_flavor }}', which has no package
+      list. Set it to one of:
+      {{ nikos_desktop_packages.keys() | list | join(', ') }}.
+    success_msg: "Installing the {{ nikos_desktop_flavor }} desktop package set."
+
 - name: Install Xubuntu desktop packages
   ansible.builtin.apt:
     name: "{{ nikos_desktop_packages[nikos_desktop_flavor] + nikos_desktop_extra_packages }}"
@@ -154,13 +164,23 @@
       {{ 'xubuntu' if (nikos_default_session == 'auto' and desktop_xubuntu_session.stat.exists)
          else ('xfce' if nikos_default_session == 'auto' else nikos_default_session) }}
 
-- name: Ensure AccountsService user directory exists
+# accountsservice ships this directory itself, 0700 root:root. Only create it
+# when it is genuinely missing, and with those permissions: managing it
+# unconditionally would rewrite the mode the distribution chose, and the 0775
+# this role used before 0.5.0 made a root-owned system directory group-writable.
+- name: Check for the AccountsService user directory
+  ansible.builtin.stat:
+    path: /var/lib/AccountsService/users
+  register: desktop_accountsservice_users_dir
+
+- name: Create the AccountsService user directory
   ansible.builtin.file:
     path: /var/lib/AccountsService/users
     state: directory
     owner: root
     group: root
-    mode: "0775"
+    mode: "0700"
+  when: not desktop_accountsservice_users_dir.stat.exists
 
 - name: Set the default session in AccountsService
   community.general.ini_file:
