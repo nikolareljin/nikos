@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Installing NikOS</title>
+<meta name="description" content="How to install NikOS on Ubuntu 24.04: requirements, the three install modes, first boot, updating, and recovery.">
+<link rel="icon" href="assets/menu-icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/menu-icon.svg" alt=""> NikOS</a>
+    <nav class="site">
+      <a href="index.html">Overview</a>
+      <a href="install.html" aria-current="page">Install</a>
+      <a href="included.html">What's included</a>
+      <a href="about.html">About</a>
+      <a href="https://github.com/nikolareljin/nikos">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+  <p class="tagline">Installation</p>
+  <h1>Installing NikOS</h1>
+  <p class="lede">One command for the common case, and three modes when you need control over which
+  version you get.</p>
+
+  <h2>Before you start</h2>
+
+  <ul class="tight">
+    <li><strong>Ubuntu 24.04 LTS</strong> or Xubuntu 24.04. The installer checks and warns on anything else.</li>
+    <li>A non-root user with <code>sudo</code>. Running the installer as root is refused.</li>
+    <li>~20&nbsp;GB free disk for a base install; up to 93&nbsp;GB more if you later pull every optional model group.</li>
+    <li>4&nbsp;GB RAM minimum, 8&nbsp;GB recommended.</li>
+    <li>Internet access throughout — packages, themes and models are all fetched during the run.</li>
+  </ul>
+
+  <div class="note">
+    <strong>Coming from stock Ubuntu?</strong> The installer moves the display manager from GDM3 to LightDM
+    and sets your session to Xubuntu. Neither takes effect while the GNOME session that launched the
+    installer is still running, so you will need to reboot. The installer tells you which you need when it
+    finishes. GNOME is not removed and stays selectable from the greeter.
+  </div>
+
+  <h2>Quick install</h2>
+
+<pre><code>curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos/main/install.sh | bash</code></pre>
+
+  <p>This clones the repository to <code>~/.local/share/nikos</code>, moves it to the newest release tag,
+  offers a <code>dialog</code> menu for the optional bundles, then runs the playbook behind a per-role
+  progress gauge. Add <code>NIKOS_USE_DIALOG=0</code> for the plain-prompt path.</p>
+
+  <h2>Choosing a version</h2>
+
+  <p>With no options the installer resolves and installs the newest release tag. Pre-release tags
+  (<code>0.6.0-rc1</code>) and floating tags (<code>production</code>) are never selected automatically.</p>
+
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Command</th><th>Installs</th></tr></thead>
+    <tbody>
+      <tr><td><code>curl … | bash</code></td><td>The latest release tag</td></tr>
+      <tr><td><code>bash install.sh</code></td><td>The latest release tag — <em>not</em> the checkout you ran it from</td></tr>
+      <tr><td><code>bash install.sh --ref 0.5.0</code></td><td>That specific branch or tag</td></tr>
+      <tr><td><code>bash install.sh --dev</code></td><td>The checkout you ran it from, uncommitted changes included</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p><code>NIKOS_REPO_REF=&lt;ref&gt;</code> is equivalent to <code>--ref</code>. Installing a tag leaves the
+  persistent checkout on a detached HEAD, which is expected.</p>
+
+  <h3>Development mode</h3>
+
+<pre><code>git clone --recurse-submodules https://github.com/nikolareljin/nikos
+cd nikos
+bash install.sh --dev</code></pre>
+
+  <p><code>--dev</code> runs the checkout the script lives in, exactly as it stands. Nothing is cloned,
+  fetched, pulled or stashed, and <code>~/.local/share/nikos</code> is never touched — so testing a branch
+  cannot damage a working install. It refuses to run outside a NikOS checkout and cannot be combined
+  with <code>--ref</code>.</p>
+
+  <h2>What happens during the run</h2>
+
+  <ol class="tight">
+    <li>The installer checks the OS, your <code>sudo</code> access and the Ansible version, offering an
+      upgrade from the Ansible PPA if it is too old.</li>
+    <li>You pick optional bundles from a menu, or skip them all.</li>
+    <li>Ansible runs 27 roles against <code>localhost</code>, shown as a per-role progress gauge.</li>
+    <li>The full log is written to <code>~/.config/nikos/logs/</code>, with
+      <code>install-latest.log</code> symlinked to the most recent run.</li>
+  </ol>
+
+  <h2>First boot</h2>
+
+  <p>Reboot if you came from Ubuntu; log out and back in if you were already on Xubuntu. On the first
+  terminal session a one-time GitHub setup wizard runs: <code>gh auth login</code>, SSH key generation and
+  upload, git identity, and optionally cloning your dotfiles. It writes
+  <code>~/.config/nikos/github-configured</code> and does not run again.</p>
+
+  <h2>Day-to-day</h2>
+
+<pre><code><span class="c"># update to the newest release and re-run the playbook</span>
+nikos update
+
+<span class="c"># update to a specific branch or tag instead</span>
+nikos update --ref 0.6.0
+
+<span class="c"># add an optional bundle later</span>
+nikos add postgres
+nikos add ollama-vision
+
+<span class="c"># check what is installed and whether anything is broken</span>
+nikos status
+nikos doctor
+
+<span class="c"># read the last playbook log</span>
+nikos log 100</code></pre>
+
+  <p>Every role is idempotent, so re-running changes only what has drifted. <code>nikos update</code> reads
+  its target from what is checked out: a release install advances to the newest release only when that
+  release is genuinely newer, and a branch install stays on its branch. An update never downgrades.</p>
+
+  <h2>Customising before you run</h2>
+
+  <p>Create <code>vars/local.yml</code> to override defaults without editing tracked files:</p>
+
+<pre><code><span class="p">nikos_timezone:</span> "Europe/London"
+<span class="p">nikos_desktop_flavor:</span> "xubuntu-full"
+<span class="p">nikos_remove_gnome:</span> true
+<span class="p">ollama_default_model:</span> "qwen3:8b"
+<span class="p">nikos_tesseract_languages:</span> [eng, srp, deu]</code></pre>
+
+  <p>The full set of variables is documented in
+  <a href="https://github.com/nikolareljin/nikos/blob/main/docs/customization.md">docs/customization.md</a>.</p>
+
+  <h2>If something goes wrong</h2>
+
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Symptom</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Still booting into GNOME</td>
+        <td>Check <code>systemctl status display-manager</code>. The playbook asserts the handover and fails
+        rather than reporting success on a host that will boot into GNOME.</td>
+      </tr>
+      <tr>
+        <td><code>You are not currently on a branch</code></td>
+        <td>An installer older than 0.5.0 could not update a checkout left on a tag. Run
+        <code>git -C ~/.local/share/nikos switch --track origin/main</code> once; 0.5.0 handles it itself.</td>
+      </tr>
+      <tr>
+        <td>A role failed mid-run</td>
+        <td><code>nikos log 200</code>, then re-run — roles are idempotent, so completed work is skipped.</td>
+      </tr>
+      <tr>
+        <td>Want to check which version is installed</td>
+        <td><code>nikos status</code>, or <code>cat ~/.local/share/nikos/VERSION</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>More in <a href="https://github.com/nikolareljin/nikos/blob/main/docs/debugging.md">docs/debugging.md</a>.</p>
+
+  <div class="actions">
+    <a class="btn btn-primary" href="included.html">What gets installed</a>
+    <a class="btn btn-ghost" href="https://github.com/nikolareljin/nikos">Source on GitHub</a>
+  </div>
+
+</div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>NikOS — Neural Innovation for Knowledge OS</span>
+    <span><a href="https://github.com/nikolareljin/nikos">github.com/nikolareljin/nikos</a> · MIT</span>
+  </div>
+</footer>
+
+<script src="copy.js" defer></script>
+</body>
+</html>

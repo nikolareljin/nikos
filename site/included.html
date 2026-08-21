@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>What NikOS installs</title>
+<meta name="description" content="The full NikOS inventory: 12 core roles, 15 optional bundles, the Python AI stack, Ollama model groups, and the nikos CLI.">
+<link rel="icon" href="assets/menu-icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/menu-icon.svg" alt=""> NikOS</a>
+    <nav class="site">
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install</a>
+      <a href="included.html" aria-current="page">What's included</a>
+      <a href="about.html">About</a>
+      <a href="https://github.com/nikolareljin/nikos">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+  <p class="tagline">Inventory</p>
+  <h1>What NikOS installs</h1>
+  <p class="lede">Twelve roles run on every install. Fifteen more are opt-in, and nothing in them is
+  downloaded unless you ask. Every item below maps to a role you can read in the repository.</p>
+
+  <h2>Core roles</h2>
+
+  <p>These run on every install.</p>
+
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Role</th><th>What it installs</th></tr></thead>
+    <tbody>
+      <tr><td><code>base</code></td><td>nala, git, curl, wget, build-essential, python3-pip, python3-venv, flatpak, gnupg, ca-certificates, dialog, xfconf, inkscape, openssh-server, tmux, pipx, sqlite3, unzip. Sets timezone, locale and NTP, adds the Flathub remote, deploys a default <code>.tmux.conf</code>.</td></tr>
+      <tr><td><code>desktop</code></td><td>The Xubuntu desktop package set, LightDM and its GTK greeter. Detects an existing GNOME install, hands <code>display-manager.service</code> to LightDM, and sets the account's default session.</td></tr>
+      <tr><td><code>theming</code></td><td>Nord GTK theme and icons, a generated wallpaper, GRUB theme, Plymouth boot splash, and an autostart entry that applies the wallpaper across every connected monitor.</td></tr>
+      <tr><td><code>github-setup</code></td><td>GitHub CLI from GitHub's apt repository, plus the first-run wizard for auth, SSH keys and git identity.</td></tr>
+      <tr><td><code>ai-stack</code></td><td>Ollama as a user service, the default model, Miniforge, the <code>nikos-ai</code> conda environment, PyTorch (CPU), and llama.cpp binaries.</td></tr>
+      <tr><td><code>editors</code></td><td>VS Code from Microsoft's apt repository, plus the extension set.</td></tr>
+      <tr><td><code>cloud-ai-cli</code></td><td>Node.js 22 LTS from NodeSource, Gemini CLI, GitHub Copilot CLI, shell-gpt and glances via pipx.</td></tr>
+      <tr><td><code>agent-dev</code></td><td>The agent frameworks, ML libraries and image analysis stack in the conda environment, plus Claude Code.</td></tr>
+      <tr><td><code>dev-tools</code></td><td>distrodeck, image-view, git-lantern, ai-runner and mkcert, cloned into <code>~/Projects</code> and built.</td></tr>
+      <tr><td><code>network</code></td><td>Network tooling; adds you to the <code>wireshark</code> group. Tagged <code>network</code>.</td></tr>
+      <tr><td><code>music</code></td><td>Music production tools and Ardour via Flatpak. Tagged <code>music</code>.</td></tr>
+      <tr><td><code>education</code></td><td>Education tools and draw.io desktop via Flatpak. Tagged <code>education</code>.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>Optional bundles</h2>
+
+  <p>Installed with <code>nikos add &lt;name&gt;</code>, or selected from the installer menu.</p>
+
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Bundle</th><th>Contents</th></tr></thead>
+    <tbody>
+      <tr><td><code>neovim</code></td><td>Neovim with a minimal <code>init.lua</code></td></tr>
+      <tr><td><code>java</code></td><td>OpenJDK 21 (LTS)</td></tr>
+      <tr><td><code>bun</code></td><td>The Bun JavaScript runtime</td></tr>
+      <tr><td><code>zsh</code></td><td>Zsh with the Starship prompt</td></tr>
+      <tr><td><code>podman</code></td><td>Rootless container runtime</td></tr>
+      <tr><td><code>redis</code></td><td>Redis server and the Python client</td></tr>
+      <tr><td><code>postgres</code></td><td>PostgreSQL with pgvector and <code>psycopg2-binary</code></td></tr>
+      <tr><td><code>qdrant</code></td><td>Qdrant vector database as a user systemd service on port 6333</td></tr>
+      <tr><td><code>k8s-tools</code></td><td>kubectl and Helm</td></tr>
+      <tr><td><code>act</code></td><td>Run GitHub Actions workflows locally</td></tr>
+      <tr><td><code>fabric</code></td><td>The Fabric AI pattern CLI</td></tr>
+      <tr><td><code>bitnet</code></td><td>BitNet.cpp 1-bit inference, built from source</td></tr>
+      <tr><td><code>mistral-rs</code></td><td>mistral.rs, a Rust OpenAI-compatible LLM server</td></tr>
+      <tr><td><code>monitoring</code></td><td>Netdata metrics dashboard</td></tr>
+      <tr><td><code>openclaw</code></td><td>The OpenClaw LLM gateway CLI</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>The Python AI environment</h2>
+
+  <p>A conda environment named <code>nikos-ai</code>, built on Miniforge. Python is a range
+  (<code>&gt;=3.11,&lt;3.14</code>) rather than a fixed minor, so conda resolves whatever actually solves
+  against the package set.</p>
+
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Group</th><th>Packages</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Deep learning</strong></td><td><code>torch</code>, <code>torchvision</code>, <code>torchaudio</code> (CPU builds), <code>transformers</code>, <code>accelerate</code></td></tr>
+      <tr><td><strong>Agent frameworks</strong></td><td><code>langchain</code>, <code>langchain-community</code>, <code>langchain-openai</code>, <code>llama-index</code>, <code>llama-index-llms-ollama</code>, <code>openai</code>, <code>anthropic</code>, <code>instructor</code></td></tr>
+      <tr><td><strong>Retrieval</strong></td><td><code>sentence-transformers</code>, <code>chromadb</code>, <code>qdrant-client</code>, <code>datasets</code>, <code>evaluate</code></td></tr>
+      <tr><td><strong>Image analysis</strong></td><td><code>opencv-contrib-python</code>, <code>pillow</code>, <code>scikit-image</code>, <code>imageio</code>, <code>pytesseract</code>, <code>timm</code></td></tr>
+      <tr><td><strong>Data and notebooks</strong></td><td><code>jupyter</code>, <code>jupyterlab</code>, <code>pandas</code>, <code>numpy</code>, <code>scikit-learn</code>, <code>matplotlib</code>, <code>litecli</code></td></tr>
+      <tr><td><strong>Serving</strong></td><td><code>fastapi</code>, <code>uvicorn</code>, <code>httpx</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>OpenCV's wheels are dynamically linked, so <code>libgl1</code>, <code>libglib2.0-0t64</code>,
+  <code>libsm6</code>, <code>libxext6</code> and <code>ffmpeg</code> are installed alongside them.
+  Tesseract arrives with orientation detection and nine language packs by default; set
+  <code>nikos_tesseract_languages: ["all"]</code> for all 160-plus.</p>
+
+  <div class="note">
+    <strong>Tesseract reads text, it does not translate it.</strong> It performs OCR — extracting characters
+    from an image. Translating what it extracts is a separate step, and one of the local language models
+    can do it.
+  </div>
+
+  <h2>Ollama models</h2>
+
+  <p>One model is pulled by default: <code>qwen2.5-coder:7b</code> (4.7&nbsp;GB). Everything else is grouped
+  by capability, each group with its own tag, so a laptop can take one without the rest.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 200" role="img" aria-labelledby="sizes-title">
+      <title id="sizes-title">Relative download size of each model group: coding 34 GB, reasoning 23 GB, text 22 GB, vision 13 GB, embedding 1.3 GB</title>
+      <g font-family="JetBrains Mono, monospace" font-size="12">
+        <g>
+          <text x="0" y="26" fill="currentColor">coding</text>
+          <rect x="110" y="14" width="500" height="18" rx="4" fill="#5E81AC"/>
+          <text x="622" y="27" fill="#8FA1B3" font-size="11">~34 GB</text>
+        </g>
+        <g>
+          <text x="0" y="60" fill="currentColor">reasoning</text>
+          <rect x="110" y="48" width="338" height="18" rx="4" fill="#81A1C1"/>
+          <text x="460" y="61" fill="#8FA1B3" font-size="11">~23 GB</text>
+        </g>
+        <g>
+          <text x="0" y="94" fill="currentColor">text</text>
+          <rect x="110" y="82" width="323" height="18" rx="4" fill="#88C0D0"/>
+          <text x="445" y="95" fill="#8FA1B3" font-size="11">~22 GB</text>
+        </g>
+        <g>
+          <text x="0" y="128" fill="currentColor">vision</text>
+          <rect x="110" y="116" width="191" height="18" rx="4" fill="#A3BE8C"/>
+          <text x="313" y="129" fill="#8FA1B3" font-size="11">~13 GB</text>
+        </g>
+        <g>
+          <text x="0" y="162" fill="currentColor">embedding</text>
+          <rect x="110" y="150" width="19" height="18" rx="4" fill="#EBCB8B"/>
+          <text x="141" y="163" fill="#8FA1B3" font-size="11">~1.3 GB</text>
+        </g>
+        <text x="0" y="192" fill="#8FA1B3" font-size="11">Nothing is pulled unless you request the tag.</text>
+      </g>
+    </svg>
+    <figcaption>Download size per group. Models load on demand, so this is disk and bandwidth, not idle RAM.</figcaption>
+  </figure>
+
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Group</th><th>Model</th><th>Size</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="5"><code>ollama-reasoning</code></td><td><code>deepseek-r1:1.5b</code></td><td class="size">1.1 GB</td><td>Runs on a 4 GB machine</td></tr>
+      <tr><td><code>qwen3:4b</code></td><td class="size">2.5 GB</td><td></td></tr>
+      <tr><td><code>deepseek-r1:8b</code></td><td class="size">5.2 GB</td><td></td></tr>
+      <tr><td><code>qwen3:8b</code></td><td class="size">5.2 GB</td><td>Thinking mode</td></tr>
+      <tr><td><code>phi4:14b</code></td><td class="size">9.1 GB</td><td>Desktop-class</td></tr>
+
+      <tr><td rowspan="3"><code>ollama-coding</code></td><td><code>deepseek-coder-v2:16b</code></td><td class="size">6.4 GB</td><td>Mid-size</td></tr>
+      <tr><td><code>qwen2.5-coder:14b</code></td><td class="size">9.0 GB</td><td>One size up from the default</td></tr>
+      <tr><td><code>qwen3-coder:30b</code></td><td class="size">19 GB</td><td>Current generation, workstation-class</td></tr>
+
+      <tr><td rowspan="5"><code>ollama-text</code></td><td><code>granite4:micro</code></td><td class="size">2.1 GB</td><td>Small enough to keep resident</td></tr>
+      <tr><td><code>llama3.1:8b</code></td><td class="size">3.2 GB</td><td></td></tr>
+      <tr><td><code>gemma3:4b</code></td><td class="size">4.0 GB</td><td></td></tr>
+      <tr><td><code>mistral:7b</code></td><td class="size">4.4 GB</td><td></td></tr>
+      <tr><td><code>gemma3:12b</code></td><td class="size">8.1 GB</td><td>Multimodal</td></tr>
+
+      <tr><td rowspan="3"><code>ollama-vision</code></td><td><code>granite3.2-vision:2b</code></td><td class="size">2.4 GB</td><td>Smallest, laptop-friendly</td></tr>
+      <tr><td><code>minicpm-v:8b</code></td><td class="size">4.1 GB</td><td></td></tr>
+      <tr><td><code>qwen2.5vl:7b</code></td><td class="size">6.0 GB</td><td>Vision and document understanding</td></tr>
+
+      <tr><td rowspan="2"><code>ollama-embedding</code></td><td><code>embeddinggemma</code></td><td class="size">622 MB</td><td rowspan="2">For the Chroma / Qdrant stack</td></tr>
+      <tr><td><code>qwen3-embedding:0.6b</code></td><td class="size">639 MB</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p><code>nikos add ollama-models</code> pulls every group, about 93&nbsp;GB. Override any group in
+  <code>vars/local.yml</code> to take a subset.</p>
+
+  <h2>VS Code extensions</h2>
+
+  <p>Continue, GitHub Copilot, Leak Lock, GitLens, Python, Jupyter, the Nord theme, Remote SSH, Docker
+  and REST Client. Edit <code>nikos_vscode_extensions</code> to change the set.</p>
+
+  <h2>The <code>nikos</code> command</h2>
+
+<pre><code>nikos setup            <span class="c"># run the full playbook</span>
+nikos update           <span class="c"># move to the newest release, then re-run</span>
+nikos update --ref X   <span class="c"># update to a specific branch or tag</span>
+nikos add &lt;name&gt;       <span class="c"># install an optional bundle or model group</span>
+nikos status           <span class="c"># version, Ollama models, installed roles</span>
+nikos doctor           <span class="c"># check for broken configs and missing deps</span>
+nikos log [N]          <span class="c"># tail the latest playbook log</span>
+nikos log list         <span class="c"># list available logs</span></code></pre>
+
+  <div class="actions">
+    <a class="btn btn-primary" href="install.html">Installation guide</a>
+    <a class="btn btn-ghost" href="https://github.com/nikolareljin/nikos">Read the roles</a>
+  </div>
+
+</div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>NikOS — Neural Innovation for Knowledge OS</span>
+    <span><a href="https://github.com/nikolareljin/nikos">github.com/nikolareljin/nikos</a> · MIT</span>
+  </div>
+</footer>
+
+<script src="copy.js" defer></script>
+</body>
+</html>

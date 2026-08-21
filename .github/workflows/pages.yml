@@ -1,0 +1,78 @@
+name: Pages
+
+# Publishes site/ to GitHub Pages.
+#
+# The site is hand-written HTML with one stylesheet, so there is no build step.
+# pages-build.yml only builds when it is given a build_command; this file passes
+# none, so it validates site/ and uploads it as it stands. Nothing is installed,
+# which is why no toolchain version is pinned below.
+#
+# Build and deploy are two jobs rather than the combined pages.yml preset, so a
+# pull-request run holds no write scope at all. GitHub validates a called
+# workflow's declared permissions when the run starts, before any job-level
+# `if:` is evaluated, so calling the combined preset would require this file to
+# grant `pages: write` and `id-token: write` on every pull request — including
+# the ones where nothing is deployed and third-party code runs. Splitting keeps
+# those scopes on the one job that cannot work without them, which checks out
+# nothing and runs no build.
+#
+# Pull requests still build, which is what catches a broken path or an empty
+# site/ before it reaches the published site rather than after.
+#
+# There is deliberately no `concurrency:` block. pages-deploy.yml declares its
+# own, and a caller that adds a second group leaves the called job queued behind
+# the run that started it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - site/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+# Read-only at the workflow level, so anything added to this file later starts
+# with no write scope and has to ask for it.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: nikolareljin/ci-helpers/.github/workflows/pages-build.yml@production
+    permissions:
+      contents: read
+      # Read, not write: this job validates and uploads an artifact. Nothing
+      # here publishes.
+      pages: read
+    with:
+      # Nothing reads git history to build this site.
+      fetch_depth: 1
+      pages_path: "site"
+      # configure_pages runs actions/configure-pages, which *reads* the
+      # repository's Pages configuration - the preset passes no `enablement`,
+      # so it never mutates anything and `pages: read` above is enough for it.
+      # It is still gated, because that read fails on a repository which has
+      # not enabled Pages, and a pull request validating a fork or a fresh
+      # checkout is exactly that case. upload writes an artifact, not a
+      # deployment, and is gated so a proposed change cannot stage one.
+      #
+      # The gate matches the deploy job's: excluding pull requests stops a
+      # proposed change publishing itself, and requiring main stops a
+      # workflow_dispatch run started from a feature branch doing the same by
+      # hand.
+      configure_pages: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      upload: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+
+  deploy:
+    needs: build
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    uses: nikolareljin/ci-helpers/.github/workflows/pages-deploy.yml@production
+    # The only place a write scope is ever live. On a pull request this job is
+    # skipped, so its token is never minted.
+    permissions:
+      pages: write
+      id-token: write
