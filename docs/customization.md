@@ -217,7 +217,7 @@ nikos add zsh        # Zsh plus Starship prompt
 nikos add act        # Run GitHub Actions locally
 nikos add fabric     # Fabric AI pattern CLI
 nikos add k8s-tools  # kubectl and Helm
-nikos add bitnet     # BitNet.cpp 1-bit LLM inference
+nikos add bitnet     # BitNet.cpp 1-bit LLM inference (bitnet-cli)
 nikos add mistral-rs # mistral.rs Rust LLM server
 nikos add monitoring # Netdata monitoring dashboard
 nikos add openclaw   # OpenClaw LLM gateway CLI
