@@ -302,14 +302,12 @@ fun message_callback(text) {
     if (text.SubString(0, 5) == "keys:") {
         text = text.SubString(5, strlen(text));
     }
+    # systemd-fsckd sends this while checks are running, not when they end: it
+    # carries "Press Ctrl+C to cancel all filesystem checks in progress", and
+    # fsckd clears it afterwards. Only the prefix comes off. Touching the fsck
+    # state here would hide a live meter and let boot progress draw over it.
     if (text.SubString(0, 17) == "fsckd-cancel-msg:") {
         text = text.SubString(17, strlen(text));
-        # The check is over, so release the bar. Without this fsck_running
-        # stays set, and boot_progress_callback returns early for the rest of
-        # the boot, so the progress bar never reappears.
-        fsck_meter_sprite.SetOpacity(0);
-        fsck_fade_sprite.SetOpacity(0);
-        fsck_running = 0;
     }
 
     for (i = 4; i > 0; i--) {
@@ -391,11 +389,10 @@ fun status_callback(status) {
         }
     }
 
-    # systemd-fsckd reports the whole run: fsckd:<devices>:<progress>:<string>,
-    # the field layout every shipped Plymouth theme documents. The progress
-    # field carries a fractional part that atoi cannot read; its separator and
-    # digit count depend on systemd's format string and the locale, so take the
-    # leading integer rather than trimming a fixed number of characters.
+    # systemd-fsckd reports the whole run. Its format string is
+    # "fsckd:%d:%3.1f:%s", so field 2 is the progress percentage, carrying one
+    # fractional digit whose separator follows the locale. atoi cannot read
+    # that, so take the leading integer.
     if (status_array[0] == "fsckd" && element_count >= 2) {
         if (fsck_running == 0) {
             fsck_running = 1;
