@@ -86,11 +86,17 @@
 # Every *.so* goes across, not only what ldd reports. ggml dlopens its backend
 # libraries at run time, so a strict dependency-only copy passes ldd and then
 # fails when a backend is loaded.
+#
+# executable: /bin/bash because `shell` runs under /bin/sh, which is dash on
+# Debian and Ubuntu, and dash has no `pipefail`: the script died on its first
+# line with "set: Illegal option -o pipefail", before reaching the copy.
 - name: Install the BitNet CLI and the libraries it loads
   ansible.builtin.shell: |
     set -euo pipefail
     cp -a {{ bitnet_build_bin }}/llama-cli {{ bitnet_build_bin }}/*.so* {{ bitnet_prefix }}/
     chown -R root:root {{ bitnet_prefix }}
+  args:
+    executable: /bin/bash
   become: true
   changed_when: true
   when:

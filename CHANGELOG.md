@@ -4,7 +4,25 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-08-21
+
 ### Fixed
+- **The BitNet install task failed every run, and took the whole optional
+  playbook down with it** - `ansible.builtin.shell` runs its script with
+  `/bin/sh`, which is dash on Debian and Ubuntu, and dash has no `pipefail`.
+  The task died on its first line with `/bin/sh: 1: set: Illegal option -o
+  pipefail`, before the copy it existed to perform, so the run ended `rc=2`
+  with the CLI never installed. The task now declares
+  `args: executable: /bin/bash`. It surfaced only now because the earlier
+  configure and build steps had to start producing `llama-cli` before this one
+  could run at all.
+- **Tests now cover the whole class** - `tests/test_shell_task_interpreters.py`
+  walks every playbook, in both YAML extensions and both task call forms, and
+  fails any `shell` task written with bash-only syntax (`pipefail`, `[[`,
+  process substitution, associative arrays) that is left on the default
+  interpreter. Nothing about the failure was specific to BitNet, and it is
+  invisible until the task runs. Verified by removing the fix above, which
+  fails the suite.
 - **Tagged releases were never published, so the repository advertised 0.4.2 as
   the latest** - `release.yml` triggers on a tag push, but the tag is created by
   the Auto Tag Release workflow, which pushes it with `GITHUB_TOKEN`. GitHub
