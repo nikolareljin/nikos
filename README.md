@@ -8,7 +8,7 @@
 A curated Xubuntu / Ubuntu 24.04 LTS setup for AI coding and development.  
 One command turns a fresh Ubuntu install into a fully configured AI workstation — Xubuntu desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
 
-**Version:** 0.6.1 · **License:** MIT · **Author:** Nikola Reljin
+**Version:** 0.6.2 · **License:** MIT · **Author:** Nikola Reljin
 
 > One file, the Plymouth boot splash, is GPL-3.0-or-later rather than MIT, because it is derived from Xubuntu's theme. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 

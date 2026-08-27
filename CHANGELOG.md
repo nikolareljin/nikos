@@ -4,6 +4,8 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-08-27
+
 ### Fixed
 - **The documented one-liner install silently dropped the bundles it was asked
   for** - `_select_bundles_plain` printed its section headers to stdout and
