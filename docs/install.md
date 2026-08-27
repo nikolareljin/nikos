@@ -32,7 +32,7 @@ The script will:
      when the configured value differs from the detected one)
    - **Custom** — enter any IANA timezone string (e.g. `America/New_York`, `Asia/Tokyo`)
    The chosen timezone is written to `vars/local.yml` before the playbook runs.
-9. Run `ansible-playbook` from the local clone
+9. Run `ansible-playbook` from the local clone, behind a per-role progress gauge
 
 ## What the playbook does (in order)
 
@@ -119,11 +119,32 @@ The target is chosen from what is currently checked out:
   is newer. An update never downgrades.
 - **On a branch** — stays on that branch and fast-forwards it.
 
-To force the plain-prompt installer path instead of the `dialog` UI:
+## Which interface a run gets
+
+The TUI follows the **controlling terminal**, not stdin. Under
+`curl ... | bash`, bash reads the script itself from stdin, so stdin is a pipe
+on every such run — the installer asks whether `/dev/tty` is reachable instead,
+which it is whenever a person is sitting at a terminal. The one-liner therefore
+gets the same checklists and the same per-role gauge as a clone-and-run install.
+
+Before 0.6.2 that test asked about stdin, and no piped install could pass it: the
+one-liner showed raw `TASK [...]` output, and on machines without `dialog` it
+also discarded the bundles that had been selected. See issues #52 and #53.
+
+A run with no controlling terminal at all — `setsid`, `nohup`, a CI job — takes
+the plain path. Because it cannot ask which optional bundles to install, and an
+empty answer is indistinguishable from a deliberate "install nothing optional",
+it says so and stops rather than reporting success for an install that skipped
+everything.
+
+To force plain output on a real terminal, for a scripted or logged run:
 
 ```bash
 NIKOS_USE_DIALOG=0 bash install.sh
 ```
+
+The same variable applies to `nikos setup` and `nikos update`, which use the
+per-role gauge on a terminal and plain output without one.
 
 ## Manual run (without curl | bash)
 

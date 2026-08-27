@@ -60,7 +60,9 @@
 
   <p>This clones the repository to <code>~/.local/share/nikos</code>, moves it to the newest release tag,
   offers a <code>dialog</code> menu for the optional bundles, then runs the playbook behind a per-role
-  progress gauge. Add <code>NIKOS_USE_DIALOG=0</code> for the plain-prompt path.</p>
+  progress gauge. The TUI follows the controlling terminal rather than stdin, so the piped
+  one-liner gets the same interface a clone-and-run install does. Add
+  <code>NIKOS_USE_DIALOG=0</code> for the plain-prompt path.</p>
 
   <h2>Choosing a version</h2>
 
@@ -98,7 +100,8 @@ bash install.sh --dev</code></pre>
   <ol class="tight">
     <li>The installer checks the OS, your <code>sudo</code> access and the Ansible version, offering an
       upgrade from the Ansible PPA if it is too old.</li>
-    <li>You pick optional bundles from a menu, or skip them all.</li>
+    <li>You pick optional bundles from a menu, or skip them all. Without a controlling terminal
+      the installer stops here rather than silently installing none of them.</li>
     <li>Ansible runs 27 roles against <code>localhost</code>, shown as a per-role progress gauge.</li>
     <li>The full log is written to <code>~/.config/nikos/logs/</code>, with
       <code>install-latest.log</code> symlinked to the most recent run.</li>

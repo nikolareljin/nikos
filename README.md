@@ -25,6 +25,8 @@ curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos/main/install.sh 
 The installer clones the full repo (with submodules) to `~/.local/share/nikos`, moves it to
 the **newest release tag**, presents a `dialog`-based TUI to select optional bundles, then
 runs the Ansible playbook behind a per-role progress gauge.
+The TUI follows the controlling terminal rather than stdin, so the one-liner above gets it too —
+`curl ... | bash` leaves the script's own bytes on stdin, which is not a terminal on any machine.
 Set `NIKOS_USE_DIALOG=0` to force the plain-prompt fallback.
 
 Pass `--ref <branch-or-tag>` to install something other than the latest release.
