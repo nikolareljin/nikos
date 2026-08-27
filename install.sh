@@ -116,9 +116,14 @@ _have_tty() {
   [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null
 }
 
-# Returns 0 if dialog is enabled, the binary is present, and stdin/stdout are connected to a TTY.
+# Returns 0 if dialog is enabled, the binary is present, and the controlling
+# terminal is reachable. It used to require `-t 0 && -t 1`, which no piped
+# install can satisfy: under `curl ... | bash` the script's own bytes are on
+# stdin, so the gate was false by construction and every dialog behind it -
+# including the playbook - fell to the plain view (#52). Whether curses can
+# draw depends on /dev/tty, not on what stdin happens to be.
 _can_use_dialog() {
-  [[ "${USE_DIALOG}" != "0" ]] && command -v dialog &>/dev/null && [[ -t 0 ]] && [[ -t 1 ]]
+  [[ "${USE_DIALOG}" != "0" ]] && command -v dialog &>/dev/null && _have_tty
 }
 
 # Log file helpers (available before script-helpers is sourced)
@@ -131,7 +136,7 @@ _safe_logfile() {
 }
 
 _restore_terminal_cursor() {
-  if [[ -e /dev/tty ]] && { printf '' >/dev/tty; } 2>/dev/null; then
+  if _have_tty; then
     { tput cnorm 2>/dev/null || printf '\033[?25h'; } >/dev/tty 2>/dev/null || true
   elif [[ -t 1 ]]; then
     tput cnorm 2>/dev/null || printf '\033[?25h' || true
@@ -230,7 +235,7 @@ _offer_ansible_upgrade() {
 Upgrade Ansible from the Ansible Ubuntu PPA now?"
   if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION} - Ansible Upgrade Required" \
-      --yesno "${message}" 11 72
+      --yesno "${message}" 11 72 0</dev/tty
     return $?
   fi
 
@@ -295,7 +300,7 @@ _require_supported_ansible() {
   _safe_logfile "[FAILED] ${message}"
   if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION} - Ansible Upgrade Required" \
-      --msgbox "${message}" 9 72 || true
+      --msgbox "${message}" 9 72 0</dev/tty || true
   fi
   echo "ERROR: ${message}" >&2
   exit 1
@@ -316,7 +321,7 @@ _show_logged_command_failure() {
   if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION} — Error" \
       --msgbox "${message}\n\nSee log: ${INSTALL_LOG}\n\nRecent output:\n${recent_output:-No additional details captured.}" \
-      18 76 || true
+      18 76 0</dev/tty || true
   fi
 
   echo "ERROR: ${message} See log: ${INSTALL_LOG}" >&2
@@ -328,7 +333,7 @@ _collect_become_password_dialog() {
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Sudo Password" \
       --passwordbox "Enter your sudo (become) password to run the Ansible playbook:" \
-      8 62
+      8 62 0</dev/tty
   ); then
     return $?
   fi
@@ -479,9 +484,9 @@ $(_session_next_step)
 
   Full log: ${INSTALL_LOG}"
     if [[ "${rc}" -eq 0 ]]; then
-      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 17 76 || true
+      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 17 76 0</dev/tty || true
     else
-      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 17 76 || true
+      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 17 76 0</dev/tty || true
     fi
   fi
 }
@@ -507,7 +512,7 @@ fi
 if _can_use_dialog; then
   if ! dialog --title "NikOS ${NIKOS_VERSION}" \
     --msgbox "Neural Innovation for Knowledge OS\n\nLight system. Heavy thinking.\n\nPress OK to begin installation." \
-    10 52; then
+    10 52 0</dev/tty; then
     echo "Installation canceled." >&2
     exit 130
   fi
@@ -525,7 +530,7 @@ fi
 if ! _is_supported_ubuntu_system || ! command -v apt-get &>/dev/null; then
   if _can_use_dialog; then
     dialog --title "Error" \
-      --msgbox "NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." 7 56
+      --msgbox "NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." 7 56 0</dev/tty
   fi
   echo "ERROR: NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." >&2
   exit 1
@@ -722,7 +727,7 @@ _select_timezone_dialog() {
       --default-item "${default_item}" \
       --menu "System timezone: ${detected_tz}" \
       "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" "${n_items}" \
-      "${items[@]}"
+      "${items[@]}" 0</dev/tty
   ); then
     return $?
   fi
@@ -737,7 +742,7 @@ _select_timezone_dialog() {
         dialog --stdout \
           --title "NikOS ${NIKOS_VERSION} — Custom Timezone" \
           --inputbox "Enter IANA timezone (e.g. America/New_York, Asia/Tokyo):" \
-          8 60 "${default_input}"
+          8 60 "${default_input}" 0</dev/tty
       ); then
         return $?
       fi
@@ -906,10 +911,8 @@ if _ensure_script_helpers; then
   source "${HELPERS}"
   if [[ "${USE_DIALOG}" == "0" ]]; then
     shlib_import logging
-    _USE_DIALOG=false
   else
     shlib_import logging dialog
-    _USE_DIALOG=true
   fi
 else
   echo "ERROR: script-helpers is missing from ${NIKOS_HOME}. Check the git/submodule output above and rerun the installer." >&2
@@ -930,6 +933,14 @@ done
 unset _progress_lib
 [[ "${_PROGRESS_LIB_LOADED}" == "true" ]] || \
   _safe_logfile "[WARNING] ${PROGRESS_LIB_REL} not found; using the plain progress view"
+
+# Which UI this run gets, and the three inputs that decided it. #52 could not be
+# diagnosed from a log because the decision was never written down.
+if _can_use_dialog; then
+  _safe_logfile "UI: dialog (NIKOS_USE_DIALOG=${USE_DIALOG}, dialog present, /dev/tty writable)"
+else
+  _safe_logfile "UI: plain (NIKOS_USE_DIALOG=${USE_DIALOG}, dialog $(command -v dialog >/dev/null 2>&1 && echo present || echo absent), /dev/tty $(_have_tty && echo writable || echo unreachable))"
+fi
 
 _ensure_ansible_collections
 
@@ -960,7 +971,7 @@ _select_bundles_dialog() {
       "fabric"        "Fabric AI pattern CLI"                        off \
       "bitnet"        "BitNet.cpp 1-bit LLM inference"               off \
       "mistral-rs"    "mistral.rs Rust LLM server"                   off \
-      "monitoring"    "Netdata monitoring dashboard"                 off
+      "monitoring"    "Netdata monitoring dashboard"                 off 0</dev/tty
   ); then
     echo "${result}"
     return 0
@@ -984,7 +995,7 @@ _select_ai_tools_dialog() {
       "ai-claude"       "Claude Code CLI"                                      on \
       "ai-copilot-cli"  "GitHub Copilot CLI extension"                         on \
       "ai-runner"       "ai-runner local model UI"                             on \
-      "ai-vscode"       "AI VS Code extensions (Continue, Copilot)"            on
+      "ai-vscode"       "AI VS Code extensions (Continue, Copilot)"            on 0</dev/tty
   ); then
     echo "${result}"
     return 0
@@ -1117,7 +1128,7 @@ _select_ai_tools_plain() {
   return 0
 }
 
-if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
+if _can_use_dialog; then
   if ! _raw=$(_select_bundles_dialog); then
     echo "Installer canceled during optional bundle selection." >&2
     exit 130
@@ -1141,7 +1152,7 @@ fi
 _detected_tz=$(_detect_system_timezone)
 _configured_tz=$(_get_configured_timezone)
 
-if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
+if _can_use_dialog; then
   if ! _chosen_tz=$(_select_timezone_dialog "${_detected_tz}" "${_configured_tz}"); then
     echo "Installer canceled during timezone selection." >&2
     exit 130
