@@ -207,8 +207,11 @@ def test_an_interrupt_restores_the_cursor(tmp_path):
         + "\n\n"
         + 'BECOME_PASSWORD_FILE=""\n'
         + "trap '_cleanup_run; exit 130' INT\n"
-        # Hide the cursor the way dialog does, then interrupt mid-run.
-        + "tput civis 2>/dev/null >/dev/tty\n"
+        # Hide the cursor, then interrupt mid-run. The escape is written
+        # literally rather than through `tput civis`, which emits nothing when
+        # TERM is unset - as it is on a CI runner, where the probe would then
+        # prove nothing.
+        + "printf '\\033[?25l' >/dev/tty\n"
         + "kill -INT $$\n",
         encoding="utf-8",
     )
