@@ -166,8 +166,8 @@ _collect_become_password() {
     unset pw
     return 1
   fi
-  # mktemp already creates at 0600; chmod is the belt to that braces, and its
-  # failure is still fatal here rather than left to widen the file silently.
+  # mktemp already creates at 0600, so chmod is belt and braces - but a failure
+  # is still fatal here rather than left to widen the file silently.
   if ! chmod 600 "${tmp}" || ! printf '%s\n' "${pw}" > "${tmp}"; then
     print_error "Could not write the sudo password to ${tmp}."
     rm -f -- "${tmp}"
@@ -274,6 +274,20 @@ _playbook() {
 
   local _rc=0 ansible_rc=0 tee_rc=0
   local -a pipe_status=()
+  # nikos_progress_run renders against the role list and task total that
+  # nikos_progress_plan produces. Without the planner NIKOS_PROGRESS_TOTAL stays
+  # zero, the percentage is never computed, and the gauge sits at 0% until
+  # PLAY RECAP jumps it to 100 - a progress bar that does not report progress.
+  # install.sh plans first for the same reason, and drops to the plain view when
+  # the task list cannot be produced.
+  if [[ "${use_gauge}" == "true" ]]; then
+    declare -F dialog_init >/dev/null 2>&1 && dialog_init
+    if ! nikos_progress_plan "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg" "${playbook_args[@]}"; then
+      _logfile "[WARNING] could not enumerate playbook tasks; using the plain progress view"
+      use_gauge=false
+    fi
+  fi
+
   set +e
   if [[ "${use_gauge}" == "true" ]]; then
     nikos_progress_run "NikOS ${NIKOS_VERSION} — Playbook" "${run_log}" \

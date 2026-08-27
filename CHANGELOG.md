@@ -43,6 +43,21 @@ All notable changes to NikOS are documented here.
   and passed in a mode-600 file, as `install.sh` does. The plain branches gained
   the `ANSIBLE_NOCOLOR` / `ANSIBLE_FORCE_COLOR` settings the dialog paths always
   set.
+- **The timezone prompt had the same defect, and `NIKOS_USE_DIALOG=0` wrote a
+  menu into `vars/local.yml`** - `_select_timezone_plain` printed its menu and
+  its answer to stdout, and the caller captured both with
+  `_chosen_tz=$(_select_timezone_plain ...)`. Measured on the unfixed version,
+  the captured value was five lines long: the heading, the option list and the
+  timezone. Prose now goes to `/dev/tty` and the answer is assigned, as the
+  bundle selectors do, and `tests/test_install_tui_gate.py` round-trips the auto,
+  defaulted and custom answers.
+- **`nikos update` drew a progress bar that did not report progress** -
+  `nikos_progress_run` renders against the role list and task total that
+  `nikos_progress_plan` produces, and that planner was never called, so
+  `NIKOS_PROGRESS_TOTAL` stayed zero and the gauge sat at 0% until `PLAY RECAP`
+  jumped it to 100. The playbook is now planned first, exactly as `install.sh`
+  does, and a task list that cannot be produced drops the run to the plain view
+  instead of drawing an empty gauge.
 - **The sudo password file could be published without its permissions being
   confirmed** - `_collect_become_password` ignored the status of `chmod 600` and
   went on to write the password and report success. The caller reads a non-zero

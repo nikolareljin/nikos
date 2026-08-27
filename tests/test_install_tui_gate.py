@@ -237,3 +237,40 @@ def test_plain_selection_round_trips_the_answers(tmp_path):
     # The bundles nobody asked for are skipped; the one that was asked for is not.
     assert {"network", "music", "education"} <= set(skip), skip
     assert "bitnet" not in skip, skip
+
+
+TIMEZONE_HELPERS = ("_say_tty", "_ask_tty", "_select_timezone_plain")
+
+TIMEZONE_BODY = """
+    _chosen_tz=""
+    _select_timezone_plain "America/New_York" ""
+    printf '\nTZ=[%s]\n' "${_chosen_tz}"
+    printf 'TZ_LINES=%s\n' "$(printf %s "${_chosen_tz}" | grep -c '' )"
+"""
+
+
+@needs_pty
+@pytest.mark.parametrize(
+    "answer,expected",
+    [("1", "America/New_York"), ("", "America/New_York"), ("2\nAsia/Tokyo", "Asia/Tokyo")],
+    ids=["explicit-auto", "defaulted", "custom"],
+)
+def test_plain_timezone_returns_only_the_timezone(tmp_path, answer, expected):
+    """The same class again: the menu and the answer must not share a channel.
+
+    `_select_timezone_plain` printed its menu to stdout and the caller captured
+    the lot with `_chosen_tz=$(...)`, so `NIKOS_USE_DIALOG=0` wrote five lines of
+    menu text into vars/local.yml as the timezone. Measured on the unfixed
+    version: the capture was 5 lines long.
+    """
+    program = write_program(tmp_path, TIMEZONE_HELPERS, TIMEZONE_BODY)
+    bindir = stub_dialog(tmp_path)
+    out = run(
+        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        path=with_stub(bindir),
+        stdin=(answer + "\n").encode(),
+        home=tmp_path,
+    )
+
+    assert field(out, "TZ") == f"[{expected}]", out
+    assert field(out, "TZ_LINES") == "1", "the menu leaked into the captured value"

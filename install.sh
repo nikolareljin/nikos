@@ -751,15 +751,23 @@ _select_timezone_dialog() {
   esac
 }
 
+# Fills _chosen_tz in the caller's scope.
+#
+# This had the same defect as the bundle selectors: the menu and the answer
+# shared stdout, and the caller captured both with
+# `_chosen_tz=$(_select_timezone_plain ...)`. With NIKOS_USE_DIALOG=0 that wrote
+# five lines of menu text into vars/local.yml as the timezone. Prose goes to
+# /dev/tty and the answer is assigned, so there is no shared channel left.
 _select_timezone_plain() {
   local detected_tz="$1" configured_tz="$2"
+  local choice="" custom_tz=""
 
-  echo "Timezone setup:"
-  echo "  System timezone (NTP): ${detected_tz}"
+  _say_tty "Timezone setup:"
+  _say_tty "  System timezone (NTP): ${detected_tz}"
   if [[ -n "${configured_tz}" && "${configured_tz}" != "${detected_tz}" ]]; then
-    echo "  Configured timezone:   ${configured_tz}"
+    _say_tty "  Configured timezone:   ${configured_tz}"
   fi
-  echo ""
+  _say_tty ""
 
   # Build numbered option list
   local -a opts=()
@@ -773,28 +781,29 @@ _select_timezone_plain() {
     opts+=("2) Enter a specific timezone")
   fi
 
-  for o in "${opts[@]}"; do echo "  ${o}"; done
+  local o
+  for o in "${opts[@]}"; do _say_tty "  ${o}"; done
 
   local default_n="1"
   [[ -n "${keep_n}" ]] && default_n="${keep_n}"
 
-  local choice
-  read -r -p "  Choice [${default_n}]: " choice </dev/tty
+  _ask_tty choice "  Choice [${default_n}]: "
   choice="${choice:-${default_n}}"
 
   case "${choice}" in
     1)
-      printf '%s\n' "${detected_tz}"
+      _chosen_tz="${detected_tz}"
       ;;
     "${keep_n}")
-      printf '%s\n' "${configured_tz}"
+      _chosen_tz="${configured_tz}"
       ;;
     *)
-      local custom_tz
-      read -r -p "  Enter IANA timezone (e.g. America/New_York): " custom_tz </dev/tty
-      printf '%s\n' "${custom_tz:-${detected_tz}}"
+      _ask_tty custom_tz "  Enter IANA timezone (e.g. America/New_York): "
+      _chosen_tz="${custom_tz:-${detected_tz}}"
       ;;
   esac
+
+  return 0
 }
 
 # Clone (or update) the repo with submodules to a persistent location
@@ -1158,7 +1167,7 @@ if _can_use_dialog; then
     exit 130
   fi
 else
-  _chosen_tz=$(_select_timezone_plain "${_detected_tz}" "${_configured_tz}")
+  _select_timezone_plain "${_detected_tz}" "${_configured_tz}"
 fi
 
 _set_timezone_in_local_vars "${_chosen_tz}"

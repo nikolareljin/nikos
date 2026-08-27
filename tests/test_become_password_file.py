@@ -109,6 +109,35 @@ def test_falls_back_and_leaves_nothing_when_permissions_cannot_be_set(tmp_path):
     assert temp_files(tmp_path) == [], "a temp file survived a failed collection"
 
 
+def test_the_gauge_is_planned_before_it_is_run():
+    """A gauge that was never planned reports 0% for the whole run.
+
+    `nikos_progress_run` renders against the role list and task total that
+    `nikos_progress_plan` produces. Called without the planner,
+    `NIKOS_PROGRESS_TOTAL` stays zero, the percentage is never computed, and the
+    bar sits at 0% until `PLAY RECAP` jumps it to 100 - a progress bar that does
+    not report progress. This is a static check because the alternative is
+    running a real playbook; what it guards is the ordering, which is the part
+    that was wrong.
+    """
+    # Comments name both functions, so only real code lines are considered.
+    code = [
+        line
+        for line in NIKOS.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    planned = [i for i, line in enumerate(code) if "nikos_progress_plan" in line]
+    ran = [i for i, line in enumerate(code) if "nikos_progress_run" in line]
+
+    assert planned, "the gauge is run without being planned"
+    assert ran, "scripts/nikos no longer runs the gauge"
+    assert min(planned) < min(ran), (
+        "nikos_progress_run is reached before nikos_progress_plan"
+    )
+    # Planning that fails must drop to the plain view rather than draw an empty gauge.
+    assert any("use_gauge=false" in line for line in code)
+
+
 def test_falls_back_without_aborting_when_the_file_cannot_be_created(tmp_path):
     """errexit is suspended in the caller's `&&`, so this must return, not drift on."""
     out = run(
