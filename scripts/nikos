@@ -177,8 +177,13 @@ _collect_become_password() {
   fi
   # mktemp already creates at 0600, so chmod is belt and braces - but a failure
   # is still fatal here rather than left to widen the file silently.
-  if ! chmod 600 "${BECOME_PASSWORD_FILE}" ||
-    ! printf '%s\n' "${pw}" > "${BECOME_PASSWORD_FILE}"; then
+  if ! chmod 600 "${BECOME_PASSWORD_FILE}"; then
+    print_error "Could not restrict access to ${BECOME_PASSWORD_FILE}; the sudo password was not written to it."
+    _cleanup_become_password_file
+    unset pw
+    return 1
+  fi
+  if ! printf '%s\n' "${pw}" > "${BECOME_PASSWORD_FILE}"; then
     print_error "Could not write the sudo password to ${BECOME_PASSWORD_FILE}."
     _cleanup_become_password_file
     unset pw

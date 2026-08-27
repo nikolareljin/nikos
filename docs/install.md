@@ -132,12 +132,14 @@ one-liner showed raw `TASK [...]` output, and on machines without `dialog` it
 also discarded the bundles that had been selected. See issues #52 and #53.
 
 A run with no controlling terminal at all — `setsid`, a systemd unit, most CI
-jobs — takes the plain path. (`nohup` alone is not one of these: it ignores
-SIGHUP and redirects the standard streams, but leaves the controlling terminal
-in place, so a `nohup` run started from a terminal still gets the TUI.) Because it cannot ask which optional bundles to install, and an
-empty answer is indistinguishable from a deliberate "install nothing optional",
-it says so and stops rather than reporting success for an install that skipped
-everything.
+jobs — does not fall back to plain prompts. It stops. It cannot ask which
+optional bundles to install, and an empty answer is indistinguishable from a
+deliberate "install nothing optional", so it says so and exits rather than
+reporting success for an install that skipped everything.
+
+`nohup` alone is not such a run: it ignores SIGHUP and redirects the standard
+streams, but leaves the controlling terminal in place, so a `nohup` install
+started from a terminal still gets the TUI.
 
 To force plain output on a real terminal, for a scripted or logged run:
 
