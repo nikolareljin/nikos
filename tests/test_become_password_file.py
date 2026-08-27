@@ -14,8 +14,12 @@ function went on to write the password and report success, having never
 confirmed the permissions it exists to guarantee. Measured on the unfixed
 version with a failing `chmod` on PATH: `RESULT=ok`.
 
-Every step is now checked on its own, and the file is only published to
-BECOME_PASSWORD_FILE once it actually holds the password.
+Every step is now checked on its own, and the path is published to
+BECOME_PASSWORD_FILE the moment the file exists, so the INT/TERM traps can see
+it - the guarantee is that every later failure cleans up that published path,
+not that publication waits for the password. Holding it back until the write had
+succeeded would leave a window in which an interrupt stranded a mode-600 file
+containing the password on disk.
 """
 
 from __future__ import annotations
