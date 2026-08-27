@@ -87,8 +87,11 @@ All notable changes to NikOS are documented here.
   a window where Ctrl-C stranded a mode-600 file containing the sudo password on
   disk. Every failure after that point cleans up explicitly, so a failed
   collection still leaves nothing behind and still returns non-zero.
-  `tests/test_become_password_file.py` covers the mode of the written file, a
-  failing `chmod`, a temp file that cannot be created, and that ordering.
+  The traps restore the terminal cursor as well, which `dialog` hides while the
+  gauge draws - interrupting `nikos update` used to hand back a terminal with no
+  visible cursor. `tests/test_become_password_file.py` covers the mode of the
+  written file, a failing `chmod`, a temp file that cannot be created, that
+  ordering, and the cursor after an interrupt.
 - **Neither defect was catchable by the existing suites** - `tests/` had no
   coverage of the gate or the selection, and `./test` structurally cannot provide
   it: it drives the installer over `ssh -tt`, so a pty is always allocated and

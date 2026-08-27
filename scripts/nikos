@@ -137,9 +137,18 @@ _cleanup_become_password_file() {
   fi
   BECOME_PASSWORD_FILE=""
 }
-trap '_cleanup_become_password_file' EXIT
-trap '_cleanup_become_password_file; exit 130' INT
-trap '_cleanup_become_password_file; exit 143' TERM
+# One cleanup for both things an interrupted run leaves behind: the password
+# file, and the cursor, which dialog hides while the gauge is drawing. Without
+# the second, Ctrl-C during `nikos update` returns an invisible prompt.
+# install.sh's _cleanup_install pairs them for the same reason.
+_cleanup_run() {
+  _cleanup_become_password_file
+  _restore_terminal_cursor
+}
+
+trap '_cleanup_run' EXIT
+trap '_cleanup_run; exit 130' INT
+trap '_cleanup_run; exit 143' TERM
 
 # ansible's own --ask-become-pass prompt reads /dev/tty, which the gauge is
 # drawing the mixedgauge on at the same moment. Collect the password first and

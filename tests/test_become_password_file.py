@@ -184,3 +184,42 @@ def test_falls_back_without_aborting_when_the_file_cannot_be_created(tmp_path):
     assert "RESULT=fallback" in out, out
     assert "published=[]" in out, out
     assert "REACHED_END=yes" in out, out
+
+
+def test_an_interrupt_restores_the_cursor(tmp_path):
+    """Ctrl-C during the gauge must not leave an invisible prompt behind.
+
+    `dialog` hides the cursor while the mixedgauge is drawing. The traps cleaned
+    up the password file and nothing else, so interrupting `nikos update`
+    returned a terminal with no visible cursor. install.sh's _cleanup_install
+    pairs the two for this reason; scripts/nikos now does too.
+    """
+    program = tmp_path / "probe.sh"
+    program.write_text(
+        "\n\n".join(
+            extract_helper(name)
+            for name in (
+                "_restore_terminal_cursor",
+                "_cleanup_become_password_file",
+                "_cleanup_run",
+            )
+        )
+        + "\n\n"
+        + 'BECOME_PASSWORD_FILE=""\n'
+        + "trap '_cleanup_run; exit 130' INT\n"
+        # Hide the cursor the way dialog does, then interrupt mid-run.
+        + "tput civis 2>/dev/null >/dev/tty\n"
+        + "kill -INT $$\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [SCRIPT, "-qec", f"bash {program}", "/dev/null"],
+        capture_output=True,
+        timeout=60,
+    )
+    out = result.stdout.decode(errors="replace")
+
+    assert "\x1b[?25l" in out, "the probe never hid the cursor, so it proves nothing"
+    assert out.rindex("\x1b[?25h") > out.rindex("\x1b[?25l"), (
+        "the interrupt left the cursor hidden"
+    )
