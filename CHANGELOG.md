@@ -43,6 +43,18 @@ All notable changes to NikOS are documented here.
   and passed in a mode-600 file, as `install.sh` does. The plain branches gained
   the `ANSIBLE_NOCOLOR` / `ANSIBLE_FORCE_COLOR` settings the dialog paths always
   set.
+- **Cancelling a dialog was reported as success** - `_collect_become_password_dialog`
+  and both timezone dialogs used `if ! var=$(dialog ...); then return $?; fi`.
+  In the then-branch `$?` is the status of the `!` itself, which is 0, so Cancel
+  and Esc returned success and the caller took the empty output for an answer:
+  an empty sudo password handed to ansible, or an empty timezone written to
+  `vars/local.yml`. The status is now captured from the assignment, the shape
+  `_select_bundles_dialog` already used.
+- **Input ending mid-prompt was treated as an answer** - a failed `read` became
+  an empty string, which silently declines the bundle being asked about and
+  accepts any default-enabled AI tool. That is the behaviour the plain path was
+  changed to stop, reintroduced one level down. Input that ends with nothing
+  captured now stops the installer; a partial line before EOF is still an answer.
 - **The timezone prompt had the same defect, and `NIKOS_USE_DIALOG=0` wrote a
   menu into `vars/local.yml`** - `_select_timezone_plain` printed its menu and
   its answer to stdout, and the caller captured both with

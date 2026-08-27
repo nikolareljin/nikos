@@ -274,3 +274,79 @@ def test_plain_timezone_returns_only_the_timezone(tmp_path, answer, expected):
 
     assert field(out, "TZ") == f"[{expected}]", out
     assert field(out, "TZ_LINES") == "1", "the menu leaked into the captured value"
+
+
+DIALOG_CANCEL_HELPERS = {
+    "_collect_become_password_dialog": "_collect_become_password_dialog",
+    "_select_timezone_dialog": '_select_timezone_dialog "America/New_York" ""',
+}
+
+
+@needs_pty
+@pytest.mark.parametrize("helper,call", DIALOG_CANCEL_HELPERS.items())
+def test_a_cancelled_dialog_is_not_reported_as_success(tmp_path, helper, call):
+    """Cancel and Esc must reach the caller as a failure.
+
+    `if ! var=$(dialog ...); then return $?; fi` returns the status of the `!`,
+    which is 0 - so a cancelled dialog reported success. The caller then took the
+    empty output for an answer: an empty sudo password handed to ansible, or an
+    empty timezone written to vars/local.yml. Measured on the unfixed version:
+    `f(){ if ! x=$(exit 3); then return $?; fi; }` returns 0.
+    """
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    cancelled = bindir / "dialog"
+    # dialog exits 1 on Cancel, 255 on Esc; 1 is enough to show the shape.
+    cancelled.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    cancelled.chmod(0o755)
+
+    program = write_program(
+        tmp_path,
+        (helper,),
+        f"""
+    DIALOG_HEIGHT=20
+    DIALOG_WIDTH=72
+    NIKOS_VERSION=test
+    if out=$({call}); then
+      echo "STATUS=success out=[${{out}}]"
+    else
+      echo "STATUS=cancelled rc=$?"
+    fi
+""",
+    )
+    out = run(
+        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        path=f"{bindir}:/usr/bin:/bin",
+        home=tmp_path,
+    )
+    assert "STATUS=cancelled" in out, out
+
+
+@needs_pty
+def test_input_ending_mid_prompt_is_not_treated_as_an_answer(tmp_path):
+    """EOF is not a 'no'.
+
+    `read ... || __ask_answer=""` turned a failed read into an empty answer,
+    which silently declines the bundle being asked about and accepts any
+    default-enabled AI tool - the exact behaviour this path was changed to stop.
+    """
+    program = write_program(
+        tmp_path,
+        ("_say_tty", "_ask_tty"),
+        """
+    _safe_logfile() { :; }
+    answer="unset"
+    _ask_tty answer "  Install something? [y/N] "
+    echo "REACHED=yes answer=[${answer}]"
+""",
+    )
+    bindir = stub_dialog(tmp_path)
+    # No answers at all: the read hits EOF immediately.
+    out = run(
+        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        path=with_stub(bindir),
+        stdin=b"",
+        home=tmp_path,
+    )
+    assert "REACHED=yes" not in out, out
+    assert "input ended while NikOS was waiting" in out, out

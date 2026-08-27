@@ -327,16 +327,22 @@ _show_logged_command_failure() {
   echo "ERROR: ${message} See log: ${INSTALL_LOG}" >&2
 }
 
+# Cancel and Esc must not read as success. `if ! var=$(dialog ...)` makes `$?`
+# in the then-branch the status of the `!` itself, which is 0 - so a cancelled
+# dialog returned 0, the caller took it for an answer, and the installer ran
+# ansible with an empty sudo password. The status is captured from the
+# assignment instead, the shape _select_bundles_dialog already used.
 _collect_become_password_dialog() {
-  local pw
-  if ! pw=$(
+  local pw="" status=0
+
+  pw=$(
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Sudo Password" \
       --passwordbox "Enter your sudo (become) password to run the Ansible playbook:" \
       8 62 0</dev/tty
-  ); then
-    return $?
-  fi
+  ) || status=$?
+  (( status == 0 )) || return "${status}"
+
   printf '%s\n' "${pw}"
 }
 
@@ -720,32 +726,33 @@ _select_timezone_dialog() {
   local default_item="auto"
   [[ -n "${configured_tz}" && "${configured_tz}" != "${detected_tz}" ]] && default_item="keep"
 
-  local choice
-  if ! choice=$(
+  # Same inverted-status trap as _collect_become_password_dialog: a cancelled
+  # menu used to return 0, so the caller accepted an empty timezone and wrote it
+  # to vars/local.yml.
+  local choice="" status=0
+  choice=$(
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Timezone" \
       --default-item "${default_item}" \
       --menu "System timezone: ${detected_tz}" \
       "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" "${n_items}" \
       "${items[@]}" 0</dev/tty
-  ); then
-    return $?
-  fi
+  ) || status=$?
+  (( status == 0 )) || return "${status}"
 
   case "${choice}" in
     auto)   printf '%s\n' "${detected_tz}" ;;
     keep)   printf '%s\n' "${configured_tz}" ;;
     custom)
       local default_input="${configured_tz:-${detected_tz}}"
-      local custom_tz
-      if ! custom_tz=$(
+      local custom_tz="" custom_status=0
+      custom_tz=$(
         dialog --stdout \
           --title "NikOS ${NIKOS_VERSION} — Custom Timezone" \
           --inputbox "Enter IANA timezone (e.g. America/New_York, Asia/Tokyo):" \
           8 60 "${default_input}" 0</dev/tty
-      ); then
-        return $?
-      fi
+      ) || custom_status=$?
+      (( custom_status == 0 )) || return "${custom_status}"
       printf '%s\n' "${custom_tz:-${detected_tz}}"
       ;;
   esac
@@ -1033,10 +1040,24 @@ _say_tty() {
 }
 
 # _ask_tty <varname> <prompt>
+#
+# A failed read - Ctrl-D, or the terminal going away mid-run - is not an answer.
+# Substituting "" for it would silently decline the bundle being asked about, or
+# accept a default-enabled AI tool, which is the very thing this path was
+# changed to stop doing. A partial line before EOF is still an answer, so only
+# a failure that captured nothing aborts.
 _ask_tty() {
   local __ask_var="$1" __ask_prompt="$2" __ask_answer=""
+
   printf '%s' "${__ask_prompt}" >/dev/tty
-  read -r __ask_answer </dev/tty || __ask_answer=""
+  if ! read -r __ask_answer </dev/tty && [[ -z "${__ask_answer}" ]]; then
+    printf '\n' >/dev/tty 2>/dev/null || true
+    _safe_logfile "[FAILED] input ended while asking: ${__ask_prompt}"
+    echo "ERROR: input ended while NikOS was waiting for an answer. Nothing was installed." >&2
+    echo "       Re-run the installer from a terminal and answer the prompts." >&2
+    exit 130
+  fi
+
   printf -v "${__ask_var}" '%s' "${__ask_answer}"
 }
 
