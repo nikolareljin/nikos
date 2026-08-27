@@ -1053,8 +1053,10 @@ _ask_tty() {
   if ! read -r __ask_answer </dev/tty && [[ -z "${__ask_answer}" ]]; then
     printf '\n' >/dev/tty 2>/dev/null || true
     _safe_logfile "[FAILED] input ended while asking: ${__ask_prompt}"
-    echo "ERROR: input ended while NikOS was waiting for an answer. Nothing was installed." >&2
-    echo "       Re-run the installer from a terminal and answer the prompts." >&2
+    echo "ERROR: input ended while NikOS was waiting for an answer. The playbook was not run." >&2
+    echo "       Bootstrap packages, the checkout at ${NIKOS_HOME} and the Ansible collections" >&2
+    echo "       are already installed; nothing has been configured. Re-run the installer from" >&2
+    echo "       a terminal and answer the prompts to continue." >&2
     exit 130
   fi
 

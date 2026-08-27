@@ -335,6 +335,7 @@ def test_input_ending_mid_prompt_is_not_treated_as_an_answer(tmp_path):
         ("_say_tty", "_ask_tty"),
         """
     _safe_logfile() { :; }
+    NIKOS_HOME="${HOME}/.local/share/nikos"
     answer="unset"
     _ask_tty answer "  Install something? [y/N] "
     echo "REACHED=yes answer=[${answer}]"
@@ -350,3 +351,7 @@ def test_input_ending_mid_prompt_is_not_treated_as_an_answer(tmp_path):
     )
     assert "REACHED=yes" not in out, out
     assert "input ended while NikOS was waiting" in out, out
+    # The message must not overstate what was undone: by this point the
+    # bootstrap packages, the checkout and the collections are already in place.
+    assert "Nothing was installed" not in out, out
+    assert "The playbook was not run" in out, out

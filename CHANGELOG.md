@@ -55,6 +55,9 @@ All notable changes to NikOS are documented here.
   accepts any default-enabled AI tool. That is the behaviour the plain path was
   changed to stop, reintroduced one level down. Input that ends with nothing
   captured now stops the installer; a partial line before EOF is still an answer.
+  The message names what that leaves behind - the bootstrap packages, the
+  checkout and the collections are already installed by then - rather than
+  claiming nothing was.
 - **The timezone prompt had the same defect, and `NIKOS_USE_DIALOG=0` wrote a
   menu into `vars/local.yml`** - `_select_timezone_plain` printed its menu and
   its answer to stdout, and the caller captured both with
