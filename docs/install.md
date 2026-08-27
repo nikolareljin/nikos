@@ -131,8 +131,10 @@ Before 0.6.2 that test asked about stdin, and no piped install could pass it: th
 one-liner showed raw `TASK [...]` output, and on machines without `dialog` it
 also discarded the bundles that had been selected. See issues #52 and #53.
 
-A run with no controlling terminal at all — `setsid`, `nohup`, a CI job — takes
-the plain path. Because it cannot ask which optional bundles to install, and an
+A run with no controlling terminal at all — `setsid`, a systemd unit, most CI
+jobs — takes the plain path. (`nohup` alone is not one of these: it ignores
+SIGHUP and redirects the standard streams, but leaves the controlling terminal
+in place, so a `nohup` run started from a terminal still gets the TUI.) Because it cannot ask which optional bundles to install, and an
 empty answer is indistinguishable from a deliberate "install nothing optional",
 it says so and stops rather than reporting success for an install that skipped
 everything.
