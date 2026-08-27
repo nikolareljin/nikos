@@ -138,6 +138,35 @@ def test_the_gauge_is_planned_before_it_is_run():
     assert any("use_gauge=false" in line for line in code)
 
 
+def test_the_trap_can_see_the_file_before_the_password_is_written():
+    """An interrupt must never strand a file holding the sudo password.
+
+    The INT/TERM trap removes what BECOME_PASSWORD_FILE names, and nothing else.
+    Holding the path in a local until the write had succeeded left a window in
+    which Ctrl-C stranded a mode-600 file containing the password on disk. The
+    ordering is the whole guarantee, so it is what this asserts.
+    """
+    body = re.search(
+        r"^_collect_become_password\(\) \{.*?^\}",
+        NIKOS.read_text(encoding="utf-8"),
+        re.M | re.S,
+    )
+    assert body, "scripts/nikos no longer defines _collect_become_password"
+    code = [
+        line
+        for line in body.group(0).splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+
+    registered = next(
+        i for i, line in enumerate(code) if 'BECOME_PASSWORD_FILE="$(mktemp' in line
+    )
+    written = next(i for i, line in enumerate(code) if "> \"${BECOME_PASSWORD_FILE}\"" in line)
+    assert registered < written, (
+        "the password is written before the trap can see the file"
+    )
+
+
 def test_falls_back_without_aborting_when_the_file_cannot_be_created(tmp_path):
     """errexit is suspended in the caller's `&&`, so this must return, not drift on."""
     out = run(

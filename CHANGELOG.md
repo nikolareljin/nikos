@@ -81,8 +81,12 @@ All notable changes to NikOS are documented here.
   failure there neither aborted nor returned - it carried on. Every step is now
   checked on its own, and the file is published to `BECOME_PASSWORD_FILE` only
   once it holds the password, so a failed collection leaves nothing behind.
+  The path is registered in `BECOME_PASSWORD_FILE` the moment the file exists,
+  because the INT/TERM trap can only remove what that global names - holding it
+  in a local until the write succeeded left a window where Ctrl-C stranded a
+  mode-600 file containing the sudo password on disk.
   `tests/test_become_password_file.py` covers the mode of the written file, a
-  failing `chmod`, and a temp file that cannot be created.
+  failing `chmod`, a temp file that cannot be created, and that ordering.
 - **Neither defect was catchable by the existing suites** - `tests/` had no
   coverage of the gate or the selection, and `./test` structurally cannot provide
   it: it drives the installer over `ssh -tt`, so a pty is always allocated and

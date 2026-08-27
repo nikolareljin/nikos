@@ -146,7 +146,7 @@ trap '_cleanup_become_password_file; exit 143' TERM
 # hand it over in a file, as install.sh does. Returns non-zero when it could not
 # be collected, which drops the run back to --ask-become-pass.
 _collect_become_password() {
-  local pw="" tmp=""
+  local pw=""
 
   [[ -e /dev/tty ]] || return 1
   printf 'Sudo password for %s: ' "${USER:-$(id -un)}" >/dev/tty 2>/dev/null || return 1
@@ -158,26 +158,33 @@ _collect_become_password() {
   # "fall back to --ask-become-pass", and errexit is suspended inside the `&&`
   # condition it is called from, so an unchecked failure here would neither
   # abort nor return - it would carry on and hand ansible a --become-password-file
-  # that is empty, unwritten or truncated. The file is built under a private
-  # name and only published to BECOME_PASSWORD_FILE once it holds the password,
-  # so a failure leaves nothing behind for the trap to miss.
-  if ! tmp="$(mktemp "${TMPDIR:-/tmp}/nikos-become.XXXXXX")" || [[ -z "${tmp}" ]]; then
+  # that is empty, unwritten or truncated.
+  #
+  # The path is registered in BECOME_PASSWORD_FILE the moment the file exists,
+  # because the INT/TERM trap can only remove what that global names. Holding it
+  # in a local until the write succeeded left a window where an interrupt would
+  # strand a mode-600 file containing the sudo password on disk. Every failure
+  # after this point cleans up explicitly, so a failed collection still leaves
+  # nothing behind and still returns non-zero. The remaining window strands an
+  # empty file, never the password.
+  _cleanup_become_password_file
+  if ! BECOME_PASSWORD_FILE="$(mktemp "${TMPDIR:-/tmp}/nikos-become.XXXXXX")" ||
+    [[ -z "${BECOME_PASSWORD_FILE}" ]]; then
+    BECOME_PASSWORD_FILE=""
     print_error "Could not create a temporary file for the sudo password."
     unset pw
     return 1
   fi
   # mktemp already creates at 0600, so chmod is belt and braces - but a failure
   # is still fatal here rather than left to widen the file silently.
-  if ! chmod 600 "${tmp}" || ! printf '%s\n' "${pw}" > "${tmp}"; then
-    print_error "Could not write the sudo password to ${tmp}."
-    rm -f -- "${tmp}"
+  if ! chmod 600 "${BECOME_PASSWORD_FILE}" ||
+    ! printf '%s\n' "${pw}" > "${BECOME_PASSWORD_FILE}"; then
+    print_error "Could not write the sudo password to ${BECOME_PASSWORD_FILE}."
+    _cleanup_become_password_file
     unset pw
     return 1
   fi
   unset pw
-
-  _cleanup_become_password_file
-  BECOME_PASSWORD_FILE="${tmp}"
 }
 
 usage() {
