@@ -79,12 +79,12 @@ All notable changes to NikOS are documented here.
   return as "fall back to `--ask-become-pass`" and calls it inside an `&&`
   condition, where bash suspends errexit for the whole list, so an unchecked
   failure there neither aborted nor returned - it carried on. Every step is now
-  checked on its own, and the file is published to `BECOME_PASSWORD_FILE` only
-  once it holds the password, so a failed collection leaves nothing behind.
-  The path is registered in `BECOME_PASSWORD_FILE` the moment the file exists,
-  because the INT/TERM trap can only remove what that global names - holding it
-  in a local until the write succeeded left a window where Ctrl-C stranded a
-  mode-600 file containing the sudo password on disk.
+  checked on its own, and the path is registered in `BECOME_PASSWORD_FILE` the
+  moment the file exists, because the INT/TERM trap can only remove what that
+  global names: holding it back until the password had been written would leave
+  a window where Ctrl-C stranded a mode-600 file containing the sudo password on
+  disk. Every failure after that point cleans up explicitly, so a failed
+  collection still leaves nothing behind and still returns non-zero.
   `tests/test_become_password_file.py` covers the mode of the written file, a
   failing `chmod`, a temp file that cannot be created, and that ordering.
 - **Neither defect was catchable by the existing suites** - `tests/` had no

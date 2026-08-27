@@ -134,8 +134,12 @@ def test_the_gauge_is_planned_before_it_is_run():
     assert min(planned) < min(ran), (
         "nikos_progress_run is reached before nikos_progress_plan"
     )
-    # Planning that fails must drop to the plain view rather than draw an empty gauge.
-    assert any("use_gauge=false" in line for line in code)
+    # Planning that fails must drop to the plain view rather than draw an empty
+    # gauge. Match the standalone assignment: `local use_gauge=false` is the
+    # initializer and would satisfy a substring check even with the fallback gone.
+    assert any(line.strip() == "use_gauge=false" for line in code), (
+        "a failed plan no longer falls back to the plain view"
+    )
 
 
 def test_the_trap_can_see_the_file_before_the_password_is_written():
