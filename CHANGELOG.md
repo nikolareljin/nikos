@@ -43,6 +43,16 @@ All notable changes to NikOS are documented here.
   and passed in a mode-600 file, as `install.sh` does. The plain branches gained
   the `ANSIBLE_NOCOLOR` / `ANSIBLE_FORCE_COLOR` settings the dialog paths always
   set.
+- **The sudo password file could be published without its permissions being
+  confirmed** - `_collect_become_password` ignored the status of `chmod 600` and
+  went on to write the password and report success. The caller reads a non-zero
+  return as "fall back to `--ask-become-pass`" and calls it inside an `&&`
+  condition, where bash suspends errexit for the whole list, so an unchecked
+  failure there neither aborted nor returned - it carried on. Every step is now
+  checked on its own, and the file is published to `BECOME_PASSWORD_FILE` only
+  once it holds the password, so a failed collection leaves nothing behind.
+  `tests/test_become_password_file.py` covers the mode of the written file, a
+  failing `chmod`, and a temp file that cannot be created.
 - **Neither defect was catchable by the existing suites** - `tests/` had no
   coverage of the gate or the selection, and `./test` structurally cannot provide
   it: it drives the installer over `ssh -tt`, so a pty is always allocated and

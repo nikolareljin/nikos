@@ -146,7 +146,7 @@ trap '_cleanup_become_password_file; exit 143' TERM
 # hand it over in a file, as install.sh does. Returns non-zero when it could not
 # be collected, which drops the run back to --ask-become-pass.
 _collect_become_password() {
-  local pw=""
+  local pw="" tmp=""
 
   [[ -e /dev/tty ]] || return 1
   printf 'Sudo password for %s: ' "${USER:-$(id -un)}" >/dev/tty 2>/dev/null || return 1
@@ -154,10 +154,30 @@ _collect_become_password() {
   printf '\n' >/dev/tty
   [[ -n "${pw}" ]] || return 1
 
+  # Each step is checked on its own. The caller reads a non-zero return as
+  # "fall back to --ask-become-pass", and errexit is suspended inside the `&&`
+  # condition it is called from, so an unchecked failure here would neither
+  # abort nor return - it would carry on and hand ansible a --become-password-file
+  # that is empty, unwritten or truncated. The file is built under a private
+  # name and only published to BECOME_PASSWORD_FILE once it holds the password,
+  # so a failure leaves nothing behind for the trap to miss.
+  if ! tmp="$(mktemp "${TMPDIR:-/tmp}/nikos-become.XXXXXX")" || [[ -z "${tmp}" ]]; then
+    print_error "Could not create a temporary file for the sudo password."
+    unset pw
+    return 1
+  fi
+  # mktemp already creates at 0600; chmod is the belt to that braces, and its
+  # failure is still fatal here rather than left to widen the file silently.
+  if ! chmod 600 "${tmp}" || ! printf '%s\n' "${pw}" > "${tmp}"; then
+    print_error "Could not write the sudo password to ${tmp}."
+    rm -f -- "${tmp}"
+    unset pw
+    return 1
+  fi
+  unset pw
+
   _cleanup_become_password_file
-  BECOME_PASSWORD_FILE="$(mktemp "${TMPDIR:-/tmp}/nikos-become.XXXXXX")"
-  chmod 600 "${BECOME_PASSWORD_FILE}"
-  printf '%s\n' "${pw}" > "${BECOME_PASSWORD_FILE}"
+  BECOME_PASSWORD_FILE="${tmp}"
 }
 
 usage() {
