@@ -13,6 +13,10 @@ SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"
 HELPERS="${NIKOS_HOME}/scripts/script-helpers/helpers.sh"
 NIKOS_LOG_DIR="${NIKOS_CONFIG_DIR}/logs"
 REPO_SYNC_HELPERS="${NIKOS_HOME}/scripts/repo-sync.sh"
+PROGRESS_LIB="${NIKOS_HOME}/scripts/nikos-progress.sh"
+# Same switch install.sh honours, so one setting covers both.
+USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
+BECOME_PASSWORD_FILE=""
 # Used by sourced repo sync helpers.
 # shellcheck disable=SC2034
 MAIN_VARS_REL="vars/main.yml"
@@ -103,6 +107,59 @@ if [[ -f "${REPO_SYNC_HELPERS}" ]]; then
   source "${REPO_SYNC_HELPERS}"
 fi
 
+# Progress rendering, shared with install.sh. Optional: without it the plain
+# scrolling view is used. `nikos setup` and `nikos update` never sourced this at
+# all, so post-install runs showed raw `TASK [...]` output on any terminal -
+# the same symptom as the install defect, a different cause.
+_PROGRESS_LIB_LOADED=false
+if [[ -f "${PROGRESS_LIB}" ]]; then
+  # shellcheck source=scripts/nikos-progress.sh
+  source "${PROGRESS_LIB}"
+  _PROGRESS_LIB_LOADED=true
+fi
+
+# Returns 0 when the per-role gauge can be drawn for this run.
+_can_use_gauge() {
+  [[ "${USE_DIALOG}" != "0" ]] || return 1
+  [[ "${_PROGRESS_LIB_LOADED}" == "true" ]] || return 1
+  nikos_progress_supported
+}
+
+_restore_terminal_cursor() {
+  if [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null; then
+    { tput cnorm 2>/dev/null || printf '\033[?25h'; } >/dev/tty 2>/dev/null || true
+  fi
+}
+
+_cleanup_become_password_file() {
+  if [[ -n "${BECOME_PASSWORD_FILE:-}" && -f "${BECOME_PASSWORD_FILE}" ]]; then
+    rm -f -- "${BECOME_PASSWORD_FILE}"
+  fi
+  BECOME_PASSWORD_FILE=""
+}
+trap '_cleanup_become_password_file' EXIT
+trap '_cleanup_become_password_file; exit 130' INT
+trap '_cleanup_become_password_file; exit 143' TERM
+
+# ansible's own --ask-become-pass prompt reads /dev/tty, which the gauge is
+# drawing the mixedgauge on at the same moment. Collect the password first and
+# hand it over in a file, as install.sh does. Returns non-zero when it could not
+# be collected, which drops the run back to --ask-become-pass.
+_collect_become_password() {
+  local pw=""
+
+  [[ -e /dev/tty ]] || return 1
+  printf 'Sudo password for %s: ' "${USER:-$(id -un)}" >/dev/tty 2>/dev/null || return 1
+  read -rs pw </dev/tty || { printf '\n' >/dev/tty; return 1; }
+  printf '\n' >/dev/tty
+  [[ -n "${pw}" ]] || return 1
+
+  _cleanup_become_password_file
+  BECOME_PASSWORD_FILE="$(mktemp "${TMPDIR:-/tmp}/nikos-become.XXXXXX")"
+  chmod 600 "${BECOME_PASSWORD_FILE}"
+  printf '%s\n' "${pw}" > "${BECOME_PASSWORD_FILE}"
+}
+
 usage() {
   cat <<EOF
 nikos ${NIKOS_VERSION} — Neural Innovation for Knowledge OS
@@ -162,10 +219,10 @@ _remove_skip_tag() {
 _playbook() {
   local extra_args=("$@")
   local skip_tags=""
+  local use_gauge=false
   local playbook_args=(
     -i "${NIKOS_HOME}/inventory/local"
     "${NIKOS_HOME}/site.yml"
-    --ask-become-pass
   )
   if [[ ! -d "${NIKOS_HOME}/.git" ]]; then
     print_error "NikOS repo not found at ${NIKOS_HOME}. Run the installer first."
@@ -181,6 +238,13 @@ _playbook() {
   [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
   playbook_args+=("${extra_args[@]}")
 
+  if _can_use_gauge && _collect_become_password; then
+    use_gauge=true
+    playbook_args+=(--become-password-file "${BECOME_PASSWORD_FILE}")
+  else
+    playbook_args+=(--ask-become-pass)
+  fi
+
   local run_log
   run_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-playbook.log"
   mkdir -p "${NIKOS_LOG_DIR}"
@@ -191,14 +255,29 @@ _playbook() {
   local _rc=0 ansible_rc=0 tee_rc=0
   local -a pipe_status=()
   set +e
-  (
-    cd "${NIKOS_HOME}"
-    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${playbook_args[@]}"
-  ) 2>&1 | tee -a "${run_log}"
-  pipe_status=("${PIPESTATUS[@]}")
+  if [[ "${use_gauge}" == "true" ]]; then
+    nikos_progress_run "NikOS ${NIKOS_VERSION} — Playbook" "${run_log}" \
+      "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg" "${playbook_args[@]}"
+    ansible_rc=$?
+    # A run whose log could not be written is reported as that, not as a failed
+    # playbook: nikos_progress_run folds the log failure into its own status.
+    tee_rc="${NIKOS_PROGRESS_LOG_RC:-0}"
+    if [[ "${tee_rc}" -ne 0 && "${ansible_rc}" -eq "${tee_rc}" ]]; then
+      ansible_rc=0
+    fi
+    _restore_terminal_cursor
+  else
+    (
+      cd "${NIKOS_HOME}"
+      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
+        ansible-playbook "${playbook_args[@]}"
+    ) 2>&1 | tee -a "${run_log}"
+    pipe_status=("${PIPESTATUS[@]}")
+    ansible_rc=${pipe_status[0]}
+    tee_rc=${pipe_status[1]}
+  fi
   set -e
-  ansible_rc=${pipe_status[0]}
-  tee_rc=${pipe_status[1]}
+  _cleanup_become_password_file
 
   if [[ "${ansible_rc}" -ne 0 ]]; then
     _rc="${ansible_rc}"

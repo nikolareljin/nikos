@@ -1242,7 +1242,8 @@ else
   set +e
   (
     cd "${NIKOS_HOME}"
-    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
+    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
+      ansible-playbook "${PLAY_OPTS[@]}"
   ) 2>&1 | tee -a "${INSTALL_LOG}"
   _pipe_status=("${PIPESTATUS[@]}")
   set -e
@@ -1270,7 +1271,8 @@ if [[ "${_ansible_rc}" -eq 0 && "${_tee_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TA
   else
     (
       cd "${NIKOS_HOME}"
-      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
+      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
+        ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
     ) 2>&1 | tee -a "${INSTALL_LOG}"
     _pipe_status=("${PIPESTATUS[@]}")
     _ansible_rc=${_pipe_status[0]}
