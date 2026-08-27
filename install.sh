@@ -107,9 +107,23 @@ if [[ "${DEV_MODE}" == "1" ]]; then
   SKIP_REPO_SYNC=1
 fi
 
-# Returns 0 if dialog is enabled, the binary is present, and stdin/stdout are connected to a TTY.
+# True when the controlling terminal is reachable, whatever stdin and stdout
+# happen to be attached to. `curl ... | bash` puts the script's own bytes on
+# stdin, so `-t 0` is false there even though a person is sitting at a terminal.
+# Mirrors _nikos_progress_tty in scripts/nikos-progress.sh; install.sh is fetched
+# standalone by curl and runs before the clone exists, so it cannot source it.
+_have_tty() {
+  [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null
+}
+
+# Returns 0 if dialog is enabled, the binary is present, and the controlling
+# terminal is reachable. It used to require `-t 0 && -t 1`, which no piped
+# install can satisfy: under `curl ... | bash` the script's own bytes are on
+# stdin, so the gate was false by construction and every dialog behind it -
+# including the playbook - fell to the plain view (#52). Whether curses can
+# draw depends on /dev/tty, not on what stdin happens to be.
 _can_use_dialog() {
-  [[ "${USE_DIALOG}" != "0" ]] && command -v dialog &>/dev/null && [[ -t 0 ]] && [[ -t 1 ]]
+  [[ "${USE_DIALOG}" != "0" ]] && command -v dialog &>/dev/null && _have_tty
 }
 
 # Log file helpers (available before script-helpers is sourced)
@@ -122,7 +136,7 @@ _safe_logfile() {
 }
 
 _restore_terminal_cursor() {
-  if [[ -e /dev/tty ]] && { printf '' >/dev/tty; } 2>/dev/null; then
+  if _have_tty; then
     { tput cnorm 2>/dev/null || printf '\033[?25h'; } >/dev/tty 2>/dev/null || true
   elif [[ -t 1 ]]; then
     tput cnorm 2>/dev/null || printf '\033[?25h' || true
@@ -221,7 +235,7 @@ _offer_ansible_upgrade() {
 Upgrade Ansible from the Ansible Ubuntu PPA now?"
   if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION} - Ansible Upgrade Required" \
-      --yesno "${message}" 11 72
+      --yesno "${message}" 11 72 0</dev/tty
     return $?
   fi
 
@@ -286,7 +300,7 @@ _require_supported_ansible() {
   _safe_logfile "[FAILED] ${message}"
   if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION} - Ansible Upgrade Required" \
-      --msgbox "${message}" 9 72 || true
+      --msgbox "${message}" 9 72 0</dev/tty || true
   fi
   echo "ERROR: ${message}" >&2
   exit 1
@@ -307,22 +321,28 @@ _show_logged_command_failure() {
   if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION} — Error" \
       --msgbox "${message}\n\nSee log: ${INSTALL_LOG}\n\nRecent output:\n${recent_output:-No additional details captured.}" \
-      18 76 || true
+      18 76 0</dev/tty || true
   fi
 
   echo "ERROR: ${message} See log: ${INSTALL_LOG}" >&2
 }
 
+# Cancel and Esc must not read as success. `if ! var=$(dialog ...)` makes `$?`
+# in the then-branch the status of the `!` itself, which is 0 - so a cancelled
+# dialog returned 0, the caller took it for an answer, and the installer ran
+# ansible with an empty sudo password. The status is captured from the
+# assignment instead, the shape _select_bundles_dialog already used.
 _collect_become_password_dialog() {
-  local pw
-  if ! pw=$(
+  local pw="" status=0
+
+  pw=$(
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Sudo Password" \
       --passwordbox "Enter your sudo (become) password to run the Ansible playbook:" \
-      8 62
-  ); then
-    return $?
-  fi
+      8 62 0</dev/tty
+  ) || status=$?
+  (( status == 0 )) || return "${status}"
+
   printf '%s\n' "${pw}"
 }
 
@@ -470,9 +490,9 @@ $(_session_next_step)
 
   Full log: ${INSTALL_LOG}"
     if [[ "${rc}" -eq 0 ]]; then
-      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 17 76 || true
+      dialog --title "NikOS ${NIKOS_VERSION} — Complete" --msgbox "${_dlg_body}" 17 76 0</dev/tty || true
     else
-      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 17 76 || true
+      dialog --title "NikOS ${NIKOS_VERSION} — Failed" --msgbox "${_dlg_body}" 17 76 0</dev/tty || true
     fi
   fi
 }
@@ -498,7 +518,7 @@ fi
 if _can_use_dialog; then
   if ! dialog --title "NikOS ${NIKOS_VERSION}" \
     --msgbox "Neural Innovation for Knowledge OS\n\nLight system. Heavy thinking.\n\nPress OK to begin installation." \
-    10 52; then
+    10 52 0</dev/tty; then
     echo "Installation canceled." >&2
     exit 130
   fi
@@ -516,7 +536,7 @@ fi
 if ! _is_supported_ubuntu_system || ! command -v apt-get &>/dev/null; then
   if _can_use_dialog; then
     dialog --title "Error" \
-      --msgbox "NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." 7 56
+      --msgbox "NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." 7 56 0</dev/tty
   fi
   echo "ERROR: NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." >&2
   exit 1
@@ -706,46 +726,55 @@ _select_timezone_dialog() {
   local default_item="auto"
   [[ -n "${configured_tz}" && "${configured_tz}" != "${detected_tz}" ]] && default_item="keep"
 
-  local choice
-  if ! choice=$(
+  # Same inverted-status trap as _collect_become_password_dialog: a cancelled
+  # menu used to return 0, so the caller accepted an empty timezone and wrote it
+  # to vars/local.yml.
+  local choice="" status=0
+  choice=$(
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Timezone" \
       --default-item "${default_item}" \
       --menu "System timezone: ${detected_tz}" \
       "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" "${n_items}" \
-      "${items[@]}"
-  ); then
-    return $?
-  fi
+      "${items[@]}" 0</dev/tty
+  ) || status=$?
+  (( status == 0 )) || return "${status}"
 
   case "${choice}" in
     auto)   printf '%s\n' "${detected_tz}" ;;
     keep)   printf '%s\n' "${configured_tz}" ;;
     custom)
       local default_input="${configured_tz:-${detected_tz}}"
-      local custom_tz
-      if ! custom_tz=$(
+      local custom_tz="" custom_status=0
+      custom_tz=$(
         dialog --stdout \
           --title "NikOS ${NIKOS_VERSION} — Custom Timezone" \
           --inputbox "Enter IANA timezone (e.g. America/New_York, Asia/Tokyo):" \
-          8 60 "${default_input}"
-      ); then
-        return $?
-      fi
+          8 60 "${default_input}" 0</dev/tty
+      ) || custom_status=$?
+      (( custom_status == 0 )) || return "${custom_status}"
       printf '%s\n' "${custom_tz:-${detected_tz}}"
       ;;
   esac
 }
 
+# Fills _chosen_tz in the caller's scope.
+#
+# This had the same defect as the bundle selectors: the menu and the answer
+# shared stdout, and the caller captured both with
+# `_chosen_tz=$(_select_timezone_plain ...)`. With NIKOS_USE_DIALOG=0 that wrote
+# five lines of menu text into vars/local.yml as the timezone. Prose goes to
+# /dev/tty and the answer is assigned, so there is no shared channel left.
 _select_timezone_plain() {
   local detected_tz="$1" configured_tz="$2"
+  local choice="" custom_tz=""
 
-  echo "Timezone setup:"
-  echo "  System timezone (NTP): ${detected_tz}"
+  _say_tty "Timezone setup:"
+  _say_tty "  System timezone (NTP): ${detected_tz}"
   if [[ -n "${configured_tz}" && "${configured_tz}" != "${detected_tz}" ]]; then
-    echo "  Configured timezone:   ${configured_tz}"
+    _say_tty "  Configured timezone:   ${configured_tz}"
   fi
-  echo ""
+  _say_tty ""
 
   # Build numbered option list
   local -a opts=()
@@ -759,28 +788,29 @@ _select_timezone_plain() {
     opts+=("2) Enter a specific timezone")
   fi
 
-  for o in "${opts[@]}"; do echo "  ${o}"; done
+  local o
+  for o in "${opts[@]}"; do _say_tty "  ${o}"; done
 
   local default_n="1"
   [[ -n "${keep_n}" ]] && default_n="${keep_n}"
 
-  local choice
-  read -r -p "  Choice [${default_n}]: " choice </dev/tty
+  _ask_tty choice "  Choice [${default_n}]: "
   choice="${choice:-${default_n}}"
 
   case "${choice}" in
     1)
-      printf '%s\n' "${detected_tz}"
+      _chosen_tz="${detected_tz}"
       ;;
     "${keep_n}")
-      printf '%s\n' "${configured_tz}"
+      _chosen_tz="${configured_tz}"
       ;;
     *)
-      local custom_tz
-      read -r -p "  Enter IANA timezone (e.g. America/New_York): " custom_tz </dev/tty
-      printf '%s\n' "${custom_tz:-${detected_tz}}"
+      _ask_tty custom_tz "  Enter IANA timezone (e.g. America/New_York): "
+      _chosen_tz="${custom_tz:-${detected_tz}}"
       ;;
   esac
+
+  return 0
 }
 
 # Clone (or update) the repo with submodules to a persistent location
@@ -897,10 +927,8 @@ if _ensure_script_helpers; then
   source "${HELPERS}"
   if [[ "${USE_DIALOG}" == "0" ]]; then
     shlib_import logging
-    _USE_DIALOG=false
   else
     shlib_import logging dialog
-    _USE_DIALOG=true
   fi
 else
   echo "ERROR: script-helpers is missing from ${NIKOS_HOME}. Check the git/submodule output above and rerun the installer." >&2
@@ -921,6 +949,14 @@ done
 unset _progress_lib
 [[ "${_PROGRESS_LIB_LOADED}" == "true" ]] || \
   _safe_logfile "[WARNING] ${PROGRESS_LIB_REL} not found; using the plain progress view"
+
+# Which UI this run gets, and the three inputs that decided it. #52 could not be
+# diagnosed from a log because the decision was never written down.
+if _can_use_dialog; then
+  _safe_logfile "UI: dialog (NIKOS_USE_DIALOG=${USE_DIALOG}, dialog present, /dev/tty writable)"
+else
+  _safe_logfile "UI: plain (NIKOS_USE_DIALOG=${USE_DIALOG}, dialog $(command -v dialog >/dev/null 2>&1 && echo present || echo absent), /dev/tty $(_have_tty && echo writable || echo unreachable))"
+fi
 
 _ensure_ansible_collections
 
@@ -951,7 +987,7 @@ _select_bundles_dialog() {
       "fabric"        "Fabric AI pattern CLI"                        off \
       "bitnet"        "BitNet.cpp 1-bit LLM inference"               off \
       "mistral-rs"    "mistral.rs Rust LLM server"                   off \
-      "monitoring"    "Netdata monitoring dashboard"                 off
+      "monitoring"    "Netdata monitoring dashboard"                 off 0</dev/tty
   ); then
     echo "${result}"
     return 0
@@ -975,7 +1011,7 @@ _select_ai_tools_dialog() {
       "ai-claude"       "Claude Code CLI"                                      on \
       "ai-copilot-cli"  "GitHub Copilot CLI extension"                         on \
       "ai-runner"       "ai-runner local model UI"                             on \
-      "ai-vscode"       "AI VS Code extensions (Continue, Copilot)"            on
+      "ai-vscode"       "AI VS Code extensions (Continue, Copilot)"            on 0</dev/tty
   ); then
     echo "${result}"
     return 0
@@ -986,79 +1022,145 @@ _select_ai_tools_dialog() {
   return "${dialog_status}"
 }
 
+# The plain (no-dialog) selection path.
+#
+# These functions fill the caller's array directly instead of printing a result.
+# They used to echo their section headers to stdout and return the selection on
+# that same stdout, and the caller captured the lot with
+# `read -ra ... <<< "$(...)"` -- which reads one line of a multi-line
+# here-string, so the array ended up holding the words of a header and every
+# answer was discarded. Nothing failed: the install exited 0, printed a success
+# summary and logged the corrupted array. Assigning in the caller's scope leaves
+# no channel for the prose and the answer to share.
+#
+# Prompts go to /dev/tty for the same reason the reads already do: under
+# `curl ... | bash` stdin carries the script's own remaining bytes.
+_say_tty() {
+  printf '%s\n' "$*" >/dev/tty
+}
+
+# _ask_tty <varname> <prompt>
+#
+# A failed read - Ctrl-D, or the terminal going away mid-run - is not an answer.
+# Substituting "" for it would silently decline the bundle being asked about, or
+# accept a default-enabled AI tool, which is the very thing this path was
+# changed to stop doing. A partial line before EOF is still an answer, so only
+# a failure that captured nothing aborts.
+_ask_tty() {
+  local __ask_var="$1" __ask_prompt="$2" __ask_answer=""
+
+  printf '%s' "${__ask_prompt}" >/dev/tty
+  if ! read -r __ask_answer </dev/tty && [[ -z "${__ask_answer}" ]]; then
+    printf '\n' >/dev/tty 2>/dev/null || true
+    _safe_logfile "[FAILED] input ended while asking: ${__ask_prompt}"
+    echo "ERROR: input ended while NikOS was waiting for an answer. The playbook was not run." >&2
+    echo "       Bootstrap packages, the checkout at ${NIKOS_HOME} and the Ansible collections" >&2
+    echo "       are already installed; nothing has been configured. Re-run the installer from" >&2
+    echo "       a terminal and answer the prompts to continue." >&2
+    exit 130
+  fi
+
+  printf -v "${__ask_var}" '%s' "${__ask_answer}"
+}
+
+# A run with no controlling terminal cannot ask, and must not answer on the
+# operator's behalf: an empty selection is indistinguishable from a deliberate
+# "install nothing optional", which is how the dropped bundles in #53 stayed
+# invisible. Say what happened and stop.
+_require_tty_for_selection() {
+  _have_tty && return 0
+  _safe_logfile "[FAILED] no controlling terminal available for the selection prompts"
+  echo "ERROR: NikOS asks which optional bundles and AI tools to install, and this run" >&2
+  echo "       has no controlling terminal (/dev/tty is unreachable), so it cannot ask." >&2
+  echo "       Run the installer from a terminal. Proceeding would install none of the" >&2
+  echo "       optional bundles while reporting success." >&2
+  exit 2
+}
+
+# Fills SELECTED_BUNDLES in the caller's scope.
 _select_bundles_plain() {
-  local _selected=()
-  echo "Optional app bundles (press Enter to skip each):"
-  read -r -p "  Install network tools? (nmap, wireshark, OpenVPN) [y/N] " opt_network </dev/tty
-  read -r -p "  Install music tools? (LMMS, Ardour, Audacity) [y/N] " opt_music </dev/tty
-  read -r -p "  Install education tools? (LibreOffice, draw.io, Anki) [y/N] " opt_education </dev/tty
-  echo ""
-  echo "Dev environment:"
-  read -r -p "  Install Neovim? [y/N] " opt_neovim </dev/tty
-  read -r -p "  Install Zsh + Starship? [y/N] " opt_zsh </dev/tty
-  read -r -p "  Install Java 21? [y/N] " opt_java </dev/tty
-  read -r -p "  Install Bun? [y/N] " opt_bun </dev/tty
-  echo ""
-  echo "LLM tools:"
-  read -r -p "  Install OpenClaw? [y/N] " opt_openclaw </dev/tty
-  read -r -p "  Pre-pull optional Ollama models? (~26 GB) [y/N] " opt_ollama_models </dev/tty
-  read -r -p "  Install BitNet.cpp? [y/N] " opt_bitnet </dev/tty
-  read -r -p "  Install mistral.rs? [y/N] " opt_mistral_rs </dev/tty
-  echo ""
-  echo "Databases:"
-  read -r -p "  Install PostgreSQL + pgvector? [y/N] " opt_postgres </dev/tty
-  read -r -p "  Install Redis? [y/N] " opt_redis </dev/tty
-  read -r -p "  Install Qdrant? [y/N] " opt_qdrant </dev/tty
-  echo ""
-  echo "Containers / Kubernetes:"
-  read -r -p "  Install kubectl + Helm? [y/N] " opt_k8s_tools </dev/tty
-  read -r -p "  Install Podman? [y/N] " opt_podman </dev/tty
-  read -r -p "  Install act? [y/N] " opt_act </dev/tty
-  echo ""
-  echo "Monitoring:"
-  read -r -p "  Install Netdata? [y/N] " opt_monitoring </dev/tty
-  read -r -p "  Install Fabric AI pattern CLI? [y/N] " opt_fabric </dev/tty
-  [[ "${opt_network,,}"   == "y" ]] && _selected+=("network")
-  [[ "${opt_music,,}"     == "y" ]] && _selected+=("music")
-  [[ "${opt_education,,}" == "y" ]] && _selected+=("education")
-  [[ "${opt_neovim,,}" == "y" ]] && _selected+=("neovim")
-  [[ "${opt_zsh,,}" == "y" ]] && _selected+=("zsh")
-  [[ "${opt_java,,}" == "y" ]] && _selected+=("java")
-  [[ "${opt_bun,,}" == "y" ]] && _selected+=("bun")
-  [[ "${opt_openclaw,,}" == "y" ]] && _selected+=("openclaw")
-  [[ "${opt_ollama_models,,}" == "y" ]] && _selected+=("ollama-models")
-  [[ "${opt_bitnet,,}" == "y" ]] && _selected+=("bitnet")
-  [[ "${opt_mistral_rs,,}" == "y" ]] && _selected+=("mistral-rs")
-  [[ "${opt_postgres,,}" == "y" ]] && _selected+=("postgres")
-  [[ "${opt_redis,,}" == "y" ]] && _selected+=("redis")
-  [[ "${opt_qdrant,,}" == "y" ]] && _selected+=("qdrant")
-  [[ "${opt_k8s_tools,,}" == "y" ]] && _selected+=("k8s-tools")
-  [[ "${opt_podman,,}" == "y" ]] && _selected+=("podman")
-  [[ "${opt_act,,}" == "y" ]] && _selected+=("act")
-  [[ "${opt_monitoring,,}" == "y" ]] && _selected+=("monitoring")
-  [[ "${opt_fabric,,}" == "y" ]] && _selected+=("fabric")
-  echo "${_selected[*]}"
+  local opt_network="" opt_music="" opt_education="" opt_neovim="" opt_zsh="" \
+    opt_java="" opt_bun="" opt_openclaw="" opt_ollama_models="" opt_bitnet="" \
+    opt_mistral_rs="" opt_postgres="" opt_redis="" opt_qdrant="" \
+    opt_k8s_tools="" opt_podman="" opt_act="" opt_monitoring="" opt_fabric=""
+
+  SELECTED_BUNDLES=()
+  _say_tty "Optional app bundles (press Enter to skip each):"
+  _ask_tty opt_network "  Install network tools? (nmap, wireshark, OpenVPN) [y/N] "
+  _ask_tty opt_music "  Install music tools? (LMMS, Ardour, Audacity) [y/N] "
+  _ask_tty opt_education "  Install education tools? (LibreOffice, draw.io, Anki) [y/N] "
+  _say_tty ""
+  _say_tty "Dev environment:"
+  _ask_tty opt_neovim "  Install Neovim? [y/N] "
+  _ask_tty opt_zsh "  Install Zsh + Starship? [y/N] "
+  _ask_tty opt_java "  Install Java 21? [y/N] "
+  _ask_tty opt_bun "  Install Bun? [y/N] "
+  _say_tty ""
+  _say_tty "LLM tools:"
+  _ask_tty opt_openclaw "  Install OpenClaw? [y/N] "
+  _ask_tty opt_ollama_models "  Pre-pull optional Ollama models? (~26 GB) [y/N] "
+  _ask_tty opt_bitnet "  Install BitNet.cpp? [y/N] "
+  _ask_tty opt_mistral_rs "  Install mistral.rs? [y/N] "
+  _say_tty ""
+  _say_tty "Databases:"
+  _ask_tty opt_postgres "  Install PostgreSQL + pgvector? [y/N] "
+  _ask_tty opt_redis "  Install Redis? [y/N] "
+  _ask_tty opt_qdrant "  Install Qdrant? [y/N] "
+  _say_tty ""
+  _say_tty "Containers / Kubernetes:"
+  _ask_tty opt_k8s_tools "  Install kubectl + Helm? [y/N] "
+  _ask_tty opt_podman "  Install Podman? [y/N] "
+  _ask_tty opt_act "  Install act? [y/N] "
+  _say_tty ""
+  _say_tty "Monitoring:"
+  _ask_tty opt_monitoring "  Install Netdata? [y/N] "
+  _ask_tty opt_fabric "  Install Fabric AI pattern CLI? [y/N] "
+  [[ "${opt_network,,}"   == "y" ]] && SELECTED_BUNDLES+=("network")
+  [[ "${opt_music,,}"     == "y" ]] && SELECTED_BUNDLES+=("music")
+  [[ "${opt_education,,}" == "y" ]] && SELECTED_BUNDLES+=("education")
+  [[ "${opt_neovim,,}" == "y" ]] && SELECTED_BUNDLES+=("neovim")
+  [[ "${opt_zsh,,}" == "y" ]] && SELECTED_BUNDLES+=("zsh")
+  [[ "${opt_java,,}" == "y" ]] && SELECTED_BUNDLES+=("java")
+  [[ "${opt_bun,,}" == "y" ]] && SELECTED_BUNDLES+=("bun")
+  [[ "${opt_openclaw,,}" == "y" ]] && SELECTED_BUNDLES+=("openclaw")
+  [[ "${opt_ollama_models,,}" == "y" ]] && SELECTED_BUNDLES+=("ollama-models")
+  [[ "${opt_bitnet,,}" == "y" ]] && SELECTED_BUNDLES+=("bitnet")
+  [[ "${opt_mistral_rs,,}" == "y" ]] && SELECTED_BUNDLES+=("mistral-rs")
+  [[ "${opt_postgres,,}" == "y" ]] && SELECTED_BUNDLES+=("postgres")
+  [[ "${opt_redis,,}" == "y" ]] && SELECTED_BUNDLES+=("redis")
+  [[ "${opt_qdrant,,}" == "y" ]] && SELECTED_BUNDLES+=("qdrant")
+  [[ "${opt_k8s_tools,,}" == "y" ]] && SELECTED_BUNDLES+=("k8s-tools")
+  [[ "${opt_podman,,}" == "y" ]] && SELECTED_BUNDLES+=("podman")
+  [[ "${opt_act,,}" == "y" ]] && SELECTED_BUNDLES+=("act")
+  [[ "${opt_monitoring,,}" == "y" ]] && SELECTED_BUNDLES+=("monitoring")
+  [[ "${opt_fabric,,}" == "y" ]] && SELECTED_BUNDLES+=("fabric")
+  return 0
 }
 
+# Fills SELECTED_AI_TOOLS in the caller's scope. Same shape, same defect, so it
+# gets the same fix -- it must not be assumed correct by inspection.
 _select_ai_tools_plain() {
-  local _selected=()
-  echo "AI tools (press Enter to accept the default Yes):"
-  read -r -p "  Install Ollama, Miniforge, nikos-ai env, aider, and agent SDKs? [Y/n] " opt_ai_local </dev/tty
-  read -r -p "  Install Gemini CLI? [Y/n] " opt_ai_gemini </dev/tty
-  read -r -p "  Install Claude Code CLI? [Y/n] " opt_ai_claude </dev/tty
-  read -r -p "  Install GitHub Copilot CLI extension? [Y/n] " opt_ai_copilot_cli </dev/tty
-  read -r -p "  Install ai-runner local model UI? [Y/n] " opt_ai_runner </dev/tty
-  read -r -p "  Install AI VS Code extensions (Continue, Copilot)? [Y/n] " opt_ai_vscode </dev/tty
-  [[ -z "${opt_ai_local}" || "${opt_ai_local,,}" == "y" ]] && _selected+=("ai-local")
-  [[ -z "${opt_ai_gemini}" || "${opt_ai_gemini,,}" == "y" ]] && _selected+=("ai-gemini")
-  [[ -z "${opt_ai_claude}" || "${opt_ai_claude,,}" == "y" ]] && _selected+=("ai-claude")
-  [[ -z "${opt_ai_copilot_cli}" || "${opt_ai_copilot_cli,,}" == "y" ]] && _selected+=("ai-copilot-cli")
-  [[ -z "${opt_ai_runner}" || "${opt_ai_runner,,}" == "y" ]] && _selected+=("ai-runner")
-  [[ -z "${opt_ai_vscode}" || "${opt_ai_vscode,,}" == "y" ]] && _selected+=("ai-vscode")
-  echo "${_selected[*]}"
+  local opt_ai_local="" opt_ai_gemini="" opt_ai_claude="" \
+    opt_ai_copilot_cli="" opt_ai_runner="" opt_ai_vscode=""
+
+  SELECTED_AI_TOOLS=()
+  _say_tty "AI tools (press Enter to accept the default Yes):"
+  _ask_tty opt_ai_local "  Install Ollama, Miniforge, nikos-ai env, aider, and agent SDKs? [Y/n] "
+  _ask_tty opt_ai_gemini "  Install Gemini CLI? [Y/n] "
+  _ask_tty opt_ai_claude "  Install Claude Code CLI? [Y/n] "
+  _ask_tty opt_ai_copilot_cli "  Install GitHub Copilot CLI extension? [Y/n] "
+  _ask_tty opt_ai_runner "  Install ai-runner local model UI? [Y/n] "
+  _ask_tty opt_ai_vscode "  Install AI VS Code extensions (Continue, Copilot)? [Y/n] "
+  [[ -z "${opt_ai_local}" || "${opt_ai_local,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-local")
+  [[ -z "${opt_ai_gemini}" || "${opt_ai_gemini,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-gemini")
+  [[ -z "${opt_ai_claude}" || "${opt_ai_claude,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-claude")
+  [[ -z "${opt_ai_copilot_cli}" || "${opt_ai_copilot_cli,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-copilot-cli")
+  [[ -z "${opt_ai_runner}" || "${opt_ai_runner,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-runner")
+  [[ -z "${opt_ai_vscode}" || "${opt_ai_vscode,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-vscode")
+  return 0
 }
 
-if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
+if _can_use_dialog; then
   if ! _raw=$(_select_bundles_dialog); then
     echo "Installer canceled during optional bundle selection." >&2
     exit 130
@@ -1073,49 +1175,65 @@ if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; th
   _raw=${_raw//\"/}
   read -ra SELECTED_AI_TOOLS <<< "${_raw}"
 else
-  read -ra SELECTED_BUNDLES <<< "$(_select_bundles_plain)"
-  read -ra SELECTED_AI_TOOLS <<< "$(_select_ai_tools_plain)"
+  _require_tty_for_selection
+  _select_bundles_plain
+  _select_ai_tools_plain
 fi
 
 # Timezone ─────────────────────────────────────────────────────────
 _detected_tz=$(_detect_system_timezone)
 _configured_tz=$(_get_configured_timezone)
 
-if [[ "${_USE_DIALOG}" == "true" ]] && check_if_dialog_installed 2>/dev/null; then
+if _can_use_dialog; then
   if ! _chosen_tz=$(_select_timezone_dialog "${_detected_tz}" "${_configured_tz}"); then
     echo "Installer canceled during timezone selection." >&2
     exit 130
   fi
 else
-  _chosen_tz=$(_select_timezone_plain "${_detected_tz}" "${_configured_tz}")
+  _select_timezone_plain "${_detected_tz}" "${_configured_tz}"
 fi
 
 _set_timezone_in_local_vars "${_chosen_tz}"
 _logfile "Timezone: ${_chosen_tz} (detected: ${_detected_tz}, was: ${_configured_tz:-unset})"
 
 # Build ansible tag args ───────────────────────────────────────────
-SKIP_TAGS=""
-for _bundle in network music education; do
-  if ! printf '%s\n' "${SELECTED_BUNDLES[@]}" | grep -qx "${_bundle}"; then
-    SKIP_TAGS="${SKIP_TAGS},${_bundle}"
-  fi
-done
+# Turns SELECTED_BUNDLES and SELECTED_AI_TOOLS into SKIP_TAGS and
+# EXPLICIT_OPTIONAL_TAGS. A function rather than top-level code so a test can
+# drive the selection path with scripted answers and assert that the tags carry
+# exactly what was answered -- the step where #53's lost selections became
+# "bundle silently not installed".
+_build_tag_args() {
+  local _bundle _tool
 
-EXPLICIT_OPTIONAL_TAGS=""
-for _bundle in neovim java bun redis postgres qdrant k8s-tools podman zsh act fabric bitnet mistral-rs monitoring ollama-models openclaw; do
-  if printf '%s\n' "${SELECTED_BUNDLES[@]}" | grep -qx "${_bundle}"; then
-    EXPLICIT_OPTIONAL_TAGS="${EXPLICIT_OPTIONAL_TAGS},${_bundle}"
-  fi
-done
-for _tool in ai-local ai-gemini ai-claude ai-copilot-cli ai-runner ai-vscode; do
-  if ! printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -qx "${_tool}"; then
-    SKIP_TAGS="${SKIP_TAGS},${_tool}"
-  fi
-done
+  SKIP_TAGS=""
+  EXPLICIT_OPTIONAL_TAGS=""
 
-if ! printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -Eqx 'ai-gemini|ai-claude'; then
-  SKIP_TAGS="${SKIP_TAGS},ai-node"
-fi
+  for _bundle in network music education; do
+    if ! printf '%s\n' "${SELECTED_BUNDLES[@]}" | grep -qx "${_bundle}"; then
+      SKIP_TAGS="${SKIP_TAGS},${_bundle}"
+    fi
+  done
+
+  for _bundle in neovim java bun redis postgres qdrant k8s-tools podman zsh act fabric bitnet mistral-rs monitoring ollama-models openclaw; do
+    if printf '%s\n' "${SELECTED_BUNDLES[@]}" | grep -qx "${_bundle}"; then
+      EXPLICIT_OPTIONAL_TAGS="${EXPLICIT_OPTIONAL_TAGS},${_bundle}"
+    fi
+  done
+
+  for _tool in ai-local ai-gemini ai-claude ai-copilot-cli ai-runner ai-vscode; do
+    if ! printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -qx "${_tool}"; then
+      SKIP_TAGS="${SKIP_TAGS},${_tool}"
+    fi
+  done
+
+  if ! printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -Eqx 'ai-gemini|ai-claude'; then
+    SKIP_TAGS="${SKIP_TAGS},ai-node"
+  fi
+
+  return 0
+}
+
+_build_tag_args
 
 _persist_skip_tags "${SKIP_TAGS#,}"
 _logfile "Selected bundles: ${SELECTED_BUNDLES[*]:-none}"
@@ -1156,7 +1274,8 @@ else
   set +e
   (
     cd "${NIKOS_HOME}"
-    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${PLAY_OPTS[@]}"
+    ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
+      ansible-playbook "${PLAY_OPTS[@]}"
   ) 2>&1 | tee -a "${INSTALL_LOG}"
   _pipe_status=("${PIPESTATUS[@]}")
   set -e
@@ -1184,7 +1303,8 @@ if [[ "${_ansible_rc}" -eq 0 && "${_tee_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TA
   else
     (
       cd "${NIKOS_HOME}"
-      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
+      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
+        ansible-playbook "${OPTIONAL_PLAY_OPTS[@]}"
     ) 2>&1 | tee -a "${INSTALL_LOG}"
     _pipe_status=("${PIPESTATUS[@]}")
     _ansible_rc=${_pipe_status[0]}

@@ -4,6 +4,106 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-08-27
+
+### Fixed
+- **The documented one-liner install silently dropped the bundles it was asked
+  for** - `_select_bundles_plain` printed its section headers to stdout and
+  returned the selection on that same stdout, and the caller captured the lot
+  with `read -ra SELECTED_BUNDLES <<< "$(_select_bundles_plain)"`. A here-string
+  is multi-line and `read` takes one line, so the array was filled with the
+  words of a header: `bitnet` never matched the tag loop and the role never ran.
+  `_select_ai_tools_plain` had the identical shape, so the same run also dropped
+  every AI tool into `SKIP_TAGS`. Nothing failed - the install exited 0, printed
+  a success summary, and `_logfile "Selected bundles: ..."` faithfully recorded
+  the corrupted array, so the log agreed with the wrong outcome. Both functions
+  now fill the caller's array directly; with no capture there is no channel for
+  the prose and the answer to share. A run that cannot ask, because there is no
+  controlling terminal, now says so and stops instead of installing nothing and
+  calling it success. (#53)
+- **The same install showed raw Ansible output instead of the TUI it is
+  documented to show** - the installer held three different tests for "is there
+  a terminal" and they disagreed. `_can_use_dialog` required `-t 0 && -t 1`, and
+  under `curl ... | bash` bash reads the script itself from stdin, so that gate
+  was false by construction on every machine; everything behind it was skipped,
+  including the playbook. The two gates guarding the checklists tested nothing at
+  all, which is why those still rendered - into a pipe. And
+  `nikos_progress_supported` already tested the right thing, `/dev/tty`
+  writability, but sat behind the wrong gate and was never reached. All three now
+  ask one `_have_tty` helper, mirroring `_nikos_progress_tty`; `install.sh` is
+  fetched standalone by curl and runs before the clone exists, so it keeps its
+  own copy rather than sourcing it. Dialogs that take keystrokes now read
+  `0</dev/tty` explicitly, and the UI decision and its three inputs are written
+  to the install log. (#52)
+- **`nikos setup` and `nikos update` never had the gauge at all** -
+  `scripts/nikos` ran `ansible-playbook ... | tee` and did not source
+  `scripts/nikos-progress.sh`, so post-install runs showed raw `TASK [...]`
+  output on any terminal. Same symptom as the install defect, a different cause.
+  Both now run through `nikos_progress_run` when the gauge can be drawn.
+  `--ask-become-pass` could not survive that move - Ansible's prompt reads
+  `/dev/tty`, which the gauge is drawing on - so the password is collected first
+  and passed in a mode-600 file, as `install.sh` does. The plain branches gained
+  the `ANSIBLE_NOCOLOR` / `ANSIBLE_FORCE_COLOR` settings the dialog paths always
+  set.
+- **Cancelling a dialog was reported as success** - `_collect_become_password_dialog`
+  and both timezone dialogs used `if ! var=$(dialog ...); then return $?; fi`.
+  In the then-branch `$?` is the status of the `!` itself, which is 0, so Cancel
+  and Esc returned success and the caller took the empty output for an answer:
+  an empty sudo password handed to ansible, or an empty timezone written to
+  `vars/local.yml`. The status is now captured from the assignment, the shape
+  `_select_bundles_dialog` already used.
+- **Input ending mid-prompt was treated as an answer** - a failed `read` became
+  an empty string, which silently declines the bundle being asked about and
+  accepts any default-enabled AI tool. That is the behaviour the plain path was
+  changed to stop, reintroduced one level down. Input that ends with nothing
+  captured now stops the installer; a partial line before EOF is still an answer.
+  The message names what that leaves behind - the bootstrap packages, the
+  checkout and the collections are already installed by then - rather than
+  claiming nothing was.
+- **The timezone prompt had the same defect, and `NIKOS_USE_DIALOG=0` wrote a
+  menu into `vars/local.yml`** - `_select_timezone_plain` printed its menu and
+  its answer to stdout, and the caller captured both with
+  `_chosen_tz=$(_select_timezone_plain ...)`. Measured on the unfixed version,
+  the captured value was five lines long: the heading, the option list and the
+  timezone. Prose now goes to `/dev/tty` and the answer is assigned, as the
+  bundle selectors do, and `tests/test_install_tui_gate.py` round-trips the auto,
+  defaulted and custom answers.
+- **`nikos update` drew a progress bar that did not report progress** -
+  `nikos_progress_run` renders against the role list and task total that
+  `nikos_progress_plan` produces, and that planner was never called, so
+  `NIKOS_PROGRESS_TOTAL` stayed zero and the gauge sat at 0% until `PLAY RECAP`
+  jumped it to 100. The playbook is now planned first, exactly as `install.sh`
+  does, and a task list that cannot be produced drops the run to the plain view
+  instead of drawing an empty gauge.
+- **The sudo password file could be published without its permissions being
+  confirmed** - `_collect_become_password` ignored the status of `chmod 600` and
+  went on to write the password and report success. The caller reads a non-zero
+  return as "fall back to `--ask-become-pass`" and calls it inside an `&&`
+  condition, where bash suspends errexit for the whole list, so an unchecked
+  failure there neither aborted nor returned - it carried on. Every step is now
+  checked on its own, and the path is registered in `BECOME_PASSWORD_FILE` the
+  moment the file exists, because the INT/TERM trap can only remove what that
+  global names: holding it back until the password had been written would leave
+  a window where Ctrl-C stranded a mode-600 file containing the sudo password on
+  disk. Every failure after that point cleans up explicitly, so a failed
+  collection still leaves nothing behind and still returns non-zero.
+  The traps restore the terminal cursor as well, which `dialog` hides while the
+  gauge draws - interrupting `nikos update` used to hand back a terminal with no
+  visible cursor. `tests/test_become_password_file.py` covers the mode of the
+  written file, a failing `chmod`, a temp file that cannot be created, that
+  ordering, and the cursor after an interrupt.
+- **Neither defect was catchable by the existing suites** - `tests/` had no
+  coverage of the gate or the selection, and `./test` structurally cannot provide
+  it: it drives the installer over `ssh -tt`, so a pty is always allocated and
+  only the clone-and-run path is exercised.
+  `tests/test_install_tui_gate.py` covers the gate on piped stdin with a real
+  terminal, with no controlling terminal, with `NIKOS_USE_DIALOG=0` and with
+  `dialog` absent, and round-trips a selection through the real dispatch. The
+  harness is the load-bearing part: `script -qec 'bash prog'` gives the child a
+  pty on all three descriptors, so the unfixed gate passes there; the pipe has to
+  be on bash's own stdin, as `script -qec 'cat prog | bash'` arranges. Verified
+  by re-introducing each defect.
+
 ## [0.6.1] — 2026-08-21
 
 ### Fixed
