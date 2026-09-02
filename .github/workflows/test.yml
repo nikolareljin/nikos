@@ -13,5 +13,5 @@ jobs:
       test_command: |
         sudo apt-get update
         sudo apt-get install -y ansible
-        ansible-galaxy collection install -r requirements.yml
+        ./scripts/install-collections.sh requirements.yml
         ANSIBLE_FORCE_COLOR=1 ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education

@@ -655,10 +655,22 @@ _ensure_ansible_collections() {
     exit 1
   fi
 
+  # The helper lives beside the requirements file, which may be under
+  # NIKOS_HOME or, with --dev, beside this script. Fall back to calling
+  # ansible-galaxy directly so an older checkout still works.
+  local collections_cmd=()
+  local repo_root
+  repo_root="$(cd -- "$(dirname -- "${requirements_path}")" && pwd)"
+  if [[ -x "${repo_root}/scripts/install-collections.sh" ]]; then
+    collections_cmd=("${repo_root}/scripts/install-collections.sh" "${requirements_path}")
+  else
+    collections_cmd=(ansible-galaxy collection install --no-cache -r "${requirements_path}")
+  fi
+
   if _can_use_dialog; then
     dialog --title "NikOS ${NIKOS_VERSION}" \
       --infobox "Installing required Ansible collections..." 5 56 || true
-    if ansible-galaxy collection install -r "${requirements_path}" >> "${INSTALL_LOG}" 2>&1; then
+    if "${collections_cmd[@]}" >> "${INSTALL_LOG}" 2>&1; then
       :
     else
       collection_rc=$?
@@ -667,7 +679,7 @@ _ensure_ansible_collections() {
     fi
   else
     echo "Installing required Ansible collections..."
-    ansible-galaxy collection install -r "${requirements_path}"
+    "${collections_cmd[@]}"
   fi
 }
 

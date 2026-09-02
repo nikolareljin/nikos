@@ -4,6 +4,26 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-09-02
+
+### Fixed
+- **Galaxy outages took CI red and could break an install.** Both `Lint` and
+  `Dry-run Test` failed on `main` on a commit that touched nothing near them,
+  for two unrelated Galaxy faults on the same afternoon: a `504 Gateway
+  Timeout` fetching `community.general`, and a corrupted ansible-galaxy
+  response cache (`Missing expected 'results' in ansible-galaxy cache ... Try
+  running with --clear-response-cache or --no-cache`). Neither is a fault in
+  this repository, and either would equally have failed somebody's install
+  rather than only a CI run.
+- Collection installs now go through `scripts/install-collections.sh`, which
+  passes `--no-cache` — removing the cache-corruption class outright — and
+  retries with a backoff, which covers the transient network faults. `Lint`,
+  `Dry-run Test` and `install.sh` all use it, so the behaviour is the same
+  whether a machine or a person is doing the installing. `install.sh` falls
+  back to calling `ansible-galaxy` directly when the helper is absent, so an
+  older checkout still works.
+
+
 ## [0.6.3] — 2026-09-01
 
 ### Fixed
