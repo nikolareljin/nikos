@@ -7,6 +7,11 @@ All notable changes to NikOS are documented here.
 ## [0.6.3] — 2026-09-01
 
 ### Fixed
+- **Stopped tracking `docs/CLAUDE.md`.** claude-mem writes an activity log into
+  any directory it touches, and one had been committed. It is generated, would
+  churn on every session, and publishes internal work history. Nested
+  `CLAUDE.md` files are now ignored while a root one, which is deliberate
+  project instruction, still is not.
 - **GRUB theming failed where GRUB is not installed yet.** Four tasks edited
   `/etc/default/grub` unconditionally and the playbook stopped with
   `Path /etc/default/grub does not exist !`. An installer payload holds the
