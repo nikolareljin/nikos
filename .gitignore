@@ -27,6 +27,11 @@ build/
 # Claude Code session memory
 .remember/
 docs/superpowers/
+# claude-mem writes an activity log into any directory it touches. A root
+# CLAUDE.md is deliberate project instruction; the nested ones are generated
+# and would churn on every session.
+CLAUDE.md
+!/CLAUDE.md
 
 # Secrets and keys (NEVER commit these)
 *.pem

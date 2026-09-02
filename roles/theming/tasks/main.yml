@@ -123,12 +123,23 @@
     - not ansible_check_mode
     - theming_nordic_grub_theme_dir is defined
 
+# GRUB is not always present. An installer payload carries the system that gets
+# copied to the target disk, and the bootloader is installed onto that disk
+# afterwards, so /etc/default/grub does not exist while the payload is being
+# built. Editing it unconditionally turns a bootloader that is not there yet
+# into a hard failure.
+- name: Check whether GRUB defaults exist
+  ansible.builtin.stat:
+    path: /etc/default/grub
+  register: theming_grub_defaults
+
 - name: Configure GRUB to use Nordic theme
   ansible.builtin.lineinfile:
     path: /etc/default/grub
     regexp: "^#?GRUB_THEME="
     line: 'GRUB_THEME="/boot/grub/themes/Nordic/theme.txt"'
   when:
+    - theming_grub_defaults.stat.exists
     - ansible_check_mode or theming_nordic_grub_theme_dir is defined
   notify: Theming_update_grub
 
@@ -137,6 +148,7 @@
     path: /etc/default/grub
     regexp: '^GRUB_CMDLINE_LINUX_DEFAULT=""$'
     replace: 'GRUB_CMDLINE_LINUX_DEFAULT="splash"'
+  when: theming_grub_defaults.stat.exists
   notify: Theming_update_grub
 
 - name: Replace disabled Plymouth token in GRUB defaults
@@ -144,6 +156,7 @@
     path: /etc/default/grub
     regexp: '^(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*)\bnosplash\b([^"]*")$'
     replace: '\1splash\2'
+  when: theming_grub_defaults.stat.exists
   notify: Theming_update_grub
 
 - name: Ensure Plymouth splash is enabled in GRUB defaults
@@ -151,6 +164,7 @@
     path: /etc/default/grub
     regexp: '^(GRUB_CMDLINE_LINUX_DEFAULT=")(?![^"]*\bsplash\b)([^"]*\S)(")$'
     replace: '\1\2 splash\3'
+  when: theming_grub_defaults.stat.exists
   notify: Theming_update_grub
 
 - name: Warn when Nordic GRUB theme is unavailable

@@ -72,21 +72,36 @@
 
     # PROFILE=/dev/null stops the script appending its shell snippet on every
     # run; the profile lines are written once by the task below instead.
+    # NVM_DIR is set explicitly rather than left to $HOME/.nvm. The installer
+    # and every task below have to agree on one directory, and $HOME is not
+    # reliably nikos_home: it differs when the playbook provisions an image
+    # rather than a live account, and a stray NVM_DIR in the environment would
+    # override it either way.
     - name: Run the nvm install script
       ansible.builtin.command: bash /tmp/nvm-install.sh
       args:
         creates: "{{ nikos_home }}/.nvm/nvm.sh"
       environment:
         PROFILE: /dev/null
+        NVM_DIR: "{{ nikos_home }}/.nvm"
 
+    # executable: /bin/bash is load-bearing. ansible.builtin.shell runs /bin/sh,
+    # which is dash here, and nvm.sh works out its own directory from
+    # ${BASH_SOURCE[0]}. Under dash that is unset, so nvm falls back to the
+    # directory of $0 - /bin - and installs Node into /usr/bin/versions/node
+    # instead of NVM_DIR. It reports success while doing it, so the failure
+    # only surfaces at the next task, which looks for npm where it should have
+    # gone. NVM_DIR is exported for the same reason as in the task above.
     - name: Install the pinned Node version through nvm
       ansible.builtin.shell: |
         set -e
-        . "{{ nikos_home }}/.nvm/nvm.sh"
+        export NVM_DIR="{{ nikos_home }}/.nvm"
+        . "$NVM_DIR/nvm.sh"
         nvm install "{{ nikos_node_version }}"
         nvm alias default "{{ nikos_node_version }}"
       args:
         creates: "{{ nikos_home }}/.nvm/versions/node/v{{ nikos_node_version }}/bin/node"
+        executable: /bin/bash
       # nvm is a shell function, so this needs a shell that has sourced it.
       # noqa: command-instead-of-module
 
