@@ -24,7 +24,11 @@ All notable changes to NikOS are documented here.
   calling `ansible-galaxy --no-cache` directly when the helper is absent, so an
   older checkout still works, and the helper fails immediately with a clear
   message when `ansible-galaxy` is not installed at all rather than retrying
-  and blaming Galaxy.
+  and blaming Galaxy. On final failure it exits with `ansible-galaxy`'s own
+  status rather than a flat `1`, matching how `install.sh` reports the code it
+  gets back, and `NIKOS_GALAXY_ATTEMPTS` and `NIKOS_GALAXY_RETRY_DELAY` are
+  validated before use so a typo is reported as such instead of surfacing as an
+  arithmetic error mid-loop.
 
 
 ## [0.6.3] — 2026-09-01
