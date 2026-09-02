@@ -7,6 +7,14 @@ All notable changes to NikOS are documented here.
 ## [0.6.3] — 2026-09-01
 
 ### Fixed
+- **GRUB theming failed where GRUB is not installed yet.** Four tasks edited
+  `/etc/default/grub` unconditionally and the playbook stopped with
+  `Path /etc/default/grub does not exist !`. An installer payload holds the
+  system that gets copied to the target disk, and the bootloader is installed
+  onto that disk afterwards, so the file is genuinely absent while the payload
+  is being built. The tasks now check for it first and skip when it is missing,
+  which is also the right behaviour on any machine that boots something other
+  than GRUB.
 - **nvm installed Node into `/usr/bin/versions/node` instead of `NVM_DIR`.**
   The task that installs the pinned Node sources `nvm.sh` and then calls the
   `nvm` shell function, and its comment says as much, but it never set
