@@ -4,6 +4,27 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-09-01
+
+### Fixed
+- **nvm installed Node into `/usr/bin/versions/node` instead of `NVM_DIR`.**
+  The task that installs the pinned Node sources `nvm.sh` and then calls the
+  `nvm` shell function, and its comment says as much, but it never set
+  `executable: /bin/bash`. `ansible.builtin.shell` runs `/bin/sh`, which is
+  dash on Ubuntu, and `nvm.sh` works out its own directory from
+  `${BASH_SOURCE[0]}`. Under dash that is unset, so nvm falls back to the
+  directory of `$0` — `/bin` — and unpacks Node under `/usr/bin/versions/node`.
+  It reports success while doing it, so nothing failed until the next task
+  looked for npm where it should have gone and reported
+  `No such file or directory: .../.nvm/versions/node/v22.23.2/bin/npm`.
+  The `creates:` guard never matched either, so the task re-ran on every pass.
+- **`NVM_DIR` is now set explicitly in both nvm tasks.** It was left to default
+  to `$HOME/.nvm`, which only agrees with `nikos_home` when the playbook is
+  provisioning the account it is running as. It does not agree when NikOS is
+  applied to an image being built rather than a live desktop, and a stray
+  `NVM_DIR` already in the environment would have overridden it in either case.
+
+
 ## [0.6.2] — 2026-08-27
 
 ### Fixed
