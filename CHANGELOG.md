@@ -17,11 +17,14 @@ All notable changes to NikOS are documented here.
   rather than only a CI run.
 - Collection installs now go through `scripts/install-collections.sh`, which
   passes `--no-cache` — removing the cache-corruption class outright — and
-  retries with a backoff, which covers the transient network faults. `Lint`,
-  `Dry-run Test` and `install.sh` all use it, so the behaviour is the same
-  whether a machine or a person is doing the installing. `install.sh` falls
-  back to calling `ansible-galaxy` directly when the helper is absent, so an
-  older checkout still works.
+  retries with a backoff, which covers the transient network faults. Every call
+  site goes through it: `Lint`, `Dry-run Test`, `install.sh` and the `nikos`
+  CLI's own setup and update paths, so the behaviour is the same whether a
+  machine or a person is doing the installing. Both scripts fall back to
+  calling `ansible-galaxy --no-cache` directly when the helper is absent, so an
+  older checkout still works, and the helper fails immediately with a clear
+  message when `ansible-galaxy` is not installed at all rather than retrying
+  and blaming Galaxy.
 
 
 ## [0.6.3] — 2026-09-01

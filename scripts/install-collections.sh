@@ -28,6 +28,13 @@ if [[ ! -f "$REQUIREMENTS" ]]; then
   exit 1
 fi
 
+# Retrying cannot conjure the tool, and the give-up message below would blame
+# Galaxy for something that is plainly local.
+if ! command -v ansible-galaxy >/dev/null 2>&1; then
+  echo "ERROR: ansible-galaxy is not on PATH. Install ansible-core first." >&2
+  exit 1
+fi
+
 attempt=1
 while :; do
   if ansible-galaxy collection install --no-cache -r "$REQUIREMENTS"; then
