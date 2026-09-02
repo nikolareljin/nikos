@@ -4,6 +4,36 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-09-02
+
+### Fixed
+- **Galaxy outages took CI red and could break an install.** Both `Lint` and
+  `Dry-run Test` failed on `main` on a commit that touched nothing near them,
+  for two unrelated Galaxy faults on the same afternoon: a `504 Gateway
+  Timeout` fetching `community.general`, and a corrupted ansible-galaxy
+  response cache (`Missing expected 'results' in ansible-galaxy cache ... Try
+  running with --clear-response-cache or --no-cache`). Neither is a fault in
+  this repository, and either would equally have failed somebody's install
+  rather than only a CI run.
+- Collection installs now go through `scripts/install-collections.sh`, which
+  passes `--no-cache` — removing the cache-corruption class outright — and
+  retries with a backoff, which covers the transient network faults. Every call
+  site goes through it: `Lint`, `Dry-run Test`, `install.sh` and the `nikos`
+  CLI's own setup and update paths, so the behaviour is the same whether a
+  machine or a person is doing the installing. Both scripts fall back to
+  calling `ansible-galaxy --no-cache` directly when the helper is absent, so an
+  older checkout still works, and the helper fails immediately with a clear
+  message when `ansible-galaxy` is not installed at all rather than retrying
+  and blaming Galaxy. On final failure it exits with `ansible-galaxy`'s own
+  status rather than a flat `1`, matching how `install.sh` reports the code it
+  gets back, and `NIKOS_GALAXY_ATTEMPTS` and `NIKOS_GALAXY_RETRY_DELAY` are
+  validated before use so a typo is reported as such instead of surfacing as an
+  arithmetic error mid-loop. Every call site runs it through `bash` and gates on
+  the file existing rather than on its executable bit, so a checkout on a
+  `noexec` mount, or an archive that dropped permissions, does not silently
+  fall back to the unprotected call.
+
+
 ## [0.6.3] — 2026-09-01
 
 ### Fixed

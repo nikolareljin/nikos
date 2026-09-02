@@ -274,7 +274,11 @@ _playbook() {
     exit 1
   fi
   print_info "Installing required Ansible collections..."
-  ansible-galaxy collection install -r "${ANSIBLE_REQUIREMENTS}"
+  if [[ -f "${NIKOS_HOME}/scripts/install-collections.sh" ]]; then
+    bash "${NIKOS_HOME}/scripts/install-collections.sh" "${ANSIBLE_REQUIREMENTS}"
+  else
+    ansible-galaxy collection install --no-cache -r "${ANSIBLE_REQUIREMENTS}"
+  fi
   skip_tags="$(_get_default_skip_tags)"
   [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
   playbook_args+=("${extra_args[@]}")

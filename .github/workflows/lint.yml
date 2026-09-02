@@ -16,9 +16,10 @@ jobs:
         python -m pip install ansible-lint pytest pillow
         sudo apt-get update
         sudo apt-get install -y shellcheck
-        ansible-galaxy collection install -r requirements.yml
+        bash scripts/install-collections.sh requirements.yml
         ansible-lint site.yml
         shellcheck install.sh scripts/nikos scripts/nikos-progress.sh \
-          scripts/repo-sync.sh roles/theming/files/nikos-apply-wallpaper.sh
+          scripts/repo-sync.sh scripts/install-collections.sh \
+          roles/theming/files/nikos-apply-wallpaper.sh
       test_command: |
         python -m pytest tests/ -v
