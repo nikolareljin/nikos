@@ -274,8 +274,8 @@ _playbook() {
     exit 1
   fi
   print_info "Installing required Ansible collections..."
-  if [[ -x "${NIKOS_HOME}/scripts/install-collections.sh" ]]; then
-    "${NIKOS_HOME}/scripts/install-collections.sh" "${ANSIBLE_REQUIREMENTS}"
+  if [[ -f "${NIKOS_HOME}/scripts/install-collections.sh" ]]; then
+    bash "${NIKOS_HOME}/scripts/install-collections.sh" "${ANSIBLE_REQUIREMENTS}"
   else
     ansible-galaxy collection install --no-cache -r "${ANSIBLE_REQUIREMENTS}"
   fi

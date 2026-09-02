@@ -661,8 +661,8 @@ _ensure_ansible_collections() {
   local collections_cmd=()
   local repo_root
   repo_root="$(cd -- "$(dirname -- "${requirements_path}")" && pwd)"
-  if [[ -x "${repo_root}/scripts/install-collections.sh" ]]; then
-    collections_cmd=("${repo_root}/scripts/install-collections.sh" "${requirements_path}")
+  if [[ -f "${repo_root}/scripts/install-collections.sh" ]]; then
+    collections_cmd=(bash "${repo_root}/scripts/install-collections.sh" "${requirements_path}")
   else
     collections_cmd=(ansible-galaxy collection install --no-cache -r "${requirements_path}")
   fi

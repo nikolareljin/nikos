@@ -28,7 +28,10 @@ All notable changes to NikOS are documented here.
   status rather than a flat `1`, matching how `install.sh` reports the code it
   gets back, and `NIKOS_GALAXY_ATTEMPTS` and `NIKOS_GALAXY_RETRY_DELAY` are
   validated before use so a typo is reported as such instead of surfacing as an
-  arithmetic error mid-loop.
+  arithmetic error mid-loop. Every call site runs it through `bash` and gates on
+  the file existing rather than on its executable bit, so a checkout on a
+  `noexec` mount, or an archive that dropped permissions, does not silently
+  fall back to the unprotected call.
 
 
 ## [0.6.3] — 2026-09-01
