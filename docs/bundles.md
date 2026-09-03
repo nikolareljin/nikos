@@ -28,8 +28,10 @@ across roles rather than gathered in one:
 
 So reading `site.yml` finds a bundle list that is missing six entries, and
 grepping the roles finds them only if you already know which roles to open.
-Only `ansible-playbook --list-tags` sees all of them, which is why that is what
-any check of this list has to run.
+Only `ansible-playbook site.yml -i inventory/local --list-tags` sees all of
+them, which is why that is what any check of this list has to run. The
+inventory is not optional: `site.yml` targets the `local` group and
+`ansible.cfg` sets no default inventory, so the command fails without it.
 
 With that in mind, two things decide whether a bundle lands on a machine, and
 they are not the same thing. **How the playbook treats the tag** decides what
@@ -155,7 +157,8 @@ read them instead of keeping a fifth copy.
 
 `install.sh` and `scripts/nikos` read it instead of their inline lists, taking
 each checklist default from `offered`, and a test asserts every `tag` appears
-in `ansible-playbook site.yml --list-tags`, so the manifest cannot drift from
+in `ansible-playbook site.yml -i inventory/local --list-tags`, so the manifest
+cannot drift from
 the playbook it describes. The test can only check `playbook`; `offered` is
 checked by being the one place it is written.
 
