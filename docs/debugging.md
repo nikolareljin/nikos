@@ -67,11 +67,25 @@ ls /usr/share/themes/Nordic          # should exist
 ls /usr/share/icons/Papirus-Dark     # should exist
 ```
 
-If missing, re-run theming:
+If missing, re-run the playbook:
 
 ```bash
-ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags theming
+ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local
 ```
+
+Not `--tags theming`. The `theming` role carries no tag, in `site.yml` or on
+its tasks, and Ansible does not give a role an implicit tag named after it, so
+`--tags theming` selects the `always` tasks and nothing else:
+
+```
+$ ansible-playbook site.yml -i inventory/local --tags theming --list-tasks
+      Check whether local override vars exist	TAGS: [always]
+      Load local override vars	TAGS: [always]
+      ...
+```
+
+It exits cleanly having done nothing, which reads like theming ran and failed
+to fix the problem. A full run is idempotent and is what re-applies theming.
 
 ### Ollama model not found
 

@@ -56,8 +56,12 @@ Taking the playbook first.
 
 **Always.** Roles carried in `site.yml` with no role-level tag — `base`,
 `desktop`, `theming`, `github-setup`, `editors`, `cloud-ai-cli`, `agent-dev`,
-`dev-tools`. Tags select tasks, not roles by name, so a role with no tag on it
-cannot be named in `--tags` or `--skip-tags`, and it always runs. That is
+`dev-tools`. Tags select tasks, not roles by name, and Ansible does not give a
+role an implicit tag named after it, so a role with no tag on it cannot be
+named in `--tags` or `--skip-tags`, and it always runs. `docs/debugging.md`
+told people to re-run theming with `--tags theming`; that command selects the
+`always` tasks and nothing else, and exits cleanly having done nothing. It is
+corrected in this change. That is
 deliberate: those roles are what makes a machine NikOS rather than a stock
 Xubuntu. They are not bundles and must not be offered as if they were.
 
