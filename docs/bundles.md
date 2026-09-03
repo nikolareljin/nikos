@@ -158,9 +158,8 @@ read them instead of keeping a fifth copy.
 `install.sh` and `scripts/nikos` read it instead of their inline lists, taking
 each checklist default from `offered`, and a test asserts every `tag` appears
 in `ansible-playbook site.yml -i inventory/local --list-tags`, so the manifest
-cannot drift from
-the playbook it describes. The test can only check `playbook`; `offered` is
-checked by being the one place it is written.
+cannot drift from the playbook it describes. The test can only check
+`playbook`; `offered` is checked by being the one place it is written.
 
 The check has to be `--list-tags` rather than a grep of `site.yml`. Most of the
 AI tags and `ollama-models` are declared on tasks inside roles and never appear
