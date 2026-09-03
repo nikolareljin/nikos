@@ -26,9 +26,11 @@ across roles rather than gathered in one:
 | `ai-vscode` | `roles/editors/tasks/main.yml` |
 | `ollama-models`, `ollama-reasoning`, `ollama-coding`, `ollama-text`, `ollama-vision`, `ollama-embedding` | `roles/ai-stack/tasks/main.yml` |
 
-That is thirteen tags. `site.yml` names twenty-one, so reading it finds a
-bundle list missing well over a third of what exists, and grepping the roles
-finds the rest only if you already know which roles to open. Only
+That is thirteen tags `site.yml` never mentions. It carries the other
+twenty-one names, two of which — `always` and `never` — are Ansible keywords
+rather than bundles. So reading `site.yml` finds a list missing well over a
+third of what exists, and grepping the roles finds the rest only if you
+already know which roles to open. Only
 `ansible-playbook site.yml -i inventory/local --list-tags` sees all of them,
 which is why that is what any check of this list has to run. The inventory is
 not optional: `site.yml` targets the `local` group and `ansible.cfg` sets no
