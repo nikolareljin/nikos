@@ -94,7 +94,7 @@ with `ai-gemini` and `openclaw`, so those tasks run if any of the three is
 wanted.
 
 `ai-vision` is not derived and not offered either, which looks like an
-oversight rather than a decision. It is a plain tag on five `roles/agent-dev`
+oversight rather than a decision. It is a plain tag on four `roles/agent-dev`
 tasks, so it always installs, and no selector mentions it and nothing can
 decline it. A manifest is where that becomes visible; it is listed here so it
 is not lost, not fixed here.
