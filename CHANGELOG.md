@@ -4,6 +4,14 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+### Changed
+- Vendored `script-helpers` moves from 0.12.1 to 0.24.0. The Bash API is
+  additive across that range — every function the old pin exposed is still
+  there — and NikOS imports only `logging` and `dialog`, both unchanged. The
+  breaking changes recorded in that range are all in the PowerShell modules,
+  which nothing here loads.
+
+
 ## [0.6.4] — 2026-09-02
 
 ### Fixed
