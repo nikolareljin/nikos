@@ -15,36 +15,53 @@ several lists.
 
 A bundle is an Ansible **tag**, and a tag is attached to tasks rather than to
 roles. Some are declared on a role in `site.yml`; others are declared on tasks
-inside a role and never appear in `site.yml` at all. `ollama-models` is
-declared in `roles/ai-stack/tasks/main.yml`, and every AI sub-tool
-(`ai-gemini`, `ai-claude`, `ai-copilot-cli`, `ai-runner`, `ai-vscode`) is the
-same. Only `ansible-playbook --list-tags` sees all of them.
+inside a role and never appear in `site.yml` at all, and those are spread
+across roles rather than gathered in one:
+
+| Tag | Declared in |
+| --- | --- |
+| `ai-gemini`, `ai-copilot-cli` | `roles/cloud-ai-cli/tasks/main.yml` |
+| `ai-claude` | `roles/agent-dev/tasks/main.yml` |
+| `ai-runner` | `roles/dev-tools/tasks/main.yml` |
+| `ai-vscode` | `roles/editors/tasks/main.yml` |
+| `ollama-models` | `roles/ai-stack/tasks/main.yml` |
+
+So reading `site.yml` finds a bundle list that is missing six entries, and
+grepping the roles finds them only if you already know which roles to open.
+Only `ansible-playbook --list-tags` sees all of them, which is why that is what
+any check of this list has to run.
 
 With that in mind, a bundle is in one of three states.
 
-**Always.** Roles carrying no tag anywhere — `base`, `desktop`, `theming`,
-`github-setup`, `editors`, `cloud-ai-cli`, `agent-dev`, `dev-tools`. Tags
-select tasks, not roles by name, so an untagged role cannot be selected or
-skipped and always runs. That is deliberate: those roles are what makes a
-machine NikOS rather than a stock Xubuntu. They are not bundles and must not be
-offered as if they were.
+**Always.** Roles carried in `site.yml` with no role-level tag — `base`,
+`desktop`, `theming`, `github-setup`, `editors`, `cloud-ai-cli`, `agent-dev`,
+`dev-tools`. Tags select tasks, not roles by name, so a role with no tag on it
+cannot be named in `--tags` or `--skip-tags`, and it always runs. That is
+deliberate: those roles are what makes a machine NikOS rather than a stock
+Xubuntu. They are not bundles and must not be offered as if they were.
+
+Four of them do contain individually tagged tasks — `editors`, `cloud-ai-cli`,
+`agent-dev` and `dev-tools` each hold one of the AI sub-tools above. Skipping
+that tag drops those tasks; the rest of the role still runs. The role is what
+is unconditional here, not every task in it.
 
 **On by default.** `network`, `music`, `education` and `ai-local`, declared on
 roles in `site.yml`; and the AI sub-tools `ai-gemini`, `ai-claude`,
-`ai-copilot-cli`, `ai-runner`, `ai-vscode`, declared on tasks inside
-`roles/ai-stack`. Declining one adds it to `--skip-tags`.
+`ai-copilot-cli`, `ai-runner`, `ai-vscode`, declared on tasks inside the four
+roles named in the table above. Declining one adds it to `--skip-tags`.
 
 **Opt-in.** Declared `tags: [never, <name>]`, so they never run unless asked
 for by name: `neovim`, `java`, `podman`, `openclaw`, `bun`, `redis`,
 `postgres`, `zsh`, `act`, `fabric`, `k8s-tools`, `qdrant`, `bitnet`,
 `mistral-rs` and `monitoring` on roles in `site.yml`, and `ollama-models` on
-tasks inside `roles/ai-stack`. Accepting one puts it in
+tasks inside `roles/ai-stack`, the one AI tag that really is declared there. Accepting one puts it in
 `--tags` on a **second** playbook run, because `--tags` restricts a run to
 tagged tasks and a single run carrying it would skip everything untagged —
 which is to say, the whole system.
 
 `ai-node` is not a bundle and is never offered. It is derived: skipped unless
-`ai-gemini` or `ai-claude` was chosen, because those are what need it.
+`ai-gemini` or `ai-claude` was chosen, because those are what need it. It is
+declared in `roles/cloud-ai-cli/tasks/main.yml`.
 
 ## Why a manifest
 
