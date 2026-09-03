@@ -7,28 +7,38 @@ asks; `nikos add <name>` turns one on afterwards.
 This describes how the list of bundles is meant to be published, and why it
 should be written once rather than in every place that offers it.
 
-The manifest below is not implemented yet. The behaviour it describes is: it is
-what `install.sh` and `scripts/nikos` do today, spread across several lists.
+The manifest below is not implemented yet. The behaviour it describes already
+is — it is what `install.sh` and `scripts/nikos` do today, spread across
+several lists.
 
 ## What a bundle is, in the playbook
 
-`site.yml` puts every role in one of three states.
+A bundle is an Ansible **tag**, and a tag is attached to tasks rather than to
+roles. Some are declared on a role in `site.yml`; others are declared on tasks
+inside a role and never appear in `site.yml` at all. `ollama-models` is
+declared in `roles/ai-stack/tasks/main.yml`, and every AI sub-tool
+(`ai-gemini`, `ai-claude`, `ai-copilot-cli`, `ai-runner`, `ai-vscode`) is the
+same. Only `ansible-playbook --list-tags` sees all of them.
 
-**Always.** A role with no `tags:` key at all — `base`, `desktop`, `theming`,
-`github-setup`, `editors`, `cloud-ai-cli`, `agent-dev`, `dev-tools`. Ansible
-tags select tasks, not roles by name, so a role with no tag cannot be selected
-or skipped and always runs. That is deliberate: those roles are what makes a
+With that in mind, a bundle is in one of three states.
+
+**Always.** Roles carrying no tag anywhere — `base`, `desktop`, `theming`,
+`github-setup`, `editors`, `cloud-ai-cli`, `agent-dev`, `dev-tools`. Tags
+select tasks, not roles by name, so an untagged role cannot be selected or
+skipped and always runs. That is deliberate: those roles are what makes a
 machine NikOS rather than a stock Xubuntu. They are not bundles and must not be
 offered as if they were.
 
-**On by default.** `network`, `music`, `education`, and the AI stack under
-`ai-local` with its sub-tools `ai-gemini`, `ai-claude`, `ai-copilot-cli`,
-`ai-runner`, `ai-vscode`. Declining one adds it to `--skip-tags`.
+**On by default.** `network`, `music`, `education` and `ai-local`, declared on
+roles in `site.yml`; and the AI sub-tools `ai-gemini`, `ai-claude`,
+`ai-copilot-cli`, `ai-runner`, `ai-vscode`, declared on tasks inside
+`roles/ai-stack`. Declining one adds it to `--skip-tags`.
 
 **Opt-in.** Declared `tags: [never, <name>]`, so they never run unless asked
 for by name: `neovim`, `java`, `podman`, `openclaw`, `bun`, `redis`,
 `postgres`, `zsh`, `act`, `fabric`, `k8s-tools`, `qdrant`, `bitnet`,
-`mistral-rs`, `monitoring`, and `ollama-models`. Accepting one puts it in
+`mistral-rs` and `monitoring` on roles in `site.yml`, and `ollama-models` on
+tasks inside `roles/ai-stack`. Accepting one puts it in
 `--tags` on a **second** playbook run, because `--tags` restricts a run to
 tagged tasks and a single run carrying it would skip everything untagged —
 which is to say, the whole system.
@@ -44,7 +54,7 @@ nothing checks that they do.
 
 The failure that follows is quiet. Add a role to `site.yml` and forget one of
 the other three, and the bundle is simply never offered — no error, no warning,
-just a choice that silently is not there. The same shape as nikos#53, where a
+just a choice that silently is not there. The same shape as #53, where a
 selection was made and silently not installed.
 
 A single manifest fixes that, and lets anything else that offers these choices
@@ -72,7 +82,8 @@ read them instead of keeping a fifth copy.
   default: false
 ```
 
-- `tag` — the Ansible tag, exactly as `site.yml` declares it.
+- `tag` — the Ansible tag, exactly as the playbook declares it, whether that
+  is on a role in `site.yml` or on tasks inside a role.
 - `default` — `true` for on-by-default, `false` for `never`-tagged opt-ins.
   This is what decides whether declining produces a `--skip-tags` entry or
   accepting produces a `--tags` entry, so it must match the playbook.
@@ -80,8 +91,12 @@ read them instead of keeping a fifth copy.
   so before the download starts, not after.
 
 `install.sh` and `scripts/nikos` read it instead of their inline lists, and a
-test asserts every `tag` exists in `site.yml`, so the manifest cannot drift
-from the playbook it describes.
+test asserts every `tag` appears in `ansible-playbook site.yml --list-tags`, so
+the manifest cannot drift from the playbook it describes.
+
+The check has to be `--list-tags` rather than a grep of `site.yml`. Most of the
+AI tags and `ollama-models` are declared on tasks inside roles and never appear
+in `site.yml`, so a `site.yml` check would reject a correct manifest.
 
 ## What this does not change
 
