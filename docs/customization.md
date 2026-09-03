@@ -1,5 +1,8 @@
 # Customization
 
+Bundles — the optional parts of NikOS you pick at install time, and how that
+list is meant to be published — are described in `docs/bundles.md`.
+
 Keep local overrides in `vars/local.yml`. `site.yml` loads `vars/main.yml` first, then
 overlays any values from `vars/local.yml`, so updates can refresh tracked defaults without
 clobbering your machine-specific settings.
