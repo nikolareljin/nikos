@@ -54,10 +54,10 @@ roles named in the table above. Declining one adds it to `--skip-tags`.
 for by name: `neovim`, `java`, `podman`, `openclaw`, `bun`, `redis`,
 `postgres`, `zsh`, `act`, `fabric`, `k8s-tools`, `qdrant`, `bitnet`,
 `mistral-rs` and `monitoring` on roles in `site.yml`, and `ollama-models` on
-tasks inside `roles/ai-stack`, the one AI tag that really is declared there. Accepting one puts it in
-`--tags` on a **second** playbook run, because `--tags` restricts a run to
-tagged tasks and a single run carrying it would skip everything untagged —
-which is to say, the whole system.
+tasks inside `roles/ai-stack`, the one AI tag that really is declared there.
+Accepting one puts it in `--tags` on a **second** playbook run, because
+`--tags` restricts a run to tagged tasks and a single run carrying it would
+skip everything untagged — which is to say, the whole system.
 
 `ai-node` is not a bundle and is never offered. It is derived: skipped unless
 `ai-gemini` or `ai-claude` was chosen, because those are what need it. It is
