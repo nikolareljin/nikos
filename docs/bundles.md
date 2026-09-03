@@ -31,7 +31,13 @@ grepping the roles finds them only if you already know which roles to open.
 Only `ansible-playbook --list-tags` sees all of them, which is why that is what
 any check of this list has to run.
 
-With that in mind, a bundle is in one of three states.
+With that in mind, two things decide whether a bundle lands on a machine, and
+they are not the same thing. **How the playbook treats the tag** decides what
+happens when nothing says otherwise. **What the installer preselects** decides
+what usually does say otherwise. A manifest has to carry both, because the two
+disagree today and reading only one of them gives the wrong answer.
+
+Taking the playbook first.
 
 **Always.** Roles carried in `site.yml` with no role-level tag — `base`,
 `desktop`, `theming`, `github-setup`, `editors`, `cloud-ai-cli`, `agent-dev`,
@@ -45,12 +51,14 @@ Four of them do contain individually tagged tasks — `editors`, `cloud-ai-cli`,
 that tag drops those tasks; the rest of the role still runs. The role is what
 is unconditional here, not every task in it.
 
-**On by default.** `network`, `music`, `education` and `ai-local`, declared on
-roles in `site.yml`; and the AI sub-tools `ai-gemini`, `ai-claude`,
-`ai-copilot-cli`, `ai-runner`, `ai-vscode`, declared on tasks inside the four
-roles named in the table above. Declining one adds it to `--skip-tags`.
+**Skip to remove.** A plain tag, carrying no `never`: `network`, `music`,
+`education` and `ai-local` on roles in `site.yml`, and the AI sub-tools
+`ai-gemini`, `ai-claude`, `ai-copilot-cli`, `ai-runner`, `ai-vscode` on tasks
+inside the four roles named in the table above. A plain tag runs unless it is
+named in `--skip-tags`, so a bare `ansible-playbook site.yml` installs all of
+them. Declining one at the prompt is what puts it in `--skip-tags`.
 
-**Opt-in.** Declared `tags: [never, <name>]`, so they never run unless asked
+**Named to run.** Declared `tags: [never, <name>]`, so they never run unless asked
 for by name: `neovim`, `java`, `podman`, `openclaw`, `bun`, `redis`,
 `postgres`, `zsh`, `act`, `fabric`, `k8s-tools`, `qdrant`, `bitnet`,
 `mistral-rs` and `monitoring` on roles in `site.yml`, and `ollama-models` on
@@ -62,6 +70,28 @@ skip everything untagged — which is to say, the whole system.
 `ai-node` is not a bundle and is never offered. It is derived: skipped unless
 `ai-gemini` or `ai-claude` was chosen, because those are what need it. It is
 declared in `roles/cloud-ai-cli/tasks/main.yml`.
+
+## What the installer preselects
+
+"Skip to remove" is the playbook's behaviour and says nothing about what a
+person is offered. `install.sh` has its own defaults, and for three bundles
+they are the opposite:
+
+| Bundle | Playbook | Installer default |
+| --- | --- | --- |
+| `network`, `music`, `education` | skip to remove | **off** — `off` in the checklist, `[y/N]` in text mode |
+| `ai-local`, `ai-gemini`, `ai-claude`, `ai-copilot-cli`, `ai-runner`, `ai-vscode` | skip to remove | **on** — `on` in the checklist, `[Y/n]` in text mode |
+| everything under "Named to run" | never unless named | **off** |
+
+So `network`, `music` and `education` install on a bare `ansible-playbook`
+run and do not install through `install.sh`, which adds each unselected one
+to `--skip-tags` in `_build_tag_args`. Neither behaviour is wrong; they are
+answers to different questions, and a document or a selector that reports one
+as the other is telling somebody their machine has something it does not.
+
+This is exactly what a manifest has to encode: the tag, its playbook default,
+and the offered default, as three separate fields. Deriving one from another
+would bake in the assumption that just failed.
 
 ## Why a manifest
 
@@ -85,31 +115,49 @@ read them instead of keeping a fifth copy.
 - tag: network
   name: Network tools
   description: Diagnostics and capture tools.
-  default: true
+  playbook: skip-to-remove
+  offered: false
+
+- tag: ai-gemini
+  name: Gemini CLI
+  description: Google's Gemini command-line client.
+  playbook: skip-to-remove
+  offered: true
 
 - tag: ollama-models
   name: Local Ollama models
   description: Downloads model weights. Several gigabytes.
-  default: false
+  playbook: named-to-run
+  offered: false
   weight: heavy
 
 - tag: neovim
   name: Neovim
   description: Neovim with the NikOS configuration.
-  default: false
+  playbook: named-to-run
+  offered: false
 ```
 
 - `tag` — the Ansible tag, exactly as the playbook declares it, whether that
   is on a role in `site.yml` or on tasks inside a role.
-- `default` — `true` for on-by-default, `false` for `never`-tagged opt-ins.
-  This is what decides whether declining produces a `--skip-tags` entry or
-  accepting produces a `--tags` entry, so it must match the playbook.
+- `playbook` — `skip-to-remove` for a plain tag, `named-to-run` for a
+  `never`-tagged one. This decides which list the answer goes in: declining a
+  `skip-to-remove` bundle produces a `--skip-tags` entry, accepting a
+  `named-to-run` one produces a `--tags` entry on the second pass. It has to
+  match the playbook, and `--list-tags` is what can check that.
+- `offered` — whether a selector preselects it. `network`, `music` and
+  `education` are `skip-to-remove` and `offered: false`, which is the pair
+  that reads as a contradiction until you know they answer different
+  questions. Nothing can derive this field; it is a product decision and
+  belongs written down.
 - `weight: heavy` — costs gigabytes. Anything offering these choices should say
   so before the download starts, not after.
 
-`install.sh` and `scripts/nikos` read it instead of their inline lists, and a
-test asserts every `tag` appears in `ansible-playbook site.yml --list-tags`, so
-the manifest cannot drift from the playbook it describes.
+`install.sh` and `scripts/nikos` read it instead of their inline lists, taking
+each checklist default from `offered`, and a test asserts every `tag` appears
+in `ansible-playbook site.yml --list-tags`, so the manifest cannot drift from
+the playbook it describes. The test can only check `playbook`; `offered` is
+checked by being the one place it is written.
 
 The check has to be `--list-tags` rather than a grep of `site.yml`. Most of the
 AI tags and `ollama-models` are declared on tasks inside roles and never appear
