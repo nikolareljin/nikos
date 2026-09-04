@@ -74,11 +74,13 @@ nikos setup
 ```
 
 The playbook is idempotent, and `nikos setup` is what to reach for rather than
-`ansible-playbook` directly: it prompts for the sudo password, which `site.yml`
-needs for `become: true`, and it re-applies the `--skip-tags` saved in
-`~/.config/nikos/selected-options.env`, so bundles declined at install time
-stay declined. A bare `ansible-playbook site.yml` does neither, and installs
-everything that was turned down.
+`ansible-playbook` directly, for two reasons. It collects the sudo password
+`site.yml` needs for `become: true`; a bare `ansible-playbook site.yml` asks
+for nothing and fails on the first privileged task unless sudo is already
+passwordless. And it re-applies the `--skip-tags` saved in
+`~/.config/nikos/selected-options.env`, which `ansible-playbook` knows nothing
+about, so a hand-run playbook, even with `--ask-become-pass`, installs every
+bundle that was declined at install time.
 
 Not `--tags theming`. The `theming` role carries no tag, in `site.yml` or on
 its tasks, and Ansible does not give a role an implicit tag named after it, so
