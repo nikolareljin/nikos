@@ -2,7 +2,11 @@
 
 A bundle is an optional part of NikOS you can choose at install time: an
 editor, a language runtime, a database, a set of local AI tools. The installer
-asks; `nikos add <name>` turns one on afterwards.
+asks; `nikos add <name>` turns some of them on afterwards. Not all: `nikos add`
+accepts the `site.yml` roles and the Ollama model families, and rejects every
+AI tag — `ai-local`, `ai-gemini`, `ai-claude`, `ai-copilot-cli`, `ai-runner`,
+`ai-vscode`. Declining one of those at install time is currently final short of
+re-running the playbook by hand.
 
 This describes how the list of bundles is meant to be published, and why it
 should be written once rather than in every place that offers it.
@@ -140,12 +144,14 @@ the other three, and the bundle is simply never offered — no error, no warning
 just a choice that silently is not there. The same shape as #53, where a
 selection was made and silently not installed.
 
-It has already happened twice, and both are visible above. `scripts/nikos`
-accepts `ollama-reasoning` and the four other model families; `install.sh`
-offers none of them, so they exist only for someone who reads `nikos add`'s
-usage line. And `ai-vision` is in neither, so it installs on every machine
-without appearing in any list of what a machine gets. Nothing is broken in
-either case, which is the point: nothing reported them.
+It has already happened three times, and all three are visible above.
+`scripts/nikos` accepts `ollama-reasoning` and the four other model families;
+`install.sh` offers none of them, so they exist only for someone who reads
+`nikos add`'s usage line. `ai-vision` is in neither, so it installs on every
+machine without appearing in any list of what a machine gets. And `nikos add`
+rejects every AI tag the installer offered, so a declined `ai-gemini` cannot be
+added back the way a declined `neovim` can. Nothing errors in any of the three,
+which is the point: nothing reported them.
 
 A single manifest fixes that, and lets anything else that offers these choices
 read them instead of keeping a fifth copy.
