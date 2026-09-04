@@ -60,8 +60,9 @@ Taking the playbook first.
 role an implicit tag named after it, so a role with no tag on it cannot be
 named in `--tags` or `--skip-tags`, and it always runs. `docs/debugging.md`
 told people to re-run theming with `--tags theming`; that command selects the
-`always` tasks and nothing else, and exits cleanly having done nothing. It is
-corrected in this change. That is
+`always` tasks and nothing else, and exits cleanly having done nothing. It now
+points at `nikos setup`, which re-runs everything while honouring the saved
+`--skip-tags`. That is
 deliberate: those roles are what makes a machine NikOS rather than a stock
 Xubuntu. They are not bundles and must not be offered as if they were.
 
