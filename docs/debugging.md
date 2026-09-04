@@ -67,11 +67,34 @@ ls /usr/share/themes/Nordic          # should exist
 ls /usr/share/icons/Papirus-Dark     # should exist
 ```
 
-If missing, re-run theming:
+If missing, re-run the playbook through the CLI:
 
 ```bash
-ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags theming
+nikos setup
 ```
+
+The playbook is idempotent, and `nikos setup` is what to reach for rather than
+`ansible-playbook` directly, for two reasons. It collects the sudo password
+`site.yml` needs for `become: true`; a bare `ansible-playbook site.yml` asks
+for nothing and fails on the first privileged task unless sudo is already
+passwordless. And it re-applies the `--skip-tags` saved in
+`~/.config/nikos/selected-options.env`, which `ansible-playbook` knows nothing
+about, so a hand-run playbook, even with `--ask-become-pass`, installs every
+bundle that was declined at install time.
+
+Not `--tags theming`. The `theming` role carries no tag, in `site.yml` or on
+its tasks, and Ansible does not give a role an implicit tag named after it, so
+`--tags theming` selects the `always` tasks and nothing else:
+
+```
+$ ansible-playbook site.yml -i inventory/local --tags theming --list-tasks
+      Check whether local override vars exist	TAGS: [always]
+      Load local override vars	TAGS: [always]
+      ...
+```
+
+It exits cleanly having done nothing, which reads like theming ran and failed
+to fix the problem.
 
 ### Ollama model not found
 

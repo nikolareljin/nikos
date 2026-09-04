@@ -192,7 +192,9 @@ nikos add postgres
 nikos add ollama-models
 ```
 
-See [docs/customization.md](docs/customization.md) for full details.
+See [docs/customization.md](docs/customization.md) for full details, and
+[docs/bundles.md](docs/bundles.md) for the optional bundles you can pick at
+install time.
 
 ---
 
