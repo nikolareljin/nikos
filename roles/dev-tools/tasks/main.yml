@@ -31,15 +31,11 @@
     creates: "{{ nikos_home }}/.local/state/distrodeck/installed-tools.txt"
   when: not ansible_check_mode
 
-- name: Refresh system packages and developer tools through distrodeck
-  ansible.builtin.command:
-    argv:
-      - python3
-      - -c
-      - "from distrodeck import run_update; import sys; sys.exit(0 if run_update() else 1)"
-  args:
-    chdir: "{{ nikos_home }}/Projects/distrodeck"
-  changed_when: false
+- name: Refresh system packages managed through distrodeck
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: safe
+  become: true
   when:
     - not ansible_check_mode
     - nikos_update_mode | bool
