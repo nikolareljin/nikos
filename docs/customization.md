@@ -289,7 +289,7 @@ Run `nikos update` to apply. The playbook sets the timezone and enables NTP via
 
 1. Create `roles/my-role/tasks/main.yml`
 2. Add it to `site.yml` under `roles:`
-3. Test locally with `ansible-playbook site.yml --check --tags my-role`
+3. Test locally with `ansible-playbook site.yml --check --tags my-role -e nikos_update_mode=false`
 4. Run: `nikos update`
 
 ## Choosing which version to install

@@ -74,20 +74,26 @@ nikos setup
 ```
 
 The playbook is idempotent, and `nikos setup` is what to reach for rather than
-`ansible-playbook` directly, for two reasons. It collects the sudo password
+`ansible-playbook` directly, for three reasons. It collects the sudo password
 `site.yml` needs for `become: true`; a bare `ansible-playbook site.yml` asks
 for nothing and fails on the first privileged task unless sudo is already
-passwordless. And it re-applies the `--skip-tags` saved in
+passwordless. It re-applies the `--skip-tags` saved in
 `~/.config/nikos/selected-options.env`, which `ansible-playbook` knows nothing
 about, so a hand-run playbook, even with `--ask-become-pass`, installs every
-bundle that was declined at install time.
+bundle that was declined at install time. And it sets `nikos_update_mode`
+explicitly: the variable defaults to `true` in `vars/main.yml` so that the
+0.6.4 CLI, which runs the newly checked-out playbook without passing it,
+still refreshes dependencies on its first 0.6.5 update. A hand-run playbook
+inherits that default and performs update-only work — including a full
+system package upgrade — unless it passes `-e nikos_update_mode=false`, which
+every direct invocation below therefore does.
 
 Not `--tags theming`. The `theming` role carries no tag, in `site.yml` or on
 its tasks, and Ansible does not give a role an implicit tag named after it, so
 `--tags theming` selects the `always` tasks and nothing else:
 
 ```
-$ ansible-playbook site.yml -i inventory/local --tags theming --list-tasks
+$ ansible-playbook site.yml -i inventory/local --tags theming --list-tasks -e nikos_update_mode=false
       Check whether local override vars exist	TAGS: [always]
       Load local override vars	TAGS: [always]
       ...
@@ -191,12 +197,19 @@ login screen.
 
 ### git-lantern / lantern not found
 
+`lantern` is installed per-user, not system-wide: a root-owned
+`/usr/local/bin/lantern` pointing into the user's writable home would let that
+user hand root-controlled code to anyone else who ran the command.
+
 ```bash
-which lantern
-ls /usr/local/bin/lantern
-# Reinstall if missing:
-sudo ~/Projects/git-lantern/install --prefix /opt/git-lantern --bin-link /usr/local/bin/lantern
+which lantern                      # expect ~/.local/bin/lantern
+ls ~/.local/bin/lantern
+# Reinstall if missing (no sudo - everything here is user-owned):
+~/Projects/git-lantern/install --prefix ~/.local/opt/git-lantern --bin-link ~/.local/bin/lantern
 ```
+
+If `which lantern` finds nothing but the file exists, `~/.local/bin` is not on
+`PATH` for that shell.
 
 ### bitnet-cli not found, or fails to load a library
 
@@ -263,7 +276,7 @@ install and is expected.
 Run the playbook directly with verbose output:
 
 ```bash
-ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local -v
+ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local -v -e nikos_update_mode=false
 ```
 
 Use `-vvv` for full debug output including module arguments.
@@ -273,14 +286,14 @@ Use `-vvv` for full debug output including module arguments.
 Preview what would change without applying:
 
 ```bash
-ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --check
+ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --check -e nikos_update_mode=false
 ```
 
 ## Re-running a single role
 
 ```bash
-ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags theming
-ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags ai-stack
+ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags theming -e nikos_update_mode=false
+ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags ai-stack -e nikos_update_mode=false
 ```
 
 Note: role tags must be explicitly set in `site.yml`. The optional roles (`network`, `music`, `education`, `neovim`, `java`, `podman`) are tag-gated by default.

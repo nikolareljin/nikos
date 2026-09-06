@@ -683,9 +683,13 @@ _ensure_ansible_collections() {
   fi
 }
 
-_persist_skip_tags() {
+_persist_selected_options() {
   mkdir -p "${NIKOS_CONFIG_DIR}"
-  printf 'NIKOS_SKIP_TAGS_SAVED=%q\n' "${1}" > "${SELECTIONS_FILE}"
+  {
+    printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
+    printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${2}"
+    printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "1"
+  } > "${SELECTIONS_FILE}"
 }
 
 # ── Timezone helpers ──────────────────────────────────────────────────────────
@@ -1247,7 +1251,7 @@ _build_tag_args() {
 
 _build_tag_args
 
-_persist_skip_tags "${SKIP_TAGS#,}"
+_persist_selected_options "${SKIP_TAGS#,}" "${EXPLICIT_OPTIONAL_TAGS#,}"
 _logfile "Selected bundles: ${SELECTED_BUNDLES[*]:-none}"
 _logfile "Selected AI tools: ${SELECTED_AI_TOOLS[*]:-none}"
 _logfile "Skip tags: ${SKIP_TAGS#,}"
@@ -1269,6 +1273,7 @@ if _can_use_dialog; then
   _create_become_password_file "${_become_pass}"
   unset _become_pass
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml")
+  PLAY_OPTS+=(-e nikos_update_mode=false)
   PLAY_OPTS+=(--become-password-file "${BECOME_PASSWORD_FILE}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
@@ -1280,6 +1285,7 @@ if _can_use_dialog; then
 else
   echo "Running NikOS ${NIKOS_VERSION} playbook..."
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
+  PLAY_OPTS+=(-e nikos_update_mode=false)
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"
@@ -1301,6 +1307,7 @@ fi
 if [[ "${_ansible_rc}" -eq 0 && "${_tee_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
   print_info "Installing selected optional bundles: ${EXPLICIT_OPTIONAL_TAGS#,}"
   OPTIONAL_PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --tags "${EXPLICIT_OPTIONAL_TAGS#,}")
+  OPTIONAL_PLAY_OPTS+=(-e nikos_update_mode=false)
   if [[ -n "${BECOME_PASSWORD_FILE:-}" ]]; then
     OPTIONAL_PLAY_OPTS+=(--become-password-file "${BECOME_PASSWORD_FILE}")
   else

@@ -1,7 +1,7 @@
 ---
 - name: Install agent frameworks in nikos-ai env
   ansible.builtin.command: >
-    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install
+    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }}
     langchain langchain-community langchain-openai
     llama-index llama-index-llms-ollama
     openai anthropic instructor
@@ -11,7 +11,7 @@
 
 - name: Install ML and data libraries in nikos-ai env
   ansible.builtin.command: >
-    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install
+    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }}
     sentence-transformers chromadb qdrant-client datasets
     evaluate accelerate litecli
   changed_when: false
@@ -56,7 +56,7 @@
 
 - name: Install Python image analysis libraries in nikos-ai env
   ansible.builtin.command: >
-    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install
+    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }}
     {{ nikos_vision_pip_packages | join(' ') }}
   changed_when: false
   tags: [ai-local, ai-vision]

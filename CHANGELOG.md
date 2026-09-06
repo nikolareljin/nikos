@@ -4,12 +4,60 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.6.5] — 2026-09-05
+
 ### Changed
+- **`nikos update` now updates NikOS-managed dependencies, not only the NikOS
+  checkout.** It refreshes the pinned `script-helpers` submodule; updates the
+  `distrodeck`, `image-view`, `git-lantern`, and `ai-runner` source checkouts;
+  rebuilds the two compiled CLIs after their source changes; refreshes the apt,
+  snap, and flatpak packages the distrodeck tool set is installed from; and
+  upgrades the Python and pipx applications NikOS manages. Existing APT, VS Code
+  extension, and Ollama update paths continue to run, and saved optional-bundle
+  selections still determine which optional dependencies are refreshed.
+  `distrodeck install-tools` has no upgrade mode - it skips any tool already
+  present - so tools installed with cargo, go, or npm are not refreshed.
+- Added `./update` as the standard checkout-only command for synchronizing the
+  `script-helpers` submodule to the revision pinned by the current NikOS
+  release.
+
 - Vendored `script-helpers` moves from 0.12.1 to 0.24.0. The Bash API is
   additive across that range — every function the old pin exposed is still
   there — and NikOS imports only `logging` and `dialog`, both unchanged. The
   breaking changes recorded in that range are all in the PowerShell modules,
   which nothing here loads.
+
+### Fixed
+- `nikos update` now hands the rest of the update to the CLI it has just checked
+  out. `site.yml` installs the CLI by copying `scripts/nikos` to
+  `/usr/local/bin/nikos`, so the running process is always the copy the
+  *previous* release left there: its already-parsed `cmd_update` cannot run
+  anything a newer release adds to the update flow - the optional-bundle replay,
+  for one - until a second `nikos update`. A guarded re-exec of the checked-out
+  CLI closes that gap from 0.6.5 onwards. The `nikos_update_mode` default in
+  `vars/main.yml` remains the compatibility signal for the 0.6.4 CLI itself,
+  which predates the re-exec.
+- The `image-view` checkout no longer becomes un-updatable. Its `setup` runs a
+  plain `cargo build --release`, which can rewrite the tracked `Cargo.lock`, and
+  the build now runs on every update; `ansible.builtin.git` defaults to
+  `force: false` and refuses a checkout with local modifications, so the next
+  update would fail to update it. The generated lock is restored before the
+  update. Any other local change still blocks it, which is deliberate.
+- The git-lantern troubleshooting steps in `docs/debugging.md` no longer name the
+  superseded global paths. They checked `/usr/local/bin/lantern` and reinstalled
+  to `/opt/git-lantern` with sudo, which diagnosed a healthy per-user install as
+  missing and recreated the global launcher the release removed.
+- Every documented direct `ansible-playbook` invocation now passes
+  `-e nikos_update_mode=false`. Because that variable defaults to `true` for the
+  0.6.4 CLI's benefit, a hand-run install or `--check` inherited update mode and
+  performed update-only work, including a full system package upgrade.
+
+### Added
+- Regression coverage for the persisted optional-bundle selection
+  (`tests/test_update_selections.py`): rebuilding the selection on a 0.6.4
+  install that saved skip tags only, that rebuild latching so it cannot re-derive
+  later, the selection surviving `_save_skip_tags` and `_remove_skip_tag`, both
+  playbook passes `nikos update` runs, and the release-upgrade continuation.
 
 
 ## [0.6.4] — 2026-09-02

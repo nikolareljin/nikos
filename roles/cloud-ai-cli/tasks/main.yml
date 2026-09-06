@@ -231,6 +231,19 @@
     PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
   when: not ansible_check_mode
 
+- name: Refresh pipx applications installed by NikOS
+  ansible.builtin.command: "pipx upgrade {{ item }}"
+  loop:
+    - shell-gpt
+    - glances
+  environment:
+    PIPX_HOME: "{{ nikos_home }}/.local/pipx"
+    PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - nikos_update_mode | bool
+
 - name: Skip GitHub Copilot CLI extension because gh is not installed
   ansible.builtin.debug:
     msg: "Skipping GitHub Copilot CLI extension install because 'gh' is not installed or not available in PATH."

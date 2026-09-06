@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Absolute path of the CLI this process is running, resolved before anything can
+# change the working directory. `nikos update` compares it against the CLI in the
+# freshly synced checkout to tell whether it is running code the update replaced.
+NIKOS_CLI_PATH="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 REPO_URL="${NIKOS_REPO_URL:-https://github.com/nikolareljin/nikos}"
 if [[ -r "${NIKOS_HOME}/VERSION" ]]; then
@@ -238,8 +243,63 @@ _get_default_skip_tags() {
 }
 
 _save_skip_tags() {
+  local optional_tags="${2:-}" migrated="${3:-}"
+  if [[ $# -lt 3 && -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    source "${SELECTIONS_FILE}"
+    [[ $# -lt 2 ]] && optional_tags="${NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED:-}"
+    migrated="${NIKOS_OPTIONAL_TAGS_MIGRATED:-}"
+  fi
   mkdir -p "${NIKOS_CONFIG_DIR}"
-  printf 'NIKOS_SKIP_TAGS_SAVED=%q\n' "${1}" > "${SELECTIONS_FILE}"
+  {
+    printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
+    printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${optional_tags}"
+    printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "${migrated}"
+  } > "${SELECTIONS_FILE}"
+}
+
+_migrate_saved_optional_tags() {
+  local skip_tags optional_tags="" tag
+  local -a optional_role_tags=(
+    neovim java bun redis postgres qdrant k8s-tools podman zsh act fabric
+    bitnet mistral-rs monitoring openclaw ollama-models ollama-reasoning
+    ollama-coding ollama-text ollama-vision ollama-embedding
+  )
+
+  [[ -f "${SELECTIONS_FILE}" ]] || return 0
+  # shellcheck source=/dev/null
+  source "${SELECTIONS_FILE}"
+  [[ -n "${NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED:-}" || "${NIKOS_OPTIONAL_TAGS_MIGRATED:-}" == "1" ]] && return 0
+
+  skip_tags="${NIKOS_SKIP_TAGS_SAVED:-}"
+  for tag in "${optional_role_tags[@]}"; do
+    if grep -Eq -- "(^|,|[[:space:]])${tag}(,|[[:space:]]|$)" "${NIKOS_LOG_DIR}"/*.log 2>/dev/null; then
+      optional_tags="${optional_tags:+${optional_tags},}${tag}"
+    fi
+  done
+  _save_skip_tags "${skip_tags}" "${optional_tags}" "1"
+}
+
+_get_saved_optional_tags() {
+  _migrate_saved_optional_tags
+  if [[ -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    source "${SELECTIONS_FILE}"
+    printf "%s\n" "${NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED:-}"
+  else
+    printf "\n"
+  fi
+}
+
+
+_add_optional_tag() {
+  local tag="$1" optional_tags
+  optional_tags="$(_get_saved_optional_tags)"
+  case ",${optional_tags}," in
+    *,"${tag}",*) return 0 ;;
+  esac
+  optional_tags="${optional_tags:+${optional_tags},}${tag}"
+  _save_skip_tags "$(_get_default_skip_tags)" "${optional_tags}"
 }
 
 _remove_skip_tag() {
@@ -258,6 +318,11 @@ _remove_skip_tag() {
 }
 
 _playbook() {
+  local use_saved_skip_tags=true
+  if [[ "${1:-}" == "--no-saved-skip-tags" ]]; then
+    use_saved_skip_tags=false
+    shift
+  fi
   local extra_args=("$@")
   local skip_tags=""
   local use_gauge=false
@@ -279,7 +344,9 @@ _playbook() {
   else
     ansible-galaxy collection install --no-cache -r "${ANSIBLE_REQUIREMENTS}"
   fi
-  skip_tags="$(_get_default_skip_tags)"
+  if [[ "${use_saved_skip_tags}" == "true" ]]; then
+    skip_tags="$(_get_default_skip_tags)"
+  fi
   [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
   playbook_args+=("${extra_args[@]}")
 
@@ -354,14 +421,37 @@ _playbook() {
 
 cmd_setup() {
   print_info "Running full NikOS setup..."
-  _playbook
+  _playbook -e nikos_update_mode=false
+}
+
+# After a release upgrade the process running this function is the copy that the
+# *previous* release left at /usr/local/bin/nikos (site.yml installs the CLI by
+# copying scripts/nikos there). Bash parsed that old cmd_update long before the
+# new checkout existed, so anything the new release adds to the update flow -
+# the optional-bundle replay below, for one - would not run until a second
+# `nikos update`. Hand the rest of the update to the CLI that was just checked
+# out. NIKOS_UPDATE_CONTINUATION tells that process the checkout is already
+# synced, which is also what stops this from recursing.
+_exec_update_continuation() {
+  local new_cli="${NIKOS_HOME}/scripts/nikos"
+
+  [[ -f "${new_cli}" ]] || return 0
+  if cmp -s "${new_cli}" "${NIKOS_CLI_PATH}" 2>/dev/null; then
+    return 0
+  fi
+
+  print_info "Continuing the update with the newly checked-out NikOS CLI..."
+  NIKOS_UPDATE_CONTINUATION=1 exec bash "${new_cli}" update
 }
 
 cmd_update() {
   local update_rc=0
   local target_ref="${1:-}"
 
-  if [[ -d "${NIKOS_HOME}/.git" ]]; then
+  if [[ "${NIKOS_UPDATE_CONTINUATION:-}" == "1" ]]; then
+    # The CLI that exec'd us already synced the checkout to its target ref.
+    :
+  elif [[ -d "${NIKOS_HOME}/.git" ]]; then
     if ! declare -F _sync_repo_to_ref >/dev/null; then
       print_error "Repo sync helpers not found at ${REPO_SYNC_HELPERS}. Reinstall NikOS or restore that file."
       exit 1
@@ -400,12 +490,21 @@ cmd_update() {
       esac
       exit 1
     fi
+
+    _exec_update_continuation
   else
     print_error "NikOS repo not found at ${NIKOS_HOME}. Run the installer first."
     exit 1
   fi
+
   print_info "Re-running playbook..."
-  _playbook
+  _playbook -e nikos_update_mode=true
+  local optional_tags
+  optional_tags="$(_get_saved_optional_tags)"
+  if [[ -n "${optional_tags}" ]]; then
+    print_info "Refreshing selected optional bundles: ${optional_tags}"
+    _playbook --no-saved-skip-tags -e nikos_update_mode=true --tags "${optional_tags}"
+  fi
 }
 
 cmd_add() {
@@ -414,7 +513,12 @@ cmd_add() {
     network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
-      _playbook --tags "${role}"
+      case "${role}" in
+        neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
+          _add_optional_tag "${role}"
+          ;;
+      esac
+      _playbook -e nikos_update_mode=false --tags "${role}"
       ;;
     *)
       print_error "Unknown optional role: ${role}"
