@@ -34,7 +34,6 @@
 - name: Refresh system packages and developer tools through distrodeck
   ansible.builtin.command: "{{ nikos_home }}/Projects/distrodeck/distrodeck update"
   changed_when: false
-  become: true
   when:
     - not ansible_check_mode
     - nikos_update_mode | bool
@@ -172,12 +171,28 @@
     path: /usr/local/bin/lantern
   register: dev_tools_git_lantern_bin
 
-- name: Install git-lantern
+- name: Ensure user local bin directory exists for git-lantern
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.local/bin"
+    state: directory
+    mode: "0755"
+
+- name: Build and install git-lantern for the NikOS user
   ansible.builtin.command: >
     {{ nikos_home }}/Projects/git-lantern/install
-    --prefix /opt/git-lantern
-    --bin-link /usr/local/bin/lantern
+    --prefix {{ nikos_home }}/.local/opt/git-lantern
+    --bin-link {{ nikos_home }}/.local/bin/lantern
   changed_when: false
+  when:
+    - not ansible_check_mode
+    - nikos_update_mode | bool or not dev_tools_git_lantern_bin.stat.exists
+
+- name: Install system launcher for git-lantern
+  ansible.builtin.file:
+    src: "{{ nikos_home }}/.local/bin/lantern"
+    dest: /usr/local/bin/lantern
+    state: link
+    force: true
   become: true
   when:
     - not ansible_check_mode
