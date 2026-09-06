@@ -238,8 +238,37 @@ _get_default_skip_tags() {
 }
 
 _save_skip_tags() {
+  local optional_tags="${2:-}"
+  if [[ $# -lt 2 && -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    source "${SELECTIONS_FILE}"
+    optional_tags="${NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED:-}"
+  fi
   mkdir -p "${NIKOS_CONFIG_DIR}"
-  printf 'NIKOS_SKIP_TAGS_SAVED=%q\n' "${1}" > "${SELECTIONS_FILE}"
+  {
+    printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
+    printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${optional_tags}"
+  } > "${SELECTIONS_FILE}"
+}
+
+_get_saved_optional_tags() {
+  if [[ -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    source "${SELECTIONS_FILE}"
+    printf "%s\n" "${NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED:-}"
+  else
+    printf "\n"
+  fi
+}
+
+_add_optional_tag() {
+  local tag="$1" optional_tags
+  optional_tags="$(_get_saved_optional_tags)"
+  case ",${optional_tags}," in
+    *,"${tag}",*) return 0 ;;
+  esac
+  optional_tags="${optional_tags:+${optional_tags},}${tag}"
+  _save_skip_tags "$(_get_default_skip_tags)" "${optional_tags}"
 }
 
 _remove_skip_tag() {
@@ -406,6 +435,12 @@ cmd_update() {
   fi
   print_info "Re-running playbook..."
   _playbook -e nikos_update_mode=true
+  local optional_tags
+  optional_tags="$(_get_saved_optional_tags)"
+  if [[ -n "${optional_tags}" ]]; then
+    print_info "Refreshing selected optional bundles: ${optional_tags}"
+    _playbook -e nikos_update_mode=true --tags "${optional_tags}"
+  fi
 }
 
 cmd_add() {
@@ -414,6 +449,11 @@ cmd_add() {
     network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
+      case "${role}" in
+        neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | openclaw)
+          _add_optional_tag "${role}"
+          ;;
+      esac
       _playbook -e nikos_update_mode=false --tags "${role}"
       ;;
     *)

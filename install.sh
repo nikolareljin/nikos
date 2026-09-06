@@ -683,9 +683,12 @@ _ensure_ansible_collections() {
   fi
 }
 
-_persist_skip_tags() {
+_persist_selected_options() {
   mkdir -p "${NIKOS_CONFIG_DIR}"
-  printf 'NIKOS_SKIP_TAGS_SAVED=%q\n' "${1}" > "${SELECTIONS_FILE}"
+  {
+    printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
+    printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${2}"
+  } > "${SELECTIONS_FILE}"
 }
 
 # ── Timezone helpers ──────────────────────────────────────────────────────────
@@ -1247,7 +1250,7 @@ _build_tag_args() {
 
 _build_tag_args
 
-_persist_skip_tags "${SKIP_TAGS#,}"
+_persist_selected_options "${SKIP_TAGS#,}" "${EXPLICIT_OPTIONAL_TAGS#,}"
 _logfile "Selected bundles: ${SELECTED_BUNDLES[*]:-none}"
 _logfile "Selected AI tools: ${SELECTED_AI_TOOLS[*]:-none}"
 _logfile "Skip tags: ${SKIP_TAGS#,}"
