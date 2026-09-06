@@ -688,6 +688,7 @@ _persist_selected_options() {
   {
     printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
     printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${2}"
+    printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "1"
   } > "${SELECTIONS_FILE}"
 }
 

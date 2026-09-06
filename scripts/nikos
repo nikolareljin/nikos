@@ -238,20 +238,45 @@ _get_default_skip_tags() {
 }
 
 _save_skip_tags() {
-  local optional_tags="${2:-}"
-  if [[ $# -lt 2 && -f "${SELECTIONS_FILE}" ]]; then
+  local optional_tags="${2:-}" migrated="${3:-}"
+  if [[ $# -lt 3 && -f "${SELECTIONS_FILE}" ]]; then
     # shellcheck source=/dev/null
     source "${SELECTIONS_FILE}"
-    optional_tags="${NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED:-}"
+    [[ $# -lt 2 ]] && optional_tags="${NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED:-}"
+    migrated="${NIKOS_OPTIONAL_TAGS_MIGRATED:-}"
   fi
   mkdir -p "${NIKOS_CONFIG_DIR}"
   {
     printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
     printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${optional_tags}"
+    printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "${migrated}"
   } > "${SELECTIONS_FILE}"
 }
 
+_migrate_saved_optional_tags() {
+  local skip_tags optional_tags="" tag
+  local -a optional_role_tags=(
+    neovim java bun redis postgres qdrant k8s-tools podman zsh act fabric
+    bitnet mistral-rs monitoring openclaw ollama-models ollama-reasoning
+    ollama-coding ollama-text ollama-vision ollama-embedding
+  )
+
+  [[ -f "${SELECTIONS_FILE}" ]] || return 0
+  # shellcheck source=/dev/null
+  source "${SELECTIONS_FILE}"
+  [[ -n "${NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED:-}" || "${NIKOS_OPTIONAL_TAGS_MIGRATED:-}" == "1" ]] && return 0
+
+  skip_tags="${NIKOS_SKIP_TAGS_SAVED:-}"
+  for tag in "${optional_role_tags[@]}"; do
+    if grep -Eq -- "(^|,|[[:space:]])${tag}(,|[[:space:]]|$)" "${NIKOS_LOG_DIR}"/*.log 2>/dev/null; then
+      optional_tags="${optional_tags:+${optional_tags},}${tag}"
+    fi
+  done
+  _save_skip_tags "${skip_tags}" "${optional_tags}" "1"
+}
+
 _get_saved_optional_tags() {
+  _migrate_saved_optional_tags
   if [[ -f "${SELECTIONS_FILE}" ]]; then
     # shellcheck source=/dev/null
     source "${SELECTIONS_FILE}"
@@ -260,6 +285,7 @@ _get_saved_optional_tags() {
     printf "\n"
   fi
 }
+
 
 _add_optional_tag() {
   local tag="$1" optional_tags
@@ -450,7 +476,7 @@ cmd_add() {
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
       case "${role}" in
-        neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | openclaw)
+        neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
           _add_optional_tag "${role}"
           ;;
       esac
