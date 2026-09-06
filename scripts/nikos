@@ -313,6 +313,11 @@ _remove_skip_tag() {
 }
 
 _playbook() {
+  local use_saved_skip_tags=true
+  if [[ "${1:-}" == "--no-saved-skip-tags" ]]; then
+    use_saved_skip_tags=false
+    shift
+  fi
   local extra_args=("$@")
   local skip_tags=""
   local use_gauge=false
@@ -334,7 +339,9 @@ _playbook() {
   else
     ansible-galaxy collection install --no-cache -r "${ANSIBLE_REQUIREMENTS}"
   fi
-  skip_tags="$(_get_default_skip_tags)"
+  if [[ "${use_saved_skip_tags}" == "true" ]]; then
+    skip_tags="$(_get_default_skip_tags)"
+  fi
   [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
   playbook_args+=("${extra_args[@]}")
 
@@ -465,7 +472,7 @@ cmd_update() {
   optional_tags="$(_get_saved_optional_tags)"
   if [[ -n "${optional_tags}" ]]; then
     print_info "Refreshing selected optional bundles: ${optional_tags}"
-    _playbook -e nikos_update_mode=true --tags "${optional_tags}"
+    _playbook --no-saved-skip-tags -e nikos_update_mode=true --tags "${optional_tags}"
   fi
 }
 
