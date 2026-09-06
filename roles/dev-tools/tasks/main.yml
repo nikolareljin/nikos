@@ -31,9 +31,10 @@
     creates: "{{ nikos_home }}/.local/state/distrodeck/installed-tools.txt"
   when: not ansible_check_mode
 
-- name: Refresh developer tools managed by distrodeck
-  ansible.builtin.command: "{{ nikos_home }}/Projects/distrodeck/distrodeck install-tools --all"
+- name: Refresh system packages and developer tools through distrodeck
+  ansible.builtin.command: "{{ nikos_home }}/Projects/distrodeck/distrodeck update"
   changed_when: false
+  become: true
   when:
     - not ansible_check_mode
     - nikos_update_mode | bool
