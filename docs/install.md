@@ -156,8 +156,13 @@ per-role gauge on a terminal and plain output without one.
 git clone --recurse-submodules https://github.com/nikolareljin/nikos.git
 cd nikos
 ansible-galaxy collection install -r requirements.yml
-ansible-playbook site.yml -i inventory/local --ask-become-pass
+ansible-playbook site.yml -i inventory/local --ask-become-pass -e nikos_update_mode=false
 ```
+
+`nikos_update_mode=false` is required for a hand-run install. The variable
+defaults to `true` so the pre-0.6.5 CLI still refreshes dependencies on its
+first update; leaving it at that default turns a fresh install into an update
+run.
 
 ## Offline / air-gapped installs
 

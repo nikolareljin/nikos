@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Absolute path of the CLI this process is running, resolved before anything can
+# change the working directory. `nikos update` compares it against the CLI in the
+# freshly synced checkout to tell whether it is running code the update replaced.
+NIKOS_CLI_PATH="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+
 NIKOS_HOME="${NIKOS_HOME:-${HOME}/.local/share/nikos}"
 REPO_URL="${NIKOS_REPO_URL:-https://github.com/nikolareljin/nikos}"
 if [[ -r "${NIKOS_HOME}/VERSION" ]]; then
@@ -419,11 +424,34 @@ cmd_setup() {
   _playbook -e nikos_update_mode=false
 }
 
+# After a release upgrade the process running this function is the copy that the
+# *previous* release left at /usr/local/bin/nikos (site.yml installs the CLI by
+# copying scripts/nikos there). Bash parsed that old cmd_update long before the
+# new checkout existed, so anything the new release adds to the update flow -
+# the optional-bundle replay below, for one - would not run until a second
+# `nikos update`. Hand the rest of the update to the CLI that was just checked
+# out. NIKOS_UPDATE_CONTINUATION tells that process the checkout is already
+# synced, which is also what stops this from recursing.
+_exec_update_continuation() {
+  local new_cli="${NIKOS_HOME}/scripts/nikos"
+
+  [[ -f "${new_cli}" ]] || return 0
+  if cmp -s "${new_cli}" "${NIKOS_CLI_PATH}" 2>/dev/null; then
+    return 0
+  fi
+
+  print_info "Continuing the update with the newly checked-out NikOS CLI..."
+  NIKOS_UPDATE_CONTINUATION=1 exec bash "${new_cli}" update
+}
+
 cmd_update() {
   local update_rc=0
   local target_ref="${1:-}"
 
-  if [[ -d "${NIKOS_HOME}/.git" ]]; then
+  if [[ "${NIKOS_UPDATE_CONTINUATION:-}" == "1" ]]; then
+    # The CLI that exec'd us already synced the checkout to its target ref.
+    :
+  elif [[ -d "${NIKOS_HOME}/.git" ]]; then
     if ! declare -F _sync_repo_to_ref >/dev/null; then
       print_error "Repo sync helpers not found at ${REPO_SYNC_HELPERS}. Reinstall NikOS or restore that file."
       exit 1
@@ -462,10 +490,13 @@ cmd_update() {
       esac
       exit 1
     fi
+
+    _exec_update_continuation
   else
     print_error "NikOS repo not found at ${NIKOS_HOME}. Run the installer first."
     exit 1
   fi
+
   print_info "Re-running playbook..."
   _playbook -e nikos_update_mode=true
   local optional_tags

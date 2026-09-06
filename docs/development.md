@@ -60,7 +60,7 @@ shellcheck install.sh scripts/nikos
 python3 -m pytest tests/ -v
 
 # Dry-run (needs ansible installed)
-ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education
+ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education -e nikos_update_mode=false
 ```
 
 ## Writing a new role

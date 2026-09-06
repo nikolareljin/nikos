@@ -25,6 +25,28 @@ All notable changes to NikOS are documented here.
   breaking changes recorded in that range are all in the PowerShell modules,
   which nothing here loads.
 
+### Fixed
+- `nikos update` now hands the rest of the update to the CLI it has just checked
+  out. `site.yml` installs the CLI by copying `scripts/nikos` to
+  `/usr/local/bin/nikos`, so the running process is always the copy the
+  *previous* release left there: its already-parsed `cmd_update` cannot run
+  anything a newer release adds to the update flow - the optional-bundle replay,
+  for one - until a second `nikos update`. A guarded re-exec of the checked-out
+  CLI closes that gap from 0.6.5 onwards. The `nikos_update_mode` default in
+  `vars/main.yml` remains the compatibility signal for the 0.6.4 CLI itself,
+  which predates the re-exec.
+- Every documented direct `ansible-playbook` invocation now passes
+  `-e nikos_update_mode=false`. Because that variable defaults to `true` for the
+  0.6.4 CLI's benefit, a hand-run install or `--check` inherited update mode and
+  performed update-only work, including a full system package upgrade.
+
+### Added
+- Regression coverage for the persisted optional-bundle selection
+  (`tests/test_update_selections.py`): rebuilding the selection on a 0.6.4
+  install that saved skip tags only, that rebuild latching so it cannot re-derive
+  later, the selection surviving `_save_skip_tags` and `_remove_skip_tag`, both
+  playbook passes `nikos update` runs, and the release-upgrade continuation.
+
 
 ## [0.6.4] — 2026-09-02
 
