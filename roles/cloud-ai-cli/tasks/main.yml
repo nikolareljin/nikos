@@ -232,7 +232,10 @@
   when: not ansible_check_mode
 
 - name: Refresh pipx applications installed by NikOS
-  ansible.builtin.command: pipx upgrade-all
+  ansible.builtin.command: "pipx upgrade {{ item }}"
+  loop:
+    - shell-gpt
+    - glances
   environment:
     PIPX_HOME: "{{ nikos_home }}/.local/pipx"
     PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
