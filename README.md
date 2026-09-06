@@ -8,7 +8,7 @@
 A curated Xubuntu / Ubuntu 24.04 LTS setup for AI coding and development.  
 One command turns a fresh Ubuntu install into a fully configured AI workstation — Xubuntu desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
 
-**Version:** 0.6.2 · **License:** MIT · **Author:** Nikola Reljin
+**Version:** 0.6.5 · **License:** MIT · **Author:** Nikola Reljin
 
 > One file, the Plymouth boot splash, is GPL-3.0-or-later rather than MIT, because it is derived from Xubuntu's theme. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
@@ -163,7 +163,14 @@ nikos log [N]        # tail the latest playbook log
 
 `nikos update` reads its target from what is checked out: a release install
 advances to the newest release only when that release is genuinely newer, and a
-branch install stays on its branch. An update never downgrades.
+branch install stays on its branch. An update never downgrades. It then refreshes
+the pinned `script-helpers` submodule, NikOS-managed tool repositories
+(`distrodeck`, `image-view`, `git-lantern`, and `ai-runner`), developer tools,
+Python/pipx packages, VS Code extensions, Ollama models, and installed system
+packages. The optional bundles selected during installation remain selected.
+
+For a checkout-only refresh of the `script-helpers` revision pinned by this
+NikOS release, run `./update` from the repository root.
 
 ---
 

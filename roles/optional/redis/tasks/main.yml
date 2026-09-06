@@ -17,6 +17,6 @@
 
 - name: Install Redis Python client in nikos-ai env
   ansible.builtin.command: >
-    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install redis
+    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install --upgrade redis
   changed_when: false
   when: not ansible_check_mode

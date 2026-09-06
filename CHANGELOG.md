@@ -4,7 +4,21 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.6.5] — 2026-09-05
+
 ### Changed
+- **`nikos update` now updates NikOS-managed dependencies, not only the NikOS
+  checkout.** It refreshes the pinned `script-helpers` submodule; updates the
+  `distrodeck`, `image-view`, `git-lantern`, and `ai-runner` source checkouts;
+  rebuilds the two compiled CLIs after their source changes; refreshes the
+  distrodeck tool set; and upgrades the Python and pipx applications NikOS
+  manages. Existing APT, VS Code extension, and Ollama update paths continue to
+  run, and saved optional-bundle selections still determine which optional
+  dependencies are refreshed.
+- Added `./update` as the standard checkout-only command for synchronizing the
+  `script-helpers` submodule to the revision pinned by the current NikOS
+  release.
+
 - Vendored `script-helpers` moves from 0.12.1 to 0.24.0. The Bash API is
   additive across that range — every function the old pin exposed is still
   there — and NikOS imports only `logging` and `dialog`, both unchanged. The

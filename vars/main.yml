@@ -1,4 +1,9 @@
 ---
+# `nikos update` sets this as an extra var. Roles use it for operations that
+# should refresh an already-installed upstream tool, rather than merely ensure
+# that it exists. Keep normal setup/re-runs conservative.
+nikos_update_mode: false
+
 nikos_version: "{{ lookup('file', playbook_dir + '/VERSION') | trim }}"
 
 # Timezone and locale

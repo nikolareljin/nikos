@@ -12,7 +12,7 @@
     repo: https://github.com/nikolareljin/distrodeck.git
     dest: "{{ nikos_home }}/Projects/distrodeck"
     version: main
-    update: false
+    update: "{{ nikos_update_mode | bool }}"
 
 - name: Install distrodeck PATH wrapper
   ansible.builtin.copy:
@@ -31,6 +31,13 @@
     creates: "{{ nikos_home }}/.local/state/distrodeck/installed-tools.txt"
   when: not ansible_check_mode
 
+- name: Refresh developer tools managed by distrodeck
+  ansible.builtin.command: "{{ nikos_home }}/Projects/distrodeck/distrodeck install-tools --all"
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - nikos_update_mode | bool
+
 # ── image-view (terminal image preview — requires cargo from distrodeck) ──
 
 - name: Clone image-view
@@ -38,7 +45,7 @@
     repo: https://github.com/nikolareljin/image-view.git
     dest: "{{ nikos_home }}/Projects/image-view"
     version: main
-    update: false
+    update: "{{ nikos_update_mode | bool }}"
 
 - name: Resolve cargo binary for image-view build
   # Prefer the rustup-managed cargo over any system apt cargo.
@@ -112,23 +119,23 @@
     - not ansible_check_mode
     - dev_tools_cargo_bin | length > 0
     - dev_tools_cargo_version_number is version('1.85.0', '>=')
-    - not dev_tools_image_view_bin.stat.exists
+    - nikos_update_mode | bool or not dev_tools_image_view_bin.stat.exists
 
 - name: Build and install image-view
   ansible.builtin.command: "{{ nikos_home }}/Projects/image-view/setup"
+  changed_when: false
   environment:
     HOME: "{{ nikos_home }}"
     INSTALL_DIR: "{{ nikos_home }}/.local/bin"
     # Prepend the resolved cargo's bin dir so the setup script finds the right cargo.
     PATH: "{{ (dev_tools_cargo_bin | dirname) + ':' + ansible_env.PATH }}"
-  args:
-    creates: "{{ nikos_home }}/.local/bin/image-view"
   register: dev_tools_image_view_result
   ignore_errors: true
   when:
     - not ansible_check_mode
     - dev_tools_cargo_bin | length > 0
     - dev_tools_cargo_version_number is version('1.85.0', '>=')
+    - nikos_update_mode | bool or not dev_tools_image_view_bin.stat.exists
 
 - name: Warn when image-view build failed
   ansible.builtin.debug:
@@ -152,7 +159,7 @@
     - not ansible_check_mode
     - dev_tools_cargo_bin | length > 0
     - dev_tools_cargo_version_number is version('1.85.0', '<')
-    - not dev_tools_image_view_bin.stat.exists
+    - nikos_update_mode | bool or not dev_tools_image_view_bin.stat.exists
 
 - name: Warn when cargo was not found for image-view
   ansible.builtin.debug:
@@ -168,18 +175,24 @@
     repo: https://github.com/nikolareljin/git-lantern.git
     dest: "{{ nikos_home }}/Projects/git-lantern"
     version: main
-    update: false
+    update: "{{ nikos_update_mode | bool }}"
     recursive: false
+
+- name: Check whether git-lantern is installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/lantern
+  register: dev_tools_git_lantern_bin
 
 - name: Install git-lantern
   ansible.builtin.command: >
     {{ nikos_home }}/Projects/git-lantern/install
     --prefix /opt/git-lantern
     --bin-link /usr/local/bin/lantern
+  changed_when: false
   become: true
-  args:
-    creates: /usr/local/bin/lantern
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - nikos_update_mode | bool or not dev_tools_git_lantern_bin.stat.exists
 
 - name: Install mkcert
   ansible.builtin.get_url:
@@ -195,5 +208,5 @@
     repo: https://github.com/nikolareljin/ai-runner.git
     dest: "{{ nikos_home }}/Projects/ai-runner"
     version: main
-    update: false
+    update: "{{ nikos_update_mode | bool }}"
   tags: [ai-runner]

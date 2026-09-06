@@ -405,7 +405,7 @@ cmd_update() {
     exit 1
   fi
   print_info "Re-running playbook..."
-  _playbook
+  _playbook -e nikos_update_mode=true
 }
 
 cmd_add() {
