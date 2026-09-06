@@ -170,7 +170,7 @@
 
 - name: Check whether git-lantern is installed
   ansible.builtin.stat:
-    path: /usr/local/bin/lantern
+    path: "{{ nikos_home }}/.local/bin/lantern"
   register: dev_tools_git_lantern_bin
 
 - name: Ensure user local bin directory exists for git-lantern
@@ -185,17 +185,6 @@
     --prefix {{ nikos_home }}/.local/opt/git-lantern
     --bin-link {{ nikos_home }}/.local/bin/lantern
   changed_when: false
-  when:
-    - not ansible_check_mode
-    - nikos_update_mode | bool or not dev_tools_git_lantern_bin.stat.exists
-
-- name: Install system launcher for git-lantern
-  ansible.builtin.file:
-    src: "{{ nikos_home }}/.local/bin/lantern"
-    dest: /usr/local/bin/lantern
-    state: link
-    force: true
-  become: true
   when:
     - not ansible_check_mode
     - nikos_update_mode | bool or not dev_tools_git_lantern_bin.stat.exists
