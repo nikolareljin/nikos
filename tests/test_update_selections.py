@@ -21,7 +21,11 @@ Three failure modes are specific to this design and are what these tests pin:
 
 The release-upgrade case is the reason `_exec_update_continuation` exists: the
 running CLI is the copy the *previous* release installed at /usr/local/bin/nikos,
-and its already-parsed `cmd_update` knows nothing about the replay.
+and its already-parsed `cmd_update` knows nothing about the replay. Note what
+that does *not* cover: a 0.6.4 process has no call to the helper to reach, so
+the 0.6.4 -> 0.6.5 hop itself still needs a second `nikos update`. The
+`nikos_update_mode: true` default in vars/main.yml is the only signal that
+reaches that CLI, and it drives the main playbook but not `never`-tagged roles.
 """
 
 from __future__ import annotations
@@ -300,8 +304,13 @@ def _run_continuation(tmp_path: Path, checkout_cli: str | None, running_cli: str
     )
 
 
-def test_continuation_execs_the_checked_out_cli_when_it_differs(tmp_path):
-    """The 0.6.4 -> 0.6.5 case: the running CLI predates the new checkout."""
+def test_continuation_hands_off_when_the_checkout_replaced_the_running_cli(tmp_path):
+    """A 0.6.5-or-later CLI hands the rest of the update to the new checkout.
+
+    Deliberately not named for the 0.6.4 -> 0.6.5 transition: this exercises the
+    handoff from a CLI that *has* the continuation call, which is every release
+    from 0.6.5 on. The 0.6.4 hop cannot reach this helper at all.
+    """
     new_cli = "echo \"EXECED:${NIKOS_UPDATE_CONTINUATION:-unset}:$*\"\n"
     result = _run_continuation(tmp_path, new_cli, "old cli\n")
 

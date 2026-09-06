@@ -35,19 +35,12 @@
 # existing executable and records it as "Already installed (skipped)" - so the
 # task above cannot refresh anything on a host that already has the tools. The
 # refresh therefore goes through the package managers distrodeck installed the
-# tools with. apt covers ten of the catalog; snap and flatpak cover most of the
-# rest. Tools installed with cargo, go or npm still need an upgrade mode in
+# tools with. The apt ones need nothing here: the base role's "Upgrade all
+# packages" runs `upgrade: safe` earlier in this same play, on every pass. snap
+# and flatpak are not covered anywhere else and account for most of the
+# catalog. Tools installed with cargo, go or npm still need an upgrade mode in
 # distrodeck itself and are documented as not refreshed.
-- name: Refresh apt packages managed through distrodeck
-  ansible.builtin.apt:
-    update_cache: true
-    upgrade: safe
-  become: true
-  when:
-    - not ansible_check_mode
-    - nikos_update_mode | bool
-
-- name: Resolve the other package managers distrodeck installs through
+- name: Resolve the package managers distrodeck installs through
   # `command -v` is a shell builtin, so this needs a shell rather than command.
   ansible.builtin.shell: "command -v {{ item }} || true"
   register: dev_tools_extra_pkg_managers

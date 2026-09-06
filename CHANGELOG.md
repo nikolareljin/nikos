@@ -43,6 +43,10 @@ All notable changes to NikOS are documented here.
   `force: false` and refuses a checkout with local modifications, so the next
   update would fail to update it. The generated lock is restored before the
   update. Any other local change still blocks it, which is deliberate.
+- The git-lantern troubleshooting steps in `docs/debugging.md` no longer name the
+  superseded global paths. They checked `/usr/local/bin/lantern` and reinstalled
+  to `/opt/git-lantern` with sudo, which diagnosed a healthy per-user install as
+  missing and recreated the global launcher the release removed.
 - Every documented direct `ansible-playbook` invocation now passes
   `-e nikos_update_mode=false`. Because that variable defaults to `true` for the
   0.6.4 CLI's benefit, a hand-run install or `--check` inherited update mode and

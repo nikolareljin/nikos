@@ -197,12 +197,19 @@ login screen.
 
 ### git-lantern / lantern not found
 
+`lantern` is installed per-user, not system-wide: a root-owned
+`/usr/local/bin/lantern` pointing into the user's writable home would let that
+user hand root-controlled code to anyone else who ran the command.
+
 ```bash
-which lantern
-ls /usr/local/bin/lantern
-# Reinstall if missing:
-sudo ~/Projects/git-lantern/install --prefix /opt/git-lantern --bin-link /usr/local/bin/lantern
+which lantern                      # expect ~/.local/bin/lantern
+ls ~/.local/bin/lantern
+# Reinstall if missing (no sudo - everything here is user-owned):
+~/Projects/git-lantern/install --prefix ~/.local/opt/git-lantern --bin-link ~/.local/bin/lantern
 ```
+
+If `which lantern` finds nothing but the file exists, `~/.local/bin` is not on
+`PATH` for that shell.
 
 ### bitnet-cli not found, or fails to load a library
 
