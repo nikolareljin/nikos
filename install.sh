@@ -1269,6 +1269,7 @@ if _can_use_dialog; then
   _create_become_password_file "${_become_pass}"
   unset _become_pass
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml")
+  PLAY_OPTS+=(-e nikos_update_mode=false)
   PLAY_OPTS+=(--become-password-file "${BECOME_PASSWORD_FILE}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
@@ -1280,6 +1281,7 @@ if _can_use_dialog; then
 else
   echo "Running NikOS ${NIKOS_VERSION} playbook..."
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
+  PLAY_OPTS+=(-e nikos_update_mode=false)
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"
@@ -1301,6 +1303,7 @@ fi
 if [[ "${_ansible_rc}" -eq 0 && "${_tee_rc}" -eq 0 && -n "${EXPLICIT_OPTIONAL_TAGS}" ]]; then
   print_info "Installing selected optional bundles: ${EXPLICIT_OPTIONAL_TAGS#,}"
   OPTIONAL_PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --tags "${EXPLICIT_OPTIONAL_TAGS#,}")
+  OPTIONAL_PLAY_OPTS+=(-e nikos_update_mode=false)
   if [[ -n "${BECOME_PASSWORD_FILE:-}" ]]; then
     OPTIONAL_PLAY_OPTS+=(--become-password-file "${BECOME_PASSWORD_FILE}")
   else
