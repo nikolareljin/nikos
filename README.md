@@ -165,9 +165,16 @@ nikos log [N]        # tail the latest playbook log
 advances to the newest release only when that release is genuinely newer, and a
 branch install stays on its branch. An update never downgrades. It then refreshes
 the pinned `script-helpers` submodule, NikOS-managed tool repositories
-(`distrodeck`, `image-view`, `git-lantern`, and `ai-runner`), developer tools,
-Python/pipx packages, VS Code extensions, Ollama models, and installed system
-packages. The optional bundles selected during installation remain selected.
+(`distrodeck`, `image-view`, `git-lantern`, and `ai-runner`), Python/pipx
+packages, VS Code extensions, Ollama models, and installed system packages
+(apt, snap, and flatpak). The optional bundles selected during installation
+remain selected.
+
+Developer tools installed through distrodeck are refreshed by their package
+manager, not by distrodeck: `distrodeck install-tools` has no upgrade mode and
+skips a tool that is already present. Tools that came from apt, snap, or
+flatpak are therefore refreshed; the handful installed with cargo, go, or npm
+are not, and need reinstalling by hand until distrodeck grows an upgrade mode.
 
 For a checkout-only refresh of the `script-helpers` revision pinned by this
 NikOS release, run `./update` from the repository root.

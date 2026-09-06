@@ -10,11 +10,13 @@ All notable changes to NikOS are documented here.
 - **`nikos update` now updates NikOS-managed dependencies, not only the NikOS
   checkout.** It refreshes the pinned `script-helpers` submodule; updates the
   `distrodeck`, `image-view`, `git-lantern`, and `ai-runner` source checkouts;
-  rebuilds the two compiled CLIs after their source changes; refreshes the
-  distrodeck tool set; and upgrades the Python and pipx applications NikOS
-  manages. Existing APT, VS Code extension, and Ollama update paths continue to
-  run, and saved optional-bundle selections still determine which optional
-  dependencies are refreshed.
+  rebuilds the two compiled CLIs after their source changes; refreshes the apt,
+  snap, and flatpak packages the distrodeck tool set is installed from; and
+  upgrades the Python and pipx applications NikOS manages. Existing APT, VS Code
+  extension, and Ollama update paths continue to run, and saved optional-bundle
+  selections still determine which optional dependencies are refreshed.
+  `distrodeck install-tools` has no upgrade mode - it skips any tool already
+  present - so tools installed with cargo, go, or npm are not refreshed.
 - Added `./update` as the standard checkout-only command for synchronizing the
   `script-helpers` submodule to the revision pinned by the current NikOS
   release.
@@ -35,6 +37,12 @@ All notable changes to NikOS are documented here.
   CLI closes that gap from 0.6.5 onwards. The `nikos_update_mode` default in
   `vars/main.yml` remains the compatibility signal for the 0.6.4 CLI itself,
   which predates the re-exec.
+- The `image-view` checkout no longer becomes un-updatable. Its `setup` runs a
+  plain `cargo build --release`, which can rewrite the tracked `Cargo.lock`, and
+  the build now runs on every update; `ansible.builtin.git` defaults to
+  `force: false` and refuses a checkout with local modifications, so the next
+  update would fail to update it. The generated lock is restored before the
+  update. Any other local change still blocks it, which is deliberate.
 - Every documented direct `ansible-playbook` invocation now passes
   `-e nikos_update_mode=false`. Because that variable defaults to `true` for the
   0.6.4 CLI's benefit, a hand-run install or `--check` inherited update mode and
