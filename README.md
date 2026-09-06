@@ -243,3 +243,10 @@ aider / Claude Code / Continue  →  use in code
 ## License
 
 MIT — Copyright © 2026 Nikola Reljin
+
+
+## Clone traffic
+
+![Clone traffic](https://raw.githubusercontent.com/nikolareljin/stats/main/charts/nikos.svg)
+
+_Updated daily. Total and unique cloners over the last 14 days._
