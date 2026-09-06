@@ -354,7 +354,7 @@ _playbook() {
 
 cmd_setup() {
   print_info "Running full NikOS setup..."
-  _playbook
+  _playbook -e nikos_update_mode=false
 }
 
 cmd_update() {
@@ -414,7 +414,7 @@ cmd_add() {
     network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
-      _playbook --tags "${role}"
+      _playbook -e nikos_update_mode=false --tags "${role}"
       ;;
     *)
       print_error "Unknown optional role: ${role}"

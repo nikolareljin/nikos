@@ -1,8 +1,9 @@
 ---
-# `nikos update` sets this as an extra var. Roles use it for operations that
-# should refresh an already-installed upstream tool, rather than merely ensure
-# that it exists. Keep normal setup/re-runs conservative.
-nikos_update_mode: false
+# Default to update mode so the 0.6.4 CLI, which invokes the newly checked-out
+# playbook without extra variables, refreshes dependencies on its first 0.6.5
+# update. `nikos setup` and `nikos add` explicitly set this false, keeping
+# normal setup and add flows conservative.
+nikos_update_mode: true
 
 nikos_version: "{{ lookup('file', playbook_dir + '/VERSION') | trim }}"
 

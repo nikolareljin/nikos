@@ -231,17 +231,17 @@
 - name: Install PyTorch CPU in nikos-ai env
   ansible.builtin.command: >
     {{ nikos_home }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
-    pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+    pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }} torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
   changed_when: false
 
 - name: Install data science packages in nikos-ai env
   ansible.builtin.command: >
     {{ nikos_home }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
-    pip install --upgrade transformers jupyter jupyterlab pandas numpy scikit-learn matplotlib
+    pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }} transformers jupyter jupyterlab pandas numpy scikit-learn matplotlib
   changed_when: false
 
 - name: Install aider and uv in nikos-ai env
   ansible.builtin.command: >
     {{ nikos_home }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
-    pip install --upgrade aider-chat uv
+    pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }} aider-chat uv
   changed_when: false

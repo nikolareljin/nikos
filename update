@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# SCRIPT: update.sh
+# SCRIPT: update
 # DESCRIPTION: Sync and initialize pinned submodule revisions from this repository.
-# USAGE: ./scripts/update.sh
+# USAGE: ./update
 # PARAMETERS: No required parameters.
-# EXAMPLE: ./scripts/update.sh
+# EXAMPLE: ./update
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
