@@ -1,0 +1,25 @@
+schema: 1
+integration:
+  id: nikos-xubuntu
+base:
+  catalog_id: Xubuntu_24_04_4_desktop_amd64
+compatibility:
+  base_filename_patterns:
+    - '^xubuntu-24\.04.*-desktop-amd64\.iso$'
+output:
+  name: nikos-xubuntu-24.04-amd64
+  label: NikOS Xubuntu 24.04
+  volume_id: NIKOS_XUBUNTU_2404
+provisioning:
+  ansible:
+    playbook: site.yml
+    inventory: inventory/local
+    dest: /opt/isoforge/integration
+    skel_home: /etc/skel
+    tags: [base, desktop, theming]
+    extra_vars:
+      nikos_home: /etc/skel
+      nikos_user: root
+overlay:
+  target: []
+  live: []
