@@ -43,11 +43,12 @@ default inventory, so the command fails without it.
 ```
 $ ansible-playbook site.yml -i inventory/local --list-tags
       TASK TAGS: [act, ai-claude, ai-copilot-cli, ai-gemini, ai-local,
-      ai-node, ai-runner, ai-vision, ai-vscode, always, bitnet, bun,
-      education, fabric, java, k8s-tools, mistral-rs, monitoring, music,
-      neovim, network, never, ollama-coding, ollama-embedding, ollama-models,
-      ollama-reasoning, ollama-text, ollama-vision, openclaw, podman,
-      postgres, qdrant, redis, zsh]
+      ai-node, ai-runner, ai-vision, ai-vscode, always, base, bitnet,
+      bun, desktop, education, fabric, java, k8s-tools, mistral-rs,
+      monitoring, music, neovim, network, never, ollama-coding,
+      ollama-embedding, ollama-models, ollama-reasoning, ollama-text,
+      ollama-vision, openclaw, podman, postgres, qdrant, redis, theming,
+      zsh]
 ```
 
 With that in mind, two things decide whether a bundle lands on a machine, and
@@ -63,6 +64,12 @@ tags. This lets an image build select exactly the system core with `--tags
 base,desktop,theming`; it does not make them optional in an ordinary untagged
 run. They remain core system roles, not installer bundles.
 
+What keeps them out of the bundle list is now `nikos add`'s allowlist rather
+than the absence of a tag. Before these three tags existed the playbook made
+the guarantee itself — an untagged role cannot be named in `--tags` or
+`--skip-tags` at all — and it no longer does, so anything that offers bundles
+has to say which names it accepts instead of deriving them from the tag list.
+
 **Always.** Roles carried in `site.yml` with no role-level tag —
 `github-setup`, `editors`, `cloud-ai-cli`, `agent-dev`, `dev-tools` — cannot
 be named in `--tags` or `--skip-tags` and run in an ordinary untagged play.
@@ -70,8 +77,11 @@ be named in `--tags` or `--skip-tags` and run in an ordinary untagged play.
 intended setup while honouring saved `--skip-tags`. This distinction is
 deliberate: the untagged roles are not bundles and must not be offered as if
 they were.
-Four of the untagged roles do contain individually tagged tasks — `editors`, `cloud-ai-cli`, `agent-dev` and `dev-tools` each hold one of the AI sub-tools above. Skipping that tag drops those tasks; the rest of the role still runs. The role is what
-is unconditional here, not every task in it.
+
+Four of the untagged roles do contain individually tagged tasks — `editors`,
+`cloud-ai-cli`, `agent-dev` and `dev-tools` each hold one of the AI sub-tools
+above. Skipping that tag drops those tasks; the rest of the role still runs.
+The role is what is unconditional here, not every task in it.
 
 **Skip to remove.** A plain tag, carrying no `never`: `network`, `music`,
 `education` and `ai-local` on roles in `site.yml`, and `ai-gemini`,
