@@ -4,6 +4,21 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+### Added
+- **An IsoForge integration manifest, `isoforge.yml`.** It declares the Xubuntu
+  24.04.4 base, the ISO metadata, and the Ansible provisioning an image build
+  runs: `site.yml` against `inventory/local`, with `/etc/skel` as the home the
+  playbook configures so a built image ships the setup to every new user.
+- **Selectable tags on the three core roles.** `base`, `desktop` and `theming`
+  now carry role tags, so an image build can ask for exactly the system core
+  with `--tags base,desktop,theming`. An ordinary untagged run is unchanged:
+  they are core roles, not optional bundles, and `nikos add` still refuses
+  them by name.
+- **A test that the documented tag list is the playbook's.** `docs/bundles.md`
+  names `--list-tags` as the only complete view of the tags and then pastes its
+  output; nothing had ever run the one against the other, and the pasted block
+  had gone stale. `tests/test_bundles_doc.py` now compares them by name.
+
 ## [0.6.5] — 2026-09-05
 
 ### Changed

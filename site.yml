@@ -59,8 +59,11 @@
 
   roles:
     - role: base
+      tags: [base]
     - role: desktop
+      tags: [desktop]
     - role: theming
+      tags: [theming]
     - role: github-setup
       become: false
     - role: ai-stack
