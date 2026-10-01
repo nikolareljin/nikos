@@ -4,12 +4,6 @@
 # /tmp/ollama.sock, which Ollama never creates; both had failed_when: false, so
 # every run swallowed two failures and a 30 second timeout. The listen address
 # is now set in one place (nikos_ollama_host) and readiness is an HTTP request.
-- name: Install Ollama
-  ansible.builtin.shell: curl -fsSL https://ollama.com/install.sh | sh  # noqa: command-instead-of-module risky-shell-pipe
-  args:
-    creates: /usr/local/bin/ollama
-    executable: /bin/bash
-  when: nikos_ollama_mode == 'local'
 
 # MainPID is 0 when the unit is stopped and the task fails when it does not
 # exist yet; both mean "no listener of ours".
@@ -51,6 +45,15 @@
     - >-
       ai_stack_ollama_main_pid == '0' or ai_stack_ollama_main_pid not in
       (ai_stack_ollama_port.stdout | regex_findall('pid=([0-9]+)'))
+
+# After the port check, so a machine whose port is already taken is refused
+# before a second engine is installed onto it.
+- name: Install Ollama
+  ansible.builtin.shell: curl -fsSL https://ollama.com/install.sh | sh  # noqa: command-instead-of-module risky-shell-pipe
+  args:
+    creates: /usr/local/bin/ollama
+    executable: /bin/bash
+  when: nikos_ollama_mode == 'local'
 
 - name: Create the Ollama unit drop-in directory
   ansible.builtin.file:
