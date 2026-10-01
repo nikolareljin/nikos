@@ -92,12 +92,12 @@ grouped by what they are for, each with its own tag, so a laptop can take one
 group without the others:
 
 ```bash
-nikos add ollama-reasoning   # ~23 GB  deepseek-r1, qwen3, phi4
-nikos add ollama-coding      # ~34 GB  deepseek-coder-v2, qwen2.5-coder, qwen3-coder
-nikos add ollama-text        # ~22 GB  granite4, llama3.1, gemma3, mistral
-nikos add ollama-vision      # ~13 GB  granite3.2-vision, minicpm-v, qwen2.5vl
+nikos add ollama-reasoning   # ~30 GB  deepseek-r1, qwen3.5, gpt-oss
+nikos add ollama-coding      # ~42 GB  qwen2.5-coder, devstral, qwen3-coder
+nikos add ollama-text        # ~19 GB  granite4, ministral-3, gemma4
+nikos add ollama-vision      # ~11 GB  qwen3-vl
 nikos add ollama-embedding   # ~1.3 GB embeddinggemma, qwen3-embedding
-nikos add ollama-models      # ~93 GB  every group
+nikos add ollama-models      # ~104 GB every group
 ```
 
 Nothing is pulled unless you ask for the tag. Models load on demand, so this is

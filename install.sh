@@ -993,7 +993,7 @@ _select_bundles_dialog() {
       "java"          "OpenJDK 21"                                   off \
       "bun"           "Bun JavaScript runtime"                       off \
       "openclaw"      "OpenClaw LLM gateway CLI"                     off \
-      "ollama-models" "Optional Ollama models, about 26 GB"          off \
+      "ollama-models" "Every optional Ollama model, about 104 GB"     off \
       "postgres"      "PostgreSQL with pgvector"                     off \
       "redis"         "Redis server and Python client"               off \
       "qdrant"        "Qdrant vector database container"             off \
@@ -1114,7 +1114,7 @@ _select_bundles_plain() {
   _say_tty ""
   _say_tty "LLM tools:"
   _ask_tty opt_openclaw "  Install OpenClaw? [y/N] "
-  _ask_tty opt_ollama_models "  Pre-pull optional Ollama models? (~26 GB) [y/N] "
+  _ask_tty opt_ollama_models "  Pre-pull every optional Ollama model? (~104 GB) [y/N] "
   _ask_tty opt_bitnet "  Install BitNet.cpp? [y/N] "
   _ask_tty opt_mistral_rs "  Install mistral.rs? [y/N] "
   _say_tty ""
