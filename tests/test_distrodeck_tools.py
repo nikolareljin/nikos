@@ -224,8 +224,60 @@ def test_rewriting_skip_tags_keeps_the_saved_tools(tmp_path: Path) -> None:
     assert saved["NIKOS_SKIP_TAGS_SAVED"] == "a,b", saved
 
 
-def test_dev_tools_role_installs_the_list_not_the_catalog() -> None:
+def _run_dev_tools_selection(tmp_path: Path, *, catalog: bool, tools: str) -> list[str]:
+    """Run the role's distrodeck tasks against a fake distrodeck."""
+    assert shutil.which("ansible-playbook"), "ansible-playbook is required"
     role = (REPO / "roles" / "dev-tools" / "tasks" / "main.yml").read_text(encoding="utf-8")
-    assert "--all" not in role
-    assert "nikos_distrodeck_tools" in role
+    start = role.index("- name: Check whether this distrodeck publishes a tool catalog")
+    end = role.index("# `distrodeck install-tools` has no upgrade")
+    (tmp_path / "tasks.yml").write_text("---\n" + role[start:end], encoding="utf-8")
+    (tmp_path / "play.yml").write_text(
+        "---\n- hosts: localhost\n  connection: local\n  gather_facts: false\n"
+        "  tasks:\n    - ansible.builtin.include_tasks: tasks.yml\n",
+        encoding="utf-8",
+    )
+    log = tmp_path / "calls.log"
+    fake_distrodeck(tmp_path / "Projects" / "distrodeck" / "distrodeck", catalog=catalog, log=log)
+    if not catalog:
+        # The 0.10.3 shape: no --list-catalog, but --all works and is recorded.
+        dd = tmp_path / "Projects" / "distrodeck" / "distrodeck"
+        dd.write_text(
+            "#!/bin/sh\n"
+            'if [ "$2" = "--list-catalog" ]; then echo "unrecognized arguments" >&2; exit 2; fi\n'
+            f'echo "$@" >> {log}\n',
+            encoding="utf-8",
+        )
+    result = subprocess.run(
+        [
+            "ansible-playbook", "play.yml", "-i", "localhost,",
+            "-e", f"nikos_home={tmp_path}", "-e", f"nikos_distrodeck_tools={tools}",
+            "-e", "distrodeck_version=0.10.3",
+        ],
+        cwd=tmp_path, capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+
+
+def test_dev_tools_installs_the_saved_list_when_the_catalog_exists(tmp_path: Path) -> None:
+    assert _run_dev_tools_selection(tmp_path, catalog=True, tools="ollama,vlc") == [
+        "install-tools --tools ollama,vlc"
+    ]
+
+
+def test_dev_tools_installs_nothing_when_the_catalog_exists_and_nothing_was_chosen(
+    tmp_path: Path,
+) -> None:
+    assert _run_dev_tools_selection(tmp_path, catalog=True, tools="") == []
+
+
+def test_dev_tools_falls_back_to_all_on_an_older_distrodeck(tmp_path: Path) -> None:
+    # A saved list cannot be honoured without a catalog to check it against.
+    assert _run_dev_tools_selection(tmp_path, catalog=False, tools="ollama") == [
+        "install-tools --all"
+    ]
+
+
+def test_dev_tools_clone_is_pinned() -> None:
+    role = (REPO / "roles" / "dev-tools" / "tasks" / "main.yml").read_text(encoding="utf-8")
     assert 'version: "{{ distrodeck_version }}"' in role

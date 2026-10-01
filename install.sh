@@ -1380,7 +1380,7 @@ if [[ "${_TOOLS_LIB_LOADED}" == "true" ]] &&
     nikos_tools_select_plain "${_dd_catalog}" "${_saved_tools}" || exit 130
   fi
 else
-  echo "NOTE: distrodeck ${_dd_version:-?} has no tool catalog (install-tools --list-catalog); skipping tool selection${_saved_tools:+, keeping the saved list}." >&2
+  echo "NOTE: distrodeck ${_dd_version:-?} has no tool catalog (install-tools --list-catalog); skipping tool selection; the playbook installs its default set with --all." >&2
   _logfile "distrodeck tool selection skipped: no catalog from ${_dd_version:-unknown}"
 fi
 _logfile "distrodeck tools: ${NIKOS_SELECTED_TOOLS:-none}"
