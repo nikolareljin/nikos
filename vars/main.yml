@@ -109,54 +109,48 @@ nordic_grub_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/
 # Ollama library on 2026-10-01. Models load on demand, so none of this counts
 # against the idle RAM target - it is disk and bandwidth.
 #
-# The default stays on Qwen2.5-Coder: qwen3-coder publishes no tag below 30b
-# (19 GB), which is not a sensible default for a laptop, and qwen2.5-coder:7b
-# is still the best small code model with fill-in-the-middle support.
-ollama_default_model: "qwen2.5-coder:7b"          # 4.7 GB
+# The same tags as distrodeck's model groups, so a machine set up by either
+# tool pulls the same models.
+ollama_default_model: "gemma4:e4b"                # 6.6 GB
 
 # Optional models, grouped by what they are for. Each group has its own tag, so
 # a laptop can take one capability without pulling all of them:
 #
 #   nikos add ollama-reasoning   nikos add ollama-coding
 #   nikos add ollama-text        nikos add ollama-vision
-#   nikos add ollama-embedding   nikos add ollama-models   (everything, ~104 GB)
+#   nikos add ollama-embedding   nikos add ollama-models   (everything, ~75 GB)
 #
 # Within each group the smallest usable model is listed first.
 
-# General purpose reasoning. deepseek-r1:1.5b runs on a 4 GB machine.
-ollama_models_reasoning:            # ~30 GB
-  - "deepseek-r1:1.5b"       # 1.1 GB  fits the smallest laptops
-  - "qwen3.5:4b"             # 3.4 GB  thinking mode
-  - "deepseek-r1:8b"         # 5.2 GB
-  - "qwen3.5:9b"             # 6.6 GB
-  - "gpt-oss:20b"            # 14 GB   desktop-class, open-weight reasoning
+# General purpose reasoning.
+ollama_models_reasoning:            # ~24 GB
+  - "deepseek-r1:8b"       # 5.2 GB
+  - "qwen3:8b"             # 5.2 GB  Thinking mode
+  - "gpt-oss:20b"          # 14 GB   Desktop-class, open-weight reasoning
 
-# Code models. qwen3-coder publishes no tag below 30b, so the mid tier is
-# Qwen2.5-Coder and Devstral.
-ollama_models_coding:               # ~42 GB
-  - "qwen2.5-coder:14b"      # 9.0 GB  same family as the default, one size up
-  - "devstral:24b"           # 14 GB   agentic coding
-  - "qwen3-coder:30b"        # 19 GB   current generation, workstation-class
+# Code models. qwen3-coder publishes no tag below 30b, so the laptop tier is
+# Qwen2.5-Coder.
+ollama_models_coding:               # ~24 GB
+  - "qwen2.5-coder:7b"     # 4.7 GB  Fill-in-the-middle, laptop-sized
+  - "qwen3-coder:30b"      # 19 GB   Current generation, workstation-class
 
 # Text generation and general chat.
-ollama_models_text:                 # ~19 GB
-  - "granite4:micro"         # 2.1 GB  small enough to keep resident
-  - "ministral-3:3b"         # 3.0 GB
-  - "ministral-3:8b"         # 6.0 GB
-  - "gemma4:12b"             # 7.7 GB  multimodal
+ollama_models_text:                 # ~16 GB
+  - "granite4:micro"       # 2.1 GB  Small enough to keep resident
+  - "qwen3.5:9b"           # 6.6 GB
+  - "gemma4:12b"           # 7.7 GB  Multimodal
 
 # Image analysis. Pair these with the Python vision stack in the agent-dev role.
-ollama_models_vision:               # ~11 GB
-  - "qwen3-vl:2b"            # 1.9 GB  smallest, laptop-friendly
-  - "qwen3-vl:4b"            # 3.3 GB
-  - "qwen3-vl:8b"            # 6.1 GB  vision and document understanding
+ollama_models_vision:               # ~9.4 GB
+  - "qwen3-vl:4b"          # 3.3 GB  Laptop-friendly
+  - "qwen3-vl:8b"          # 6.1 GB  Vision and document understanding
 
 # Embeddings for the chromadb / qdrant / sentence-transformers stack.
 ollama_models_embedding:            # ~1.3 GB
-  - "embeddinggemma:300m"    # 622 MB
-  - "qwen3-embedding:0.6b"   # 639 MB
+  - "embeddinggemma:300m"  # 622 MB
+  - "qwen3-embedding:0.6b" # 639 MB
 
-# `nikos add ollama-models` pulls every group; about 104 GB in full.
+# `nikos add ollama-models` pulls every group; about 75 GB in full.
 # Override any individual group in vars/local.yml to take a subset.
 ollama_optional_models: >-
   {{ ollama_models_reasoning + ollama_models_coding + ollama_models_text

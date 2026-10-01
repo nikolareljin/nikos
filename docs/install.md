@@ -8,8 +8,8 @@
 - **User:** a non-root user with `sudo` access
 - **Internet:** required during install (packages, theme files, models)
 - **Disk:** ~20 GB free (Ollama model + conda env + VS Code + tools); add
-  about 104 GB if selecting every optional Ollama model group
-- **RAM:** 4 GB minimum; 8 GB recommended for running `qwen2.5-coder:7b`
+  about 75 GB if selecting every optional Ollama model group
+- **RAM:** 4 GB minimum; 8 GB recommended for running `gemma4:e4b`
 
 ## Quick install
 
@@ -47,8 +47,8 @@ Roles marked *desktop* run only on the `desktop` profile; see
 | `desktop` (*desktop*) | Xubuntu desktop, LightDM, xfce4-terminal, display manager and default session handover |
 | `theming` (*desktop*) | Nordic GTK theme, Papirus-Dark icons, GRUB theme, LightDM greeter, wallpaper |
 | `github-setup` | gh CLI, first-login wizard (SSH key, git identity) |
-| `ai-stack` | Ollama + qwen2.5-coder:7b, llama.cpp, Miniforge, nikos-ai conda env, aider, uv |
-| `editors` | VS Code + AI extensions + Nord theme + JetBrains Mono |
+| `ai-stack` | Ollama on 127.0.0.1:11434 + gemma4:e4b, llama.cpp, Miniforge, nikos-ai conda env, aider, uv |
+| `editors` (*desktop*) | VS Code + AI extensions + Nord theme + JetBrains Mono |
 | `cloud-ai-cli` | Node (system or nvm-pinned), Gemini CLI, GitHub Copilot CLI extension, shell-gpt, glances |
 | `agent-dev` | LangChain, LlamaIndex, ML/data libraries, Claude Code |
 | `dev-tools` | distrodeck tools, image-view, git-lantern, mkcert, ai-runner |

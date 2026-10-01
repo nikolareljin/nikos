@@ -122,37 +122,37 @@
 
   <h2>Ollama models</h2>
 
-  <p>One model is pulled by default: <code>qwen2.5-coder:7b</code> (4.7&nbsp;GB). Everything else is grouped
+  <p>One model is pulled by default: <code>gemma4:e4b</code> (6.6&nbsp;GB). Everything else is grouped
   by capability, each group with its own tag, so a laptop can take one without the rest.</p>
 
   <figure>
     <svg viewBox="0 0 700 200" role="img" aria-labelledby="sizes-title">
-      <title id="sizes-title">Relative download size of each model group: coding 42 GB, reasoning 30 GB, text 19 GB, vision 11 GB, embedding 1.3 GB</title>
+      <title id="sizes-title">Relative download size of each model group: reasoning 24 GB, coding 24 GB, text 16 GB, vision 9.4 GB, embedding 1.3 GB</title>
       <g font-family="JetBrains Mono, monospace" font-size="12">
         <g>
-          <text x="0" y="26" fill="currentColor">coding</text>
+          <text x="0" y="26" fill="currentColor">reasoning</text>
           <rect x="110" y="14" width="500" height="18" rx="4" fill="#5E81AC"/>
-          <text x="622" y="27" fill="#8FA1B3" font-size="11">~42 GB</text>
+          <text x="622" y="27" fill="#8FA1B3" font-size="11">~24 GB</text>
         </g>
         <g>
-          <text x="0" y="60" fill="currentColor">reasoning</text>
-          <rect x="110" y="48" width="357" height="18" rx="4" fill="#81A1C1"/>
-          <text x="479" y="61" fill="#8FA1B3" font-size="11">~30 GB</text>
+          <text x="0" y="60" fill="currentColor">coding</text>
+          <rect x="110" y="48" width="486" height="18" rx="4" fill="#81A1C1"/>
+          <text x="608" y="61" fill="#8FA1B3" font-size="11">~24 GB</text>
         </g>
         <g>
           <text x="0" y="94" fill="currentColor">text</text>
-          <rect x="110" y="82" width="226" height="18" rx="4" fill="#88C0D0"/>
-          <text x="348" y="95" fill="#8FA1B3" font-size="11">~19 GB</text>
+          <rect x="110" y="82" width="336" height="18" rx="4" fill="#88C0D0"/>
+          <text x="458" y="95" fill="#8FA1B3" font-size="11">~16 GB</text>
         </g>
         <g>
           <text x="0" y="128" fill="currentColor">vision</text>
-          <rect x="110" y="116" width="131" height="18" rx="4" fill="#A3BE8C"/>
-          <text x="253" y="129" fill="#8FA1B3" font-size="11">~11 GB</text>
+          <rect x="110" y="116" width="193" height="18" rx="4" fill="#A3BE8C"/>
+          <text x="315" y="129" fill="#8FA1B3" font-size="11">~9.4 GB</text>
         </g>
         <g>
           <text x="0" y="162" fill="currentColor">embedding</text>
-          <rect x="110" y="150" width="19" height="18" rx="4" fill="#EBCB8B"/>
-          <text x="141" y="163" fill="#8FA1B3" font-size="11">~1.3 GB</text>
+          <rect x="110" y="150" width="27" height="18" rx="4" fill="#EBCB8B"/>
+          <text x="149" y="163" fill="#8FA1B3" font-size="11">~1.3 GB</text>
         </g>
         <text x="0" y="192" fill="#8FA1B3" font-size="11">Nothing is pulled unless you request the tag.</text>
       </g>
@@ -164,23 +164,18 @@
   <table>
     <thead><tr><th>Group</th><th>Model</th><th>Size</th><th>Notes</th></tr></thead>
     <tbody>
-      <tr><td rowspan="5"><code>ollama-reasoning</code></td><td><code>deepseek-r1:1.5b</code></td><td class="size">1.1 GB</td><td>Runs on a 4 GB machine</td></tr>
-      <tr><td><code>qwen3.5:4b</code></td><td class="size">3.4 GB</td><td>Thinking mode</td></tr>
-      <tr><td><code>deepseek-r1:8b</code></td><td class="size">5.2 GB</td><td></td></tr>
-      <tr><td><code>qwen3.5:9b</code></td><td class="size">6.6 GB</td><td></td></tr>
-      <tr><td><code>gpt-oss:20b</code></td><td class="size">14 GB</td><td>Desktop-class</td></tr>
+      <tr><td rowspan="3"><code>ollama-reasoning</code></td><td><code>deepseek-r1:8b</code></td><td class="size">5.2 GB</td><td></td></tr>
+      <tr><td><code>qwen3:8b</code></td><td class="size">5.2 GB</td><td>Thinking mode</td></tr>
+      <tr><td><code>gpt-oss:20b</code></td><td class="size">14 GB</td><td>Desktop-class, open-weight reasoning</td></tr>
 
-      <tr><td rowspan="3"><code>ollama-coding</code></td><td><code>qwen2.5-coder:14b</code></td><td class="size">9.0 GB</td><td>One size up from the default</td></tr>
-      <tr><td><code>devstral:24b</code></td><td class="size">14 GB</td><td>Agentic coding</td></tr>
+      <tr><td rowspan="2"><code>ollama-coding</code></td><td><code>qwen2.5-coder:7b</code></td><td class="size">4.7 GB</td><td>Fill-in-the-middle, laptop-sized</td></tr>
       <tr><td><code>qwen3-coder:30b</code></td><td class="size">19 GB</td><td>Current generation, workstation-class</td></tr>
 
-      <tr><td rowspan="4"><code>ollama-text</code></td><td><code>granite4:micro</code></td><td class="size">2.1 GB</td><td>Small enough to keep resident</td></tr>
-      <tr><td><code>ministral-3:3b</code></td><td class="size">3.0 GB</td><td></td></tr>
-      <tr><td><code>ministral-3:8b</code></td><td class="size">6.0 GB</td><td></td></tr>
+      <tr><td rowspan="3"><code>ollama-text</code></td><td><code>granite4:micro</code></td><td class="size">2.1 GB</td><td>Small enough to keep resident</td></tr>
+      <tr><td><code>qwen3.5:9b</code></td><td class="size">6.6 GB</td><td></td></tr>
       <tr><td><code>gemma4:12b</code></td><td class="size">7.7 GB</td><td>Multimodal</td></tr>
 
-      <tr><td rowspan="3"><code>ollama-vision</code></td><td><code>qwen3-vl:2b</code></td><td class="size">1.9 GB</td><td>Smallest, laptop-friendly</td></tr>
-      <tr><td><code>qwen3-vl:4b</code></td><td class="size">3.3 GB</td><td></td></tr>
+      <tr><td rowspan="2"><code>ollama-vision</code></td><td><code>qwen3-vl:4b</code></td><td class="size">3.3 GB</td><td>Laptop-friendly</td></tr>
       <tr><td><code>qwen3-vl:8b</code></td><td class="size">6.1 GB</td><td>Vision and document understanding</td></tr>
 
       <tr><td rowspan="2"><code>ollama-embedding</code></td><td><code>embeddinggemma:300m</code></td><td class="size">622 MB</td><td rowspan="2">For the Chroma / Qdrant stack</td></tr>
@@ -189,7 +184,7 @@
   </table>
   </div>
 
-  <p><code>nikos add ollama-models</code> pulls every group, about 104&nbsp;GB. Override any group in
+  <p><code>nikos add ollama-models</code> pulls every group, about 75&nbsp;GB. Override any group in
   <code>vars/local.yml</code> to take a subset.</p>
 
   <h2>VS Code extensions</h2>

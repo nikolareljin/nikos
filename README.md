@@ -78,7 +78,7 @@ At the end, you should end up with something like:
 ### AI stack
 | Tool | Purpose |
 |---|---|
-| [Ollama](https://ollama.ai) | Local LLM runtime — `qwen2.5-coder:7b` pre-pulled |
+| [Ollama](https://ollama.ai) | Local LLM runtime — `gemma4:e4b` pre-pulled |
 | [aider](https://aider.chat) | AI pair programmer in the terminal |
 | [Miniforge](https://github.com/conda-forge/miniforge) | Python distribution (conda) |
 | `nikos-ai` conda env | Python 3.11-3.13 + PyTorch CPU + Jupyter + transformers + pandas |
@@ -93,17 +93,17 @@ At the end, you should end up with something like:
 
 ### Local models
 
-One model is pulled by default: `qwen2.5-coder:7b` (4.7 GB). The rest are
+One model is pulled by default: `gemma4:e4b` (6.6 GB). The rest are
 grouped by what they are for, each with its own tag, so a laptop can take one
 group without the others:
 
 ```bash
-nikos add ollama-reasoning   # ~30 GB  deepseek-r1, qwen3.5, gpt-oss
-nikos add ollama-coding      # ~42 GB  qwen2.5-coder, devstral, qwen3-coder
-nikos add ollama-text        # ~19 GB  granite4, ministral-3, gemma4
-nikos add ollama-vision      # ~11 GB  qwen3-vl
+nikos add ollama-reasoning   # ~24 GB  deepseek-r1, qwen3, gpt-oss
+nikos add ollama-coding      # ~24 GB  qwen2.5-coder, qwen3-coder
+nikos add ollama-text        # ~16 GB  granite4, qwen3.5, gemma4
+nikos add ollama-vision      # ~9.4 GB qwen3-vl
 nikos add ollama-embedding   # ~1.3 GB embeddinggemma, qwen3-embedding
-nikos add ollama-models      # ~104 GB every group
+nikos add ollama-models      # ~75 GB  every group
 ```
 
 Nothing is pulled unless you ask for the tag. Models load on demand, so this is
@@ -195,7 +195,7 @@ editing tracked files:
 
 ```yaml
 nikos_timezone: "Europe/London"     # override this for your timezone
-ollama_default_model: "qwen2.5-coder:7b"  # model to pre-pull
+ollama_default_model: "gemma4:e4b"  # model to pre-pull
 nikos_desktop_flavor: "xubuntu-minimal"   # or xubuntu-full / xfce
 nikos_remove_gnome: false           # true purges GNOME instead of keeping it selectable
 nikos_vscode_extensions:            # add/remove VS Code extensions

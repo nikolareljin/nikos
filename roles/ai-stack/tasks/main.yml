@@ -103,7 +103,7 @@
 # `ollama-models` one, so a laptop can take a single group without pulling the
 # whole set. `never` keeps them all off a default install.
 
-- name: Pull general purpose reasoning Ollama models when requested - about 30 GB
+- name: Pull general purpose reasoning Ollama models when requested - about 24 GB
   ansible.builtin.command: ollama pull {{ item }}
   loop: "{{ ollama_models_reasoning }}"
   register: ai_stack_reasoning_ollama_pull
@@ -119,7 +119,7 @@
   when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-reasoning]
 
-- name: Pull code Ollama models when requested - about 42 GB
+- name: Pull code Ollama models when requested - about 24 GB
   ansible.builtin.command: ollama pull {{ item }}
   loop: "{{ ollama_models_coding }}"
   register: ai_stack_coding_ollama_pull
@@ -135,7 +135,7 @@
   when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-coding]
 
-- name: Pull text generation Ollama models when requested - about 19 GB
+- name: Pull text generation Ollama models when requested - about 16 GB
   ansible.builtin.command: ollama pull {{ item }}
   loop: "{{ ollama_models_text }}"
   register: ai_stack_text_ollama_pull
@@ -151,7 +151,7 @@
   when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-text]
 
-- name: Pull image analysis Ollama models when requested - about 11 GB
+- name: Pull image analysis Ollama models when requested - about 9.4 GB
   ansible.builtin.command: ollama pull {{ item }}
   loop: "{{ ollama_models_vision }}"
   register: ai_stack_vision_ollama_pull

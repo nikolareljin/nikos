@@ -24,12 +24,12 @@ nikos_default_session: "auto"            # auto | xubuntu | xfce | any /usr/shar
 nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/..."
 
 # ── Ollama ────────────────────────────────────────────
-ollama_default_model: "qwen2.5-coder:7b"
+ollama_default_model: "gemma4:e4b"
 ollama_optional_models:
   - "qwen3-coder:30b"
-  - "devstral:24b"
+  - "qwen2.5-coder:7b"
   - "deepseek-r1:8b"
-# Other good choices: gemma4, qwen3.5, gpt-oss, granite4
+# Other good choices: qwen3.5, devstral, ministral-3, granite4
 llama_cpp_version: "b9151"
 
 # ── Python ────────────────────────────────────────────
@@ -92,9 +92,10 @@ Then run `nikos update`. The new model is pulled on the next playbook run.
 
 ### The default
 
-`qwen2.5-coder:7b` (4.7 GB). It stays on the 2.5 generation deliberately:
-`qwen3-coder` publishes no tag below `30b` (19 GB), which is too large to pull
-onto every machine by default.
+`gemma4:e4b` (6.6 GB), a general model that also reads images. It replaced
+`qwen2.5-coder:7b`, which is now the small end of the `ollama-coding` group:
+`qwen3-coder` publishes no tag below `30b` (19 GB), too large to pull onto
+every machine by default.
 
 ### The optional bundles
 
@@ -102,12 +103,12 @@ Models are grouped by what they are for, and each group has its own tag, so a
 laptop can take one capability without pulling all of them:
 
 ```bash
-nikos add ollama-reasoning   # ~30 GB  general purpose reasoning
-nikos add ollama-coding      # ~42 GB  code models
-nikos add ollama-text        # ~19 GB  text generation and chat
-nikos add ollama-vision      # ~11 GB  image analysis
+nikos add ollama-reasoning   # ~24 GB  general purpose reasoning
+nikos add ollama-coding      # ~24 GB  code models
+nikos add ollama-text        # ~16 GB  text generation and chat
+nikos add ollama-vision      # ~9.4 GB image analysis
 nikos add ollama-embedding   # ~1.3 GB embeddings for the RAG stack
-nikos add ollama-models      # ~104 GB every group
+nikos add ollama-models      # ~75 GB  every group
 ```
 
 Nothing here is pulled unless you ask for the tag. Override any group in
@@ -115,20 +116,15 @@ Nothing here is pulled unless you ask for the tag. Override any group in
 
 | Group | Model | Size | Notes |
 |---|---|---|---|
-| reasoning | `deepseek-r1:1.5b` | 1.1 GB | Runs on a 4 GB machine |
-| reasoning | `qwen3.5:4b` | 3.4 GB | Thinking mode |
 | reasoning | `deepseek-r1:8b` | 5.2 GB | |
-| reasoning | `qwen3.5:9b` | 6.6 GB | |
-| reasoning | `gpt-oss:20b` | 14 GB | Desktop-class |
-| coding | `qwen2.5-coder:14b` | 9.0 GB | One size up from the default |
-| coding | `devstral:24b` | 14 GB | Agentic coding |
+| reasoning | `qwen3:8b` | 5.2 GB | Thinking mode |
+| reasoning | `gpt-oss:20b` | 14 GB | Desktop-class, open-weight reasoning |
+| coding | `qwen2.5-coder:7b` | 4.7 GB | Fill-in-the-middle, laptop-sized |
 | coding | `qwen3-coder:30b` | 19 GB | Current generation, workstation-class |
 | text | `granite4:micro` | 2.1 GB | Small enough to keep resident |
-| text | `ministral-3:3b` | 3.0 GB | |
-| text | `ministral-3:8b` | 6.0 GB | |
+| text | `qwen3.5:9b` | 6.6 GB | |
 | text | `gemma4:12b` | 7.7 GB | Multimodal |
-| vision | `qwen3-vl:2b` | 1.9 GB | Smallest, laptop-friendly |
-| vision | `qwen3-vl:4b` | 3.3 GB | |
+| vision | `qwen3-vl:4b` | 3.3 GB | Laptop-friendly |
 | vision | `qwen3-vl:8b` | 6.1 GB | Vision and document understanding |
 | embedding | `embeddinggemma:300m` | 622 MB | |
 | embedding | `qwen3-embedding:0.6b` | 639 MB | |
@@ -138,10 +134,10 @@ is disk and bandwidth only.
 
 ### Models replaced in the next release
 
-`qwen3`, `phi4`, `deepseek-coder-v2`, `llama3.1`, `gemma3`, `mistral:7b`,
-`granite3.2-vision`, `minicpm-v` and `qwen2.5vl` are no longer pulled. Their
-places go to `qwen3.5`, `gpt-oss`, `devstral`, `ministral-3`, `gemma4` and
-`qwen3-vl`. Models already on disk are not removed; `ollama rm <name>` frees
+`deepseek-r1:1.5b`, `qwen3:4b`, `phi4`, `deepseek-coder-v2`, `qwen2.5-coder:14b`,
+`llama3.1`, `gemma3`, `mistral:7b`, `granite3.2-vision`, `minicpm-v` and
+`qwen2.5vl` are no longer pulled. Their places go to `gpt-oss`, `qwen3.5`,
+`gemma4` and `qwen3-vl`, and the default moves to `gemma4:e4b`. Models already on disk are not removed; `ollama rm <name>` frees
 the space.
 
 ### Models that were retired in 0.5.0
@@ -201,7 +197,7 @@ nikos_tesseract_languages: ["all"]   # pulls tesseract-ocr-all
 You can also pull models manually at any time:
 
 ```bash
-ollama pull gemma4:12b
+ollama pull gemma4:e4b
 ollama pull granite4:micro
 ollama list
 ```
@@ -232,7 +228,7 @@ nikos add bitnet     # BitNet.cpp 1-bit LLM inference (bitnet-cli)
 nikos add mistral-rs # mistral.rs Rust LLM server
 nikos add monitoring # Netdata monitoring dashboard
 nikos add openclaw   # OpenClaw LLM gateway CLI
-nikos add ollama-models # Pull every optional Ollama model; about 104 GB
+nikos add ollama-models # Pull every optional Ollama model; about 75 GB
 ```
 
 ### MongoDB
