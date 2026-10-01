@@ -11,12 +11,14 @@
     executable: /bin/bash
   when: nikos_ollama_mode == 'local'
 
-- name: Check whether the Ollama service is already running
-  ansible.builtin.command: systemctl is-active ollama
-  register: ai_stack_ollama_active
-  changed_when: false
+# MainPID is 0 when the unit is stopped and the task fails when it does not
+# exist yet; both mean "no listener of ours".
+- name: Read the Ollama service main PID
+  ansible.builtin.systemd:
+    name: ollama
+  register: ai_stack_ollama_unit
   failed_when: false
-  check_mode: false
+  check_mode: true
   when: nikos_ollama_mode == 'local'
 
 # Whichever process binds first wins and the loser logs to a file nobody reads.
@@ -31,7 +33,11 @@
   become: true
   when: nikos_ollama_mode == 'local'
 
+# A listener whose PID is not ollama.service's MainPID is a second owner. A
+# configured port that differs from the one the unit is serving on counts too.
 - name: Refuse to start a second owner of the Ollama port
+  vars:
+    ai_stack_ollama_main_pid: "{{ ((ai_stack_ollama_unit.status | default({})).MainPID | default('0')) | string }}"
   ansible.builtin.fail:
     msg: >-
       Port {{ nikos_ollama_host.split(':')[-1] }} is already in use by another
@@ -42,7 +48,9 @@
   when:
     - nikos_ollama_mode == 'local'
     - (ai_stack_ollama_port.stdout | default('') | trim) | length > 0
-    - (ai_stack_ollama_active.stdout | default('') | trim) != 'active'
+    - >-
+      ai_stack_ollama_main_pid == '0' or ai_stack_ollama_main_pid not in
+      (ai_stack_ollama_port.stdout | regex_findall('pid=([0-9]+)'))
 
 - name: Create the Ollama unit drop-in directory
   ansible.builtin.file:
