@@ -78,7 +78,7 @@ At the end, you should end up with something like:
 ### AI stack
 | Tool | Purpose |
 |---|---|
-| [Ollama](https://ollama.ai) | Local LLM runtime — `gemma4:e4b` pre-pulled |
+| [Ollama](https://ollama.ai) | Local LLM runtime — `qwen3.5:4b` pre-pulled |
 | [aider](https://aider.chat) | AI pair programmer in the terminal |
 | [Miniforge](https://github.com/conda-forge/miniforge) | Python distribution (conda) |
 | `nikos-ai` conda env | Python 3.11-3.13 + PyTorch CPU + Jupyter + transformers + pandas |
@@ -93,7 +93,7 @@ At the end, you should end up with something like:
 
 ### Local models
 
-One model is pulled by default: `gemma4:e4b` (6.6 GB). The rest are
+One model is pulled by default: `qwen3.5:4b` (3.4 GB). The rest are
 grouped by what they are for, each with its own tag, so a laptop can take one
 group without the others:
 
@@ -195,7 +195,7 @@ editing tracked files:
 
 ```yaml
 nikos_timezone: "Europe/London"     # override this for your timezone
-ollama_default_model: "gemma4:e4b"  # model to pre-pull
+ollama_default_model: "qwen3.5:4b"  # model to pre-pull
 nikos_desktop_flavor: "xubuntu-minimal"   # or xubuntu-full / xfce
 nikos_remove_gnome: false           # true purges GNOME instead of keeping it selectable
 nikos_vscode_extensions:            # add/remove VS Code extensions

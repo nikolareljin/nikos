@@ -24,7 +24,7 @@ nikos_default_session: "auto"            # auto | xubuntu | xfce | any /usr/shar
 nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/..."
 
 # ── Ollama ────────────────────────────────────────────
-ollama_default_model: "gemma4:e4b"
+ollama_default_model: "qwen3.5:4b"
 ollama_optional_models:
   - "qwen3-coder:30b"
   - "qwen2.5-coder:7b"
@@ -92,7 +92,7 @@ Then run `nikos update`. The new model is pulled on the next playbook run.
 
 ### The default
 
-`gemma4:e4b` (6.6 GB), a general model that also reads images. It replaced
+`qwen3.5:4b` (3.4 GB), a general model with a thinking mode. It replaced
 `qwen2.5-coder:7b`, which is now the small end of the `ollama-coding` group:
 `qwen3-coder` publishes no tag below `30b` (19 GB), too large to pull onto
 every machine by default.
@@ -137,7 +137,7 @@ is disk and bandwidth only.
 `deepseek-r1:1.5b`, `qwen3:4b`, `phi4`, `deepseek-coder-v2`, `qwen2.5-coder:14b`,
 `llama3.1`, `gemma3`, `mistral:7b`, `granite3.2-vision`, `minicpm-v` and
 `qwen2.5vl` are no longer pulled. Their places go to `gpt-oss`, `qwen3.5`,
-`gemma4` and `qwen3-vl`, and the default moves to `gemma4:e4b`. Models already on disk are not removed; `ollama rm <name>` frees
+`gemma4` and `qwen3-vl`, and the default moves to `qwen3.5:4b`. Models already on disk are not removed; `ollama rm <name>` frees
 the space.
 
 ### Models that were retired in 0.5.0
@@ -197,7 +197,7 @@ nikos_tesseract_languages: ["all"]   # pulls tesseract-ocr-all
 You can also pull models manually at any time:
 
 ```bash
-ollama pull gemma4:e4b
+ollama pull qwen3.5:4b
 ollama pull granite4:micro
 ollama list
 ```

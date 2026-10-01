@@ -117,7 +117,7 @@ nordic_grub_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/
 #
 # The same tags as distrodeck's model groups, so a machine set up by either
 # tool pulls the same models.
-ollama_default_model: "gemma4:e4b"                # 6.6 GB
+ollama_default_model: "qwen3.5:4b"                # 3.4 GB
 
 # Optional models, grouped by what they are for. Each group has its own tag, so
 # a laptop can take one capability without pulling all of them:

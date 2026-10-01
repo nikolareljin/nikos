@@ -53,7 +53,7 @@ All notable changes to NikOS are documented here.
   and Secure Boot/SBAT.
 
 ### Changed
-- **Ollama model groups match distrodeck.** Default `gemma4:e4b`; reasoning
+- **Ollama model groups match distrodeck.** Default `qwen3.5:4b` (3.4 GB); reasoning
   `deepseek-r1:8b`, `qwen3:8b`, `gpt-oss:20b`; coding `qwen2.5-coder:7b`,
   `qwen3-coder:30b`; text `granite4:micro`, `qwen3.5:9b`, `gemma4:12b`; vision
   `qwen3-vl:4b`, `qwen3-vl:8b`; embedding `embeddinggemma:300m`,
