@@ -27,8 +27,9 @@
   become: true
   when: nikos_ollama_mode == 'local'
 
-# A listener whose PID is not ollama.service's MainPID is a second owner. A
-# configured port that differs from the one the unit is serving on counts too.
+# A listener whose PID is not ollama.service's MainPID is a second owner. Only
+# the configured port is probed: moving nikos_ollama_host to a free port passes
+# and the drop-in change restarts the unit onto it.
 - name: Refuse to start a second owner of the Ollama port
   vars:
     ai_stack_ollama_main_pid: "{{ ((ai_stack_ollama_unit.status | default({})).MainPID | default('0')) | string }}"
