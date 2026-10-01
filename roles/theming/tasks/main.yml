@@ -130,6 +130,45 @@
     - not ansible_check_mode
     - theming_nordic_grub_theme_dir is defined
 
+# GRUB reads the theme before the kernel runs, so it must sit on a filesystem
+# GRUB can open. With an encrypted root or a separate /boot, /usr/share is not
+# that filesystem, and the theme silently fails to load. Those installs also
+# get a copy in /boot and GRUB_THEME points there. An image build keeps
+# /usr/share only: its squashfs excludes boot/grub.
+- name: Find the block devices under the root filesystem
+  ansible.builtin.shell: |
+    set -o pipefail
+    lsblk -nso TYPE "$(findmnt -no SOURCE /)" 2>/dev/null || true
+  args:
+    executable: /bin/bash
+  register: theming_root_stack
+  changed_when: false
+  check_mode: false
+  when: not (nikos_image_build | default(false) | bool)
+
+- name: Choose where GRUB reads the theme from
+  vars:
+    theming_mount_points: "{{ ansible_facts.mounts | default([]) | map(attribute='mount') | list }}"
+    theming_root_types: "{{ theming_root_stack.stdout_lines | default([]) }}"
+  ansible.builtin.set_fact:
+    theming_grub_theme_root: >-
+      {{ '/boot/grub/themes'
+         if (not (nikos_image_build | default(false) | bool))
+            and (('/boot' in theming_mount_points) or ('crypt' in theming_root_types))
+         else '/usr/share/grub/themes' }}
+
+- name: Copy the Nordic GRUB theme to /boot for GRUB to read
+  ansible.builtin.copy:
+    src: "{{ theming_nordic_grub_theme_dir }}/"
+    dest: /boot/grub/themes/Nordic/
+    remote_src: true
+    mode: "0644"
+    directory_mode: "0755"
+  when:
+    - not ansible_check_mode
+    - theming_nordic_grub_theme_dir is defined
+    - theming_grub_theme_root == '/boot/grub/themes'
+
 # GRUB is not always present. An installer payload carries the system that gets
 # copied to the target disk, and the bootloader is installed onto that disk
 # afterwards, so /etc/default/grub does not exist while the payload is being
@@ -144,7 +183,7 @@
   ansible.builtin.lineinfile:
     path: /etc/default/grub
     regexp: "^#?GRUB_THEME="
-    line: 'GRUB_THEME="/usr/share/grub/themes/Nordic/theme.txt"'
+    line: 'GRUB_THEME="{{ theming_grub_theme_root }}/Nordic/theme.txt"'
   when:
     - theming_grub_defaults.stat.exists
     - ansible_check_mode or theming_nordic_grub_theme_dir is defined

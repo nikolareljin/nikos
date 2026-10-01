@@ -8,8 +8,12 @@ upgraded inside the squashfs so it no longer matches the live kernel.
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
@@ -59,10 +63,48 @@ def test_image_build_is_detected_from_chroot_skel_or_isoforge() -> None:
     assert iso["provisioning"]["ansible"]["extra_vars"]["nikos_image_build"] is True
 
 
-def test_grub_theme_lives_outside_boot() -> None:
+def test_grub_theme_is_pointed_at_the_chosen_root() -> None:
     theming = (REPO / "roles" / "theming" / "tasks" / "main.yml").read_text(encoding="utf-8")
-    assert "/boot/grub/themes" not in theming
-    assert 'GRUB_THEME="/usr/share/grub/themes/Nordic/theme.txt"' in theming
+    assert 'GRUB_THEME="{{ theming_grub_theme_root }}/Nordic/theme.txt"' in theming
+    assert "dest: /usr/share/grub/themes/Nordic/" in theming
+
+
+@pytest.mark.parametrize(
+    "mounts,root_types,image,expected",
+    [
+        (["/"], ["part", "disk"], False, "/usr/share/grub/themes"),
+        (["/", "/boot"], ["part", "disk"], False, "/boot/grub/themes"),
+        (["/", "/boot/efi"], ["crypt", "part", "disk"], False, "/boot/grub/themes"),
+        (["/", "/boot/efi"], ["part", "disk"], False, "/usr/share/grub/themes"),
+        (["/", "/boot"], ["crypt", "part"], True, "/usr/share/grub/themes"),
+    ],
+    ids=["plain", "separate-boot", "luks-root", "efi-only", "image-build"],
+)
+def test_grub_theme_path_selection(tmp_path, mounts, root_types, image, expected) -> None:
+    assert shutil.which("ansible-playbook"), "ansible-playbook is required"
+    theming = (REPO / "roles" / "theming" / "tasks" / "main.yml").read_text(encoding="utf-8")
+    start = theming.index("- name: Choose where GRUB reads the theme from")
+    end = theming.index("- name: Copy the Nordic GRUB theme to /boot")
+    (tmp_path / "tasks.yml").write_text("---\n" + theming[start:end], encoding="utf-8")
+    (tmp_path / "play.yml").write_text(
+        "---\n- hosts: localhost\n  connection: local\n  gather_facts: false\n  tasks:\n"
+        "    - ansible.builtin.include_tasks: tasks.yml\n"
+        "    - ansible.builtin.debug:\n        msg: \"ROOT={{ theming_grub_theme_root }}\"\n",
+        encoding="utf-8",
+    )
+    extra = json.dumps(
+        {
+            "theming_mount_points": mounts,
+            "theming_root_types": root_types,
+            "nikos_image_build": image,
+        }
+    )
+    result = subprocess.run(
+        ["ansible-playbook", "play.yml", "-i", "localhost,", "-e", extra],
+        cwd=tmp_path, capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"ROOT={expected}" in result.stdout, result.stdout
 
 
 def test_kernel_is_held_for_the_upgrade_and_always_released() -> None:
