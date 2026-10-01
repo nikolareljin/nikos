@@ -5,6 +5,24 @@
 # normal setup and add flows conservative.
 nikos_update_mode: true
 
+# ── Inference endpoint ──────────────────────────────────────────────────────
+# Exactly one process on a machine owns the Ollama port. The playbook and the
+# `nikos` CLI both read these names, so set them once, in vars/local.yml.
+#
+#   nikos_ollama_mode  local  - this machine runs Ollama under systemd (default)
+#                      remote - nothing local; clients use nikos_ollama_remote_url
+#   nikos_node_role    workstation | inference | services - what this machine
+#                      is for, so a lab of several machines can be described
+#
+# nikos_ollama_host is the listen address written to the ollama.service drop-in.
+# It must stay on loopback: Ollama has no authentication, so binding 0.0.0.0
+# would hand every model on the machine to the whole network. The play refuses
+# any other value.
+nikos_ollama_mode: "local"
+nikos_node_role: "workstation"
+nikos_ollama_host: "127.0.0.1:11434"
+nikos_ollama_remote_url: ""
+
 nikos_version: "{{ lookup('file', playbook_dir + '/VERSION') | trim }}"
 
 # Timezone and locale

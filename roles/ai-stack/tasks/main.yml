@@ -1,24 +1,91 @@
 ---
+# The upstream installer writes a *system* unit, /etc/systemd/system/ollama.service.
+# Earlier releases managed a user-scope unit that does not exist and waited on
+# /tmp/ollama.sock, which Ollama never creates; both had failed_when: false, so
+# every run swallowed two failures and a 30 second timeout. The listen address
+# is now set in one place (nikos_ollama_host) and readiness is an HTTP request.
 - name: Install Ollama
-  ansible.builtin.shell: curl -fsSL https://ollama.ai/install.sh | sh  # noqa: command-instead-of-module risky-shell-pipe
+  ansible.builtin.shell: curl -fsSL https://ollama.com/install.sh | sh  # noqa: command-instead-of-module risky-shell-pipe
   args:
     creates: /usr/local/bin/ollama
     executable: /bin/bash
+  when: nikos_ollama_mode == 'local'
 
-- name: Start Ollama service (user)
+- name: Check whether the Ollama service is already running
+  ansible.builtin.command: systemctl is-active ollama
+  register: ai_stack_ollama_active
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: nikos_ollama_mode == 'local'
+
+# Whichever process binds first wins and the loser logs to a file nobody reads.
+# When the port is held and NikOS's own unit is not the one running, stop here
+# and name the holder rather than install a second owner.
+- name: Find what is listening on the Ollama port
+  ansible.builtin.command: ss -Hltnp "sport = :{{ nikos_ollama_host.split(':')[-1] }}"
+  register: ai_stack_ollama_port
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  when: nikos_ollama_mode == 'local'
+
+- name: Refuse to start a second owner of the Ollama port
+  ansible.builtin.fail:
+    msg: >-
+      Port {{ nikos_ollama_host.split(':')[-1] }} is already in use by another
+      process: {{ ai_stack_ollama_port.stdout | trim }}.
+      NikOS manages exactly one owner of this port (ollama.service). Stop that
+      process, or set nikos_ollama_mode to "remote" in vars/local.yml if this
+      machine should use an endpoint it does not run.
+  when:
+    - nikos_ollama_mode == 'local'
+    - (ai_stack_ollama_port.stdout | default('') | trim) | length > 0
+    - (ai_stack_ollama_active.stdout | default('') | trim) != 'active'
+
+- name: Create the Ollama unit drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/ollama.service.d
+    state: directory
+    mode: "0755"
+  become: true
+  when: nikos_ollama_mode == 'local'
+
+- name: Write the Ollama listen address drop-in
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ollama.service.d/nikos.conf
+    mode: "0644"
+    content: |
+      # Managed by NikOS (roles/ai-stack). Set nikos_ollama_host in vars/local.yml.
+      [Service]
+      Environment="OLLAMA_HOST={{ nikos_ollama_host }}"
+  become: true
+  register: ai_stack_ollama_dropin
+  when: nikos_ollama_mode == 'local'
+
+- name: Enable and start the Ollama system service
   ansible.builtin.systemd:
     name: ollama
     enabled: true
-    state: started
-    scope: user
-  failed_when: false
+    daemon_reload: true
+    state: "{{ 'restarted' if ai_stack_ollama_dropin is changed else 'started' }}"
+  become: true
+  when:
+    - nikos_ollama_mode == 'local'
+    - not ansible_check_mode
 
-- name: Wait for Ollama service to be ready
-  ansible.builtin.wait_for:
-    path: /tmp/ollama.sock
-    state: present
-    timeout: 30
-  failed_when: false
+- name: Wait for the Ollama endpoint to answer
+  ansible.builtin.uri:
+    url: "http://{{ nikos_ollama_host }}/api/version"
+    return_content: false
+  register: ai_stack_ollama_ready
+  until: ai_stack_ollama_ready.status == 200
+  retries: 15
+  delay: 2
+  when:
+    - nikos_ollama_mode == 'local'
+    - not ansible_check_mode
 
 - name: Pull default Ollama model
   ansible.builtin.command: ollama pull {{ ollama_default_model }}
@@ -28,6 +95,9 @@
   retries: 3
   delay: 10
   ignore_errors: true
+  environment:
+    OLLAMA_HOST: "{{ nikos_ollama_host }}"
+  when: nikos_ollama_mode == 'local'
 
 # Each capability group carries its own tag as well as the shared
 # `ollama-models` one, so a laptop can take a single group without pulling the
@@ -44,6 +114,9 @@
   retries: 3
   delay: 10
   ignore_errors: true
+  environment:
+    OLLAMA_HOST: "{{ nikos_ollama_host }}"
+  when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-reasoning]
 
 - name: Pull code Ollama models when requested - about 33 GB
@@ -57,6 +130,9 @@
   retries: 3
   delay: 10
   ignore_errors: true
+  environment:
+    OLLAMA_HOST: "{{ nikos_ollama_host }}"
+  when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-coding]
 
 - name: Pull text generation Ollama models when requested - about 22 GB
@@ -70,6 +146,9 @@
   retries: 3
   delay: 10
   ignore_errors: true
+  environment:
+    OLLAMA_HOST: "{{ nikos_ollama_host }}"
+  when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-text]
 
 - name: Pull image analysis Ollama models when requested - about 15 GB
@@ -83,6 +162,9 @@
   retries: 3
   delay: 10
   ignore_errors: true
+  environment:
+    OLLAMA_HOST: "{{ nikos_ollama_host }}"
+  when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-vision]
 
 - name: Pull embedding Ollama models when requested - about 0.3 GB
@@ -96,6 +178,9 @@
   retries: 3
   delay: 10
   ignore_errors: true
+  environment:
+    OLLAMA_HOST: "{{ nikos_ollama_host }}"
+  when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-embedding]
 
 

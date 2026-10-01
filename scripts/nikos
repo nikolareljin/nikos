@@ -528,11 +528,55 @@ cmd_add() {
   esac
 }
 
+# _nikos_var <name> <default>
+#
+# Reads a top-level scalar from vars/local.yml, then vars/main.yml - the same
+# precedence the playbook uses - so the CLI and the play agree on one value.
+# Only `name: value` lines are understood; anything templated falls back.
+_nikos_var() {
+  local name="$1" default="${2:-}" file value
+  for file in "${NIKOS_HOME}/vars/local.yml" "${NIKOS_HOME}/vars/main.yml"; do
+    [[ -r "${file}" ]] || continue
+    value="$(sed -nE "s/^${name}:[[:space:]]*[\"']?([^\"'#]*[^\"'#[:space:]])?[\"']?[[:space:]]*(#.*)?$/\\1/p" "${file}" | tail -n 1)"
+    if [[ -n "${value}" && "${value}" != *"{{"* ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  done
+  printf '%s\n' "${default}"
+}
+
+# The URL clients should use for Ollama on this machine.
+_ollama_endpoint() {
+  if [[ "$(_nikos_var nikos_ollama_mode local)" == "remote" ]]; then
+    _nikos_var nikos_ollama_remote_url ""
+  else
+    printf 'http://%s\n' "$(_nikos_var nikos_ollama_host 127.0.0.1:11434)"
+  fi
+}
+
+# Prints the model names an endpoint reports. Fails when it does not answer.
+_ollama_endpoint_models() {
+  local endpoint="$1" body
+  [[ -n "${endpoint}" ]] || return 1
+  curl -fsS --max-time 5 "${endpoint%/}/api/version" >/dev/null 2>&1 || return 1
+  body="$(curl -fsS --max-time 5 "${endpoint%/}/api/tags" 2>/dev/null)" || return 1
+  printf '%s' "${body}" | grep -oE '"name":"[^"]+"' | sed 's/^"name":"//; s/"$//'
+  return 0
+}
+
 cmd_status() {
+  local endpoint
+  endpoint="$(_ollama_endpoint)"
   print_info "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
   echo ""
+  echo "Inference:"
+  echo "  mode:      $(_nikos_var nikos_ollama_mode local)"
+  echo "  endpoint:  ${endpoint:-unset}"
+  echo "  node role: $(_nikos_var nikos_node_role workstation)"
+  echo ""
   echo "Ollama models:"
-  ollama list 2>/dev/null || echo "  Ollama not running"
+  _ollama_endpoint_models "${endpoint}" | sed 's/^/  /' || echo "  endpoint not answering"
   echo ""
   echo "distrodeck:"
   distrodeck --version 2>/dev/null || echo "  distrodeck not found"
@@ -570,12 +614,36 @@ cmd_doctor() {
       print_warn "${label} (optional or pending first login)"
     fi
   }
+  # A binary on PATH says nothing about whether anything answers. Issue a
+  # request and read the reply, in every mode: a remote node can be off or
+  # moved, and only a request finds that out.
+  _doctor_inference() {
+    local mode endpoint models
+    mode="$(_nikos_var nikos_ollama_mode local)"
+    endpoint="$(_ollama_endpoint)"
+    print_info "Inference: mode=${mode} endpoint=${endpoint:-unset} node role=$(_nikos_var nikos_node_role workstation)"
+    if [[ "${mode}" == "local" ]]; then
+      check "Ollama installed" command -v ollama
+      check "Ollama service active" systemctl is-active --quiet ollama
+    fi
+    if models="$(_ollama_endpoint_models "${endpoint}")"; then
+      print_success "Ollama endpoint answers at ${endpoint}"
+      if [[ -n "${models}" ]]; then
+        printf '  models: %s\n' "$(printf '%s' "${models}" | paste -sd ' ' -)"
+      else
+        printf '  models: none pulled yet\n'
+      fi
+    else
+      print_error "Ollama endpoint does not answer at ${endpoint:-unset}"
+      issues=$((issues + 1))
+    fi
+  }
   print_info "NikOS Doctor — checking system health..."
   check "ansible installed" command -v ansible-playbook
   check "dialog installed" command -v dialog
   check "gh CLI installed" command -v gh
   check "tmux installed" command -v tmux
-  check "Ollama installed" command -v ollama
+  _doctor_inference
   check "VS Code installed" command -v code
   check "distrodeck installed" command -v distrodeck
   optional_check "llama.cpp installed" command -v llama-server
@@ -596,6 +664,7 @@ cmd_doctor() {
     print_success "All checks passed."
   else
     print_error "${issues} issue(s) found. Run 'nikos update' to attempt repair."
+    return 1
   fi
 }
 
