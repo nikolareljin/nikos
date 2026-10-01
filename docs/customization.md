@@ -217,7 +217,7 @@ nikos add network    # nmap, wireshark, OpenVPN, traceroute, tcpdump
 nikos add music      # LMMS, Ardour (Flatpak), Audacity
 nikos add education  # LibreOffice, draw.io (Flatpak), Anki
 nikos add neovim     # Neovim plus a minimal lazy.nvim bootstrap config
-nikos add java       # OpenJDK 21
+nikos add java       # OpenJDK 21; set nikos_java_versions: [21, 17, 25] for more
 nikos add podman     # Podman container runtime
 nikos add bun        # Bun JavaScript runtime
 nikos add redis      # Redis server and Python client

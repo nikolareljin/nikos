@@ -141,7 +141,7 @@ nikos add network    # install optional: nmap, wireshark, OpenVPN
 nikos add music      # install optional: LMMS, Ardour, Audacity
 nikos add education  # install optional: LibreOffice, draw.io, Anki
 nikos add neovim     # install optional: Neovim + starter lazy.nvim config
-nikos add java       # install optional: OpenJDK 21
+nikos add java       # install optional: OpenJDK 21 (nikos_java_versions)
 nikos add podman     # install optional: Podman
 nikos add bun        # install optional: Bun JavaScript runtime
 nikos add postgres   # install optional: PostgreSQL + pgvector
