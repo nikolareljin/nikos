@@ -31,7 +31,7 @@ across roles rather than gathered in one:
 | `ollama-models`, `ollama-reasoning`, `ollama-coding`, `ollama-text`, `ollama-vision`, `ollama-embedding` | `roles/ai-stack/tasks/main.yml` |
 
 That is thirteen tags `site.yml` never mentions. It carries the other
-twenty-six names, two of which — `always` and `never` — are Ansible keywords
+twenty-six names, two of which (`always` and `never`) are Ansible keywords
 rather than bundles. So reading `site.yml` finds a list missing well over a
 third of what exists, and grepping the roles finds the rest only if you
 already know which roles to open. Only
@@ -73,8 +73,8 @@ the guarantee itself — an untagged role cannot be named in `--tags` or
 `--skip-tags` at all — and it no longer does, so anything that offers bundles
 has to say which names it accepts instead of deriving them from the tag list.
 
-**Always.** Roles carried in `site.yml` with no role-level tag —
-`github-setup`, `cloud-ai-cli`, `agent-dev`, `dev-tools` — cannot
+**Always.** Roles carried in `site.yml` with no role-level tag
+(`github-setup`, `cloud-ai-cli`, `agent-dev`, `dev-tools`) cannot
 be named in `--tags` or `--skip-tags` and run in an ordinary untagged play.
 `docs/debugging.md` points theming changes at `nikos setup`, which re-runs the
 intended setup while honouring saved `--skip-tags`. This distinction is
@@ -82,7 +82,7 @@ deliberate: the untagged roles are not bundles and must not be offered as if
 they were.
 
 Three of the untagged roles, and the tagged `editors`, contain individually
-tagged tasks — `editors`, `cloud-ai-cli`, `agent-dev` and `dev-tools` each hold
+tagged tasks: `editors`, `cloud-ai-cli`, `agent-dev` and `dev-tools` each hold
 one of the AI sub-tools above. Skipping that tag drops those tasks; the rest of the role still runs.
 The role is what is unconditional here, not every task in it.
 

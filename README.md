@@ -78,7 +78,7 @@ At the end, you should end up with something like:
 ### AI stack
 | Tool | Purpose |
 |---|---|
-| [Ollama](https://ollama.ai) | Local LLM runtime — `qwen3.5:4b` pre-pulled |
+| [Ollama](https://ollama.com) | Local LLM runtime, `qwen3.5:4b` pre-pulled |
 | [aider](https://aider.chat) | AI pair programmer in the terminal |
 | [Miniforge](https://github.com/conda-forge/miniforge) | Python distribution (conda) |
 | `nikos-ai` conda env | Python 3.11-3.13 + PyTorch CPU + Jupyter + transformers + pandas |
@@ -256,8 +256,8 @@ aider / Claude Code / Continue  →  use in code
 
 - [Installation guide](docs/install.md) — detailed install, requirements, troubleshooting
 - [Customization](docs/customization.md) — vars, roles, optional bundles
-- [Profiles](docs/profiles.md) — desktop and server, and which roles each runs
-- [Dual boot](docs/dual-boot.md) — os-prober, boot order, UEFI vs legacy, Secure Boot
+- [Profiles](docs/profiles.md) - desktop and server, and which roles each runs
+- [Dual boot](docs/dual-boot.md) - os-prober, boot order, UEFI vs legacy, Secure Boot
 - [Debugging](docs/debugging.md) — `nikos doctor`, common issues, logs
 - [Development](docs/development.md) — adding roles, testing, contributing
 
