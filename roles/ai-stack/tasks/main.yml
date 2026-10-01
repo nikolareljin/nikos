@@ -50,7 +50,7 @@
 # After the port check, so a machine whose port is already taken is refused
 # before a second engine is installed onto it.
 - name: Install Ollama
-  ansible.builtin.shell: curl -fsSL https://ollama.com/install.sh | sh  # noqa: command-instead-of-module risky-shell-pipe
+  ansible.builtin.shell: set -o pipefail; curl -fsSL https://ollama.com/install.sh | sh  # noqa: command-instead-of-module
   args:
     creates: /usr/local/bin/ollama
     executable: /bin/bash
@@ -88,9 +88,15 @@
 
 - name: Update Ollama to the latest release
   vars:
-    ai_stack_ollama_have: "{{ (ai_stack_ollama_installed.stdout | default('')) | regex_search('[0-9]+[.][0-9]+[.][0-9]+') | default('', true) }}"
+    # With the server down, or older than the binary, `ollama --version`
+    # prints "Warning: client version is X" (alone, or after the server's
+    # "ollama version is Y"). The binary is what the installer replaces.
+    ai_stack_ollama_out: "{{ ai_stack_ollama_installed.stdout | default('') }}"
+    ai_stack_ollama_have: >-
+      {{ ((ai_stack_ollama_out | regex_findall('client version is ([0-9]+[.][0-9]+[.][0-9]+)'))
+          + (ai_stack_ollama_out | regex_findall('[0-9]+[.][0-9]+[.][0-9]+'))) | first | default('', true) }}
     ai_stack_ollama_want: "{{ ((ai_stack_ollama_latest.json | default({})).tag_name | default('')) | regex_replace('^v', '') }}"
-  ansible.builtin.shell: curl -fsSL https://ollama.com/install.sh | sh  # noqa: command-instead-of-module risky-shell-pipe
+  ansible.builtin.shell: set -o pipefail; curl -fsSL https://ollama.com/install.sh | sh  # noqa: command-instead-of-module
   args:
     executable: /bin/bash
   become: true
@@ -103,7 +109,21 @@
     - not ansible_check_mode
     - ai_stack_ollama_install is not changed
     - ai_stack_ollama_want is match('^[0-9]+[.][0-9]+[.][0-9]+$')
-    - ai_stack_ollama_have | length == 0 or ai_stack_ollama_want is version(ai_stack_ollama_have, '>')
+    # An unreadable installed version skips rather than re-downloading the
+    # engine on every update.
+    - ai_stack_ollama_have is match('^[0-9]+[.][0-9]+[.][0-9]+$')
+    - ai_stack_ollama_want is version(ai_stack_ollama_have, '>')
+
+- name: Say why Ollama was not checked for an update
+  ansible.builtin.debug:
+    msg: >-
+      Could not read the latest Ollama release from GitHub (offline, or the
+      unauthenticated API rate limit); Ollama was left at its installed version.
+  when:
+    - nikos_ollama_mode == 'local'
+    - nikos_update_mode | bool
+    - ai_stack_ollama_install is not changed
+    - ((ai_stack_ollama_latest.json | default({})).tag_name | default('')) | length == 0
 
 - name: Create the Ollama unit drop-in directory
   ansible.builtin.file:
