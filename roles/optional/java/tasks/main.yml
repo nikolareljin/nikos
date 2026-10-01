@@ -19,11 +19,16 @@
 - name: Point java and javac at the first listed release
   community.general.alternatives:
     name: "{{ item }}"
-    path: "/usr/lib/jvm/java-{{ nikos_java_versions | first }}-openjdk-{{ java_deb_arch }}/bin/{{ item }}"
+    path: "/usr/lib/jvm/java-{{ java_default }}-openjdk-{{ java_deb_arch }}/{{ java_bin_dir[item] }}/{{ item }}"
   loop:
     - java
     - javac
   vars:
+    java_default: "{{ nikos_java_versions | first | string }}"
+    # OpenJDK 8 keeps the java launcher under jre/; 9 and later have one bin/.
+    java_bin_dir:
+      java: "{{ 'jre/bin' if java_default == '8' else 'bin' }}"
+      javac: bin
     java_deb_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_architecture] | default(ansible_architecture) }}"
   become: true
   when: not ansible_check_mode

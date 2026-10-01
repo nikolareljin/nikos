@@ -115,3 +115,67 @@ def test_kernel_is_held_for_the_upgrade_and_always_released() -> None:
     release = upgrade["always"][0]["ansible.builtin.dpkg_selections"]
     assert release["selection"] == "install"
     assert "linux-(image|generic" in upgrade["vars"]["base_kernel_packages"]
+
+
+def test_root_stack_probe_sees_luks_under_lvm_on_btrfs(tmp_path) -> None:
+    # Real lsblk/findmnt shapes for btrfs on LVM on LUKS: findmnt without -v
+    # appends the subvolume ("[/@]"), which lsblk rejects, and lsblk without -r
+    # prefixes nested layers with tree glyphs, so "crypt" was never a line.
+    task = next(
+        t for t in _tasks("roles/theming/tasks/main.yml")
+        if t.get("name") == "Find the block devices under the root filesystem"
+    )
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "findmnt").write_text(
+        "#!/bin/bash\n"
+        'case "$1" in *v*) echo /dev/mapper/vg-root;; *) echo "/dev/mapper/vg-root[/@]";; esac\n',
+        encoding="utf-8",
+    )
+    (fake / "lsblk").write_text(
+        "#!/bin/bash\n"
+        'dev="${!#}"; [[ "$dev" == *"["* ]] && { echo "lsblk: $dev: not a block device" >&2; exit 32; }\n'
+        'case "$1" in *r*) printf "lvm\\ncrypt\\npart\\ndisk\\n";;\n'
+        '  *) printf "lvm\\n\\xe2\\x94\\x94\\xe2\\x94\\x80crypt\\n  \\xe2\\x94\\x94\\xe2\\x94\\x80part\\n";; esac\n',
+        encoding="utf-8",
+    )
+    for tool in ("findmnt", "lsblk"):
+        (fake / tool).chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-c", task["ansible.builtin.shell"]],
+        capture_output=True, text=True, timeout=30,
+        env={"PATH": f"{fake}:/usr/bin:/bin"},
+    )
+    assert "crypt" in result.stdout.splitlines(), result.stdout
+
+
+@pytest.mark.parametrize(
+    "versions,expected",
+    [
+        ([21, 17], "/usr/lib/jvm/java-21-openjdk-amd64/bin/java"),
+        ([8, 21], "/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java"),
+    ],
+    ids=["21-first", "8-first"],
+)
+def test_java_alternative_matches_the_registered_path(tmp_path, versions, expected) -> None:
+    # OpenJDK 8 registers its java alternative under jre/bin. A path the
+    # alternatives system does not know is added as a new entry instead.
+    assert shutil.which("ansible-playbook"), "ansible-playbook is required"
+    task = next(
+        t for t in _tasks("roles/optional/java/tasks/main.yml")
+        if "community.general.alternatives" in t
+    )
+    play = [{
+        "hosts": "localhost", "connection": "local", "gather_facts": False,
+        "vars": {**task["vars"], "ansible_architecture": "x86_64",
+                 "nikos_java_versions": versions, "item": "java"},
+        "tasks": [{"ansible.builtin.debug": {
+            "msg": "PATH=" + task["community.general.alternatives"]["path"]}}],
+    }]
+    (tmp_path / "play.yml").write_text(yaml.safe_dump(play), encoding="utf-8")
+    result = subprocess.run(
+        ["ansible-playbook", "play.yml", "-i", "localhost,"],
+        cwd=tmp_path, capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"PATH={expected}" in result.stdout, result.stdout

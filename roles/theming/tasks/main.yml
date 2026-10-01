@@ -138,7 +138,10 @@
 - name: Find the block devices under the root filesystem
   ansible.builtin.shell: |
     set -o pipefail
-    lsblk -nso TYPE "$(findmnt -no SOURCE /)" 2>/dev/null || true
+    # -v drops a btrfs subvolume suffix ("/dev/sda2[/@]"), which lsblk rejects;
+    # -r prints one bare TYPE per line, without the tree prefix ("`-crypt")
+    # that would hide an encrypted layer under LVM.
+    lsblk -nrso TYPE "$(findmnt -nvo SOURCE /)" 2>/dev/null || true
   args:
     executable: /bin/bash
   register: theming_root_stack
