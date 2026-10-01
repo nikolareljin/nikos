@@ -590,7 +590,7 @@ cmd_add() {
       _select_tools || { print_error "Tool selection canceled; nothing was installed."; exit 130; }
       tools="$(_get_saved_tools)"
       if [[ -z "${tools}" ]]; then
-        print_info "No distrodeck tools selected."
+        print_info "No distrodeck tools selected. With a distrodeck that has no catalog, 'nikos setup' installs its default set."
         return 0
       fi
       bin="$(_distrodeck_bin)" || { print_error "distrodeck not found. Run 'nikos setup' first."; exit 1; }
