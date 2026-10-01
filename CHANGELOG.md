@@ -23,7 +23,9 @@ All notable changes to NikOS are documented here.
   `desktop`, `theming`, `editors`, `music` and `education` are skipped even when
   named in `--tags`. The installer asks for the profile in both selector paths,
   says whether a display manager was found, and persists the answer; `nikos
-  update` does not ask again. `editors` gains a role tag. `docs/profiles.md`
+  update` does not ask again. On a server, `nikos add music`/`education` stop
+  with an error rather than report success for a role that will not run.
+  `editors` gains a role tag. `docs/profiles.md`
   assigns every role to a layer. `./test --profile=server` builds an Ubuntu
   Server 24.04 VM and checks that no desktop artefact is present.
 - **A `mongodb` bundle.** MongoDB Community 8.0 from repo.mongodb.org (signed-by
