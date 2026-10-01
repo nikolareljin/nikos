@@ -160,6 +160,10 @@ ollama_optional_models: >-
 # A release tag, not main, so an install is reproducible and an update moves
 # only when NikOS moves this pin.
 distrodeck_version: "0.10.3"
+# Comma-separated distrodeck tools to install. install.sh and `nikos add tools`
+# set it from the saved selection (~/.config/nikos/selected-options.env); empty
+# installs none.
+nikos_distrodeck_tools: ""
 
 # ── Java (optional bundle) ───────────────────────────────────────────────────
 # OpenJDK releases `nikos add java` installs. The first is the default java.

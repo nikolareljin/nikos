@@ -112,6 +112,13 @@ else
   print_warn()    { echo "[warn] $*"; }
 fi
 
+_TOOLS_LIB_LOADED=false
+if [[ -f "${NIKOS_HOME}/scripts/nikos-tools.sh" ]]; then
+  # shellcheck source=scripts/nikos-tools.sh
+  source "${NIKOS_HOME}/scripts/nikos-tools.sh"
+  _TOOLS_LIB_LOADED=true
+fi
+
 if [[ -f "${REPO_SYNC_HELPERS}" ]]; then
   # shellcheck source=/dev/null
   source "${REPO_SYNC_HELPERS}"
@@ -219,6 +226,7 @@ Usage:
   nikos setup            Run full NikOS playbook (first install)
   nikos update           Move to the newest release, then re-run playbook (idempotent)
   nikos update --ref <r> Update to a specific branch or tag instead
+  nikos add tools        Choose distrodeck tools by category and install them
   nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw
   nikos status           Show NikOS version, Ollama models, installed roles
   nikos doctor           Check for broken configs and missing dependencies
@@ -248,7 +256,13 @@ _get_default_skip_tags() {
 }
 
 _save_skip_tags() {
-  local optional_tags="${2:-}" migrated="${3:-}"
+  local optional_tags="${2:-}" migrated="${3:-}" tools="${NIKOS_TOOLS_TO_SAVE-}"
+  # The distrodeck tool list rides along unchanged unless the caller sets
+  # NIKOS_TOOLS_TO_SAVE, so rewriting the skip tags can never drop it.
+  if [[ -z "${NIKOS_TOOLS_TO_SAVE+set}" && -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    tools="$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_DISTRODECK_TOOLS_SAVED:-}")"
+  fi
   if [[ $# -lt 3 && -f "${SELECTIONS_FILE}" ]]; then
     # shellcheck source=/dev/null
     source "${SELECTIONS_FILE}"
@@ -260,6 +274,7 @@ _save_skip_tags() {
     printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
     printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${optional_tags}"
     printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "${migrated}"
+    printf "NIKOS_DISTRODECK_TOOLS_SAVED=%q\n" "${tools}"
   } > "${SELECTIONS_FILE}"
 }
 
@@ -296,6 +311,25 @@ _get_saved_optional_tags() {
   fi
 }
 
+
+_get_saved_tools() {
+  [[ -f "${SELECTIONS_FILE}" ]] || { printf '\n'; return 0; }
+  # shellcheck source=/dev/null
+  ( source "${SELECTIONS_FILE}"; printf '%s\n' "${NIKOS_DISTRODECK_TOOLS_SAVED:-}" )
+}
+
+# _save_tools <csv> - replaces the saved distrodeck tool list, keeping the rest.
+_save_tools() {
+  local skip optional migrated=""
+  skip="$(_get_default_skip_tags)"
+  if [[ -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    optional="$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED:-}")"
+    # shellcheck source=/dev/null
+    migrated="$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_OPTIONAL_TAGS_MIGRATED:-}")"
+  fi
+  NIKOS_TOOLS_TO_SAVE="$1" _save_skip_tags "${skip}" "${optional:-}" "${migrated}"
+}
 
 _add_optional_tag() {
   local tag="$1" optional_tags
@@ -353,6 +387,7 @@ _playbook() {
     skip_tags="$(_get_default_skip_tags)"
   fi
   [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
+  playbook_args+=(-e "nikos_distrodeck_tools=$(_get_saved_tools)")
   playbook_args+=("${extra_args[@]}")
 
   if _can_use_gauge && _collect_become_password; then
@@ -424,7 +459,43 @@ _playbook() {
   return "${_rc}"
 }
 
+# The distrodeck NikOS installed, or the one on PATH.
+_distrodeck_bin() {
+  if [[ -x "${HOME}/Projects/distrodeck/distrodeck" ]]; then
+    printf '%s\n' "${HOME}/Projects/distrodeck/distrodeck"
+  else
+    command -v distrodeck
+  fi
+}
+
+# Offers distrodeck's catalog by category and saves the answer. Returns 0 with
+# nothing changed when there is no terminal or the installed distrodeck has no
+# catalog; returns non-zero only when the user cancels.
+_select_tools() {
+  local bin catalog saved
+  [[ "${_TOOLS_LIB_LOADED}" == "true" ]] || return 0
+  if ! [[ -e /dev/tty ]] || ! { : >/dev/tty; } 2>/dev/null; then
+    return 0
+  fi
+  saved="$(_get_saved_tools)"
+  if ! bin="$(_distrodeck_bin)" || ! catalog="$(nikos_tools_catalog "${bin}")"; then
+    print_info "This distrodeck has no tool catalog (install-tools --list-catalog); skipping tool selection."
+    return 0
+  fi
+  NIKOS_SELECTED_TOOLS="${saved}"
+  if [[ "${USE_DIALOG}" != "0" ]] && command -v dialog >/dev/null 2>&1; then
+    declare -F dialog_init >/dev/null 2>&1 && dialog_init
+    nikos_tools_select_dialog "${catalog}" "${saved}" || return $?
+    _restore_terminal_cursor
+  else
+    nikos_tools_select_plain "${catalog}" "${saved}" || return $?
+  fi
+  _save_tools "${NIKOS_SELECTED_TOOLS}"
+  print_info "distrodeck tools: ${NIKOS_SELECTED_TOOLS:-none}"
+}
+
 cmd_setup() {
+  _select_tools || { print_error "Tool selection canceled; nothing was run."; exit 130; }
   print_info "Running full NikOS setup..."
   _playbook -e nikos_update_mode=false
 }
@@ -513,8 +584,18 @@ cmd_update() {
 }
 
 cmd_add() {
-  local role="${1:-}"
+  local role="${1:-}" bin tools
   case "${role}" in
+    tools)
+      _select_tools || { print_error "Tool selection canceled; nothing was installed."; exit 130; }
+      tools="$(_get_saved_tools)"
+      if [[ -z "${tools}" ]]; then
+        print_info "No distrodeck tools selected."
+        return 0
+      fi
+      bin="$(_distrodeck_bin)" || { print_error "distrodeck not found. Run 'nikos setup' first."; exit 1; }
+      "${bin}" install-tools --tools "${tools}"
+      ;;
     network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
       # site.yml skips the desktop layer on a server, so this would report
       # success and install nothing.

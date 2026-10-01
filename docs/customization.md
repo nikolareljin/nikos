@@ -246,6 +246,26 @@ yourself when you want it:
 atlas deployments setup --type local
 ```
 
+## Choosing distrodeck tools
+
+NikOS installs only the distrodeck tools you pick, never the whole catalog.
+The installer, `nikos setup` and `nikos add tools` read the catalog from
+distrodeck itself (`distrodeck install-tools --list-catalog --format tsv`) and
+offer it by category: a checklist in the TUI, or one prompt per category in
+plain mode (Enter keeps the preselection, `-` for none, `*` for the whole
+category). The answer is saved as `NIKOS_DISTRODECK_TOOLS_SAVED` in
+`~/.config/nikos/selected-options.env`, and the `dev-tools` role installs
+exactly that list with `distrodeck install-tools --tools <list>`.
+
+```bash
+nikos add tools      # choose again and install the new list now
+```
+
+The catalog flag needs a distrodeck release that has it. With an older pinned
+release (`distrodeck_version` in `vars/main.yml`) the screen is skipped with a
+one-line note, the saved list is kept, and a machine with no saved list gets no
+distrodeck tools.
+
 ## Changing the wallpaper
 
 The wallpaper is a pair of vector files exported to PNG on install:

@@ -24,12 +24,26 @@
   become: true
   when: not ansible_check_mode
 
-- name: Install all developer tools via distrodeck
-  ansible.builtin.command: "{{ nikos_home }}/Projects/distrodeck/distrodeck install-tools --all"
+# Exactly the tools chosen at install time or with `nikos add tools`, never the
+# whole catalog. install.sh and the nikos CLI pass the saved list in.
+- name: Install the selected distrodeck tools
+  ansible.builtin.command:
+    argv:
+      - "{{ nikos_home }}/Projects/distrodeck/distrodeck"
+      - install-tools
+      - --tools
+      - "{{ nikos_distrodeck_tools }}"
   changed_when: false
-  args:
-    creates: "{{ nikos_home }}/.local/state/distrodeck/installed-tools.txt"
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - nikos_distrodeck_tools | length > 0
+
+- name: Note that no distrodeck tools were selected
+  ansible.builtin.debug:
+    msg: >-
+      No distrodeck tools are selected for this machine. Run `nikos add tools`
+      to choose some.
+  when: nikos_distrodeck_tools | length == 0
 
 # `distrodeck install-tools` has no upgrade or force mode - it detects an
 # existing executable and records it as "Already installed (skipped)" - so the

@@ -33,6 +33,7 @@ NIKOS_LOG_DIR="${NIKOS_CONFIG_DIR}/logs"
 INSTALL_LOG="${NIKOS_LOG_DIR}/install-$(date +%Y%m%d-%H%M%S).log"
 REPO_SYNC_HELPERS_REL="scripts/repo-sync.sh"
 PROGRESS_LIB_REL="scripts/nikos-progress.sh"
+TOOLS_LIB_REL="scripts/nikos-tools.sh"
 USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
 # Read by _migrate_local_vars in scripts/repo-sync.sh, which is sourced at runtime.
 # shellcheck disable=SC2034
@@ -689,6 +690,7 @@ _persist_selected_options() {
     printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
     printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${2}"
     printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "1"
+    printf "NIKOS_DISTRODECK_TOOLS_SAVED=%q\n" "${3:-}"
   } > "${SELECTIONS_FILE}"
 }
 
@@ -898,6 +900,38 @@ _select_profile_plain() {
   done
 }
 
+# distrodeck tools ─────────────────────────────────────────────────
+# The catalog comes from the distrodeck release NikOS pins, which the playbook
+# has not cloned yet on a first install, so read it from a shallow clone of
+# that tag in the cache.
+_pinned_distrodeck_version() {
+  local file value=""
+  for file in "${NIKOS_HOME}/${LOCAL_VARS_REL}" "${NIKOS_HOME}/vars/main.yml"; do
+    [[ -f "${file}" ]] || continue
+    value="$(grep -oP '^distrodeck_version:\s*["\x27]?\K[^"\x27\s]+' "${file}" 2>/dev/null | tail -n 1 || true)"
+    [[ -n "${value}" ]] && break
+  done
+  printf '%s\n' "${value}"
+}
+
+_distrodeck_for_catalog() {
+  local ver="$1" dir
+  [[ -n "${ver}" ]] || return 1
+  dir="${XDG_CACHE_HOME:-${HOME}/.cache}/nikos/distrodeck-${ver}"
+  if [[ ! -x "${dir}/distrodeck" ]]; then
+    rm -rf "${dir}"
+    mkdir -p "$(dirname "${dir}")"
+    git clone -q --depth 1 --branch "${ver}" https://github.com/nikolareljin/distrodeck.git "${dir}" >/dev/null 2>&1 || return 1
+  fi
+  printf '%s\n' "${dir}/distrodeck"
+}
+
+_saved_distrodeck_tools() {
+  [[ -f "${SELECTIONS_FILE}" ]] || return 0
+  # shellcheck source=/dev/null
+  ( source "${SELECTIONS_FILE}"; printf '%s\n' "${NIKOS_DISTRODECK_TOOLS_SAVED:-}" )
+}
+
 # Clone (or update) the repo with submodules to a persistent location
 mkdir -p "$(dirname "${NIKOS_HOME}")"
 if [[ "${SKIP_REPO_SYNC}" == "1" ]]; then
@@ -1032,6 +1066,18 @@ for _progress_lib in "${NIKOS_HOME}/${PROGRESS_LIB_REL}" "${SCRIPT_DIR}/${PROGRE
   fi
 done
 unset _progress_lib
+
+# distrodeck tool selection. Optional for the same reason.
+_TOOLS_LIB_LOADED=false
+for _tools_lib in "${NIKOS_HOME}/${TOOLS_LIB_REL}" "${SCRIPT_DIR}/${TOOLS_LIB_REL}"; do
+  if [[ -f "${_tools_lib}" ]]; then
+    # shellcheck source=scripts/nikos-tools.sh
+    source "${_tools_lib}"
+    _TOOLS_LIB_LOADED=true
+    break
+  fi
+done
+unset _tools_lib
 [[ "${_PROGRESS_LIB_LOADED}" == "true" ]] || \
   _safe_logfile "[WARNING] ${PROGRESS_LIB_REL} not found; using the plain progress view"
 
@@ -1316,6 +1362,29 @@ if [[ "${_chosen_profile}" == "server" ]]; then
 fi
 _logfile "Profile: ${_chosen_profile} (was: ${_configured_profile:-unset}; $(_display_manager_note))"
 
+# distrodeck tools ─────────────────────────────────────────────────
+# NikOS installs exactly this list through `distrodeck install-tools --tools`.
+_saved_tools="$(_saved_distrodeck_tools)"
+NIKOS_SELECTED_TOOLS="${_saved_tools}"
+_dd_version="$(_pinned_distrodeck_version)"
+if [[ "${_TOOLS_LIB_LOADED}" == "true" ]] &&
+  _dd_bin="$(_distrodeck_for_catalog "${_dd_version}")" &&
+  _dd_catalog="$(nikos_tools_catalog "${_dd_bin}")"; then
+  if _can_use_dialog; then
+    dialog_init
+    if ! nikos_tools_select_dialog "${_dd_catalog}" "${_saved_tools}"; then
+      echo "Installer canceled during distrodeck tool selection." >&2
+      exit 130
+    fi
+  else
+    nikos_tools_select_plain "${_dd_catalog}" "${_saved_tools}" || exit 130
+  fi
+else
+  echo "NOTE: distrodeck ${_dd_version:-?} has no tool catalog (install-tools --list-catalog); skipping tool selection${_saved_tools:+, keeping the saved list}." >&2
+  _logfile "distrodeck tool selection skipped: no catalog from ${_dd_version:-unknown}"
+fi
+_logfile "distrodeck tools: ${NIKOS_SELECTED_TOOLS:-none}"
+
 # Build ansible tag args ───────────────────────────────────────────
 # Turns SELECTED_BUNDLES and SELECTED_AI_TOOLS into SKIP_TAGS and
 # EXPLICIT_OPTIONAL_TAGS. A function rather than top-level code so a test can
@@ -1355,7 +1424,7 @@ _build_tag_args() {
 
 _build_tag_args
 
-_persist_selected_options "${SKIP_TAGS#,}" "${EXPLICIT_OPTIONAL_TAGS#,}"
+_persist_selected_options "${SKIP_TAGS#,}" "${EXPLICIT_OPTIONAL_TAGS#,}" "${NIKOS_SELECTED_TOOLS}"
 _logfile "Selected bundles: ${SELECTED_BUNDLES[*]:-none}"
 _logfile "Selected AI tools: ${SELECTED_AI_TOOLS[*]:-none}"
 _logfile "Skip tags: ${SKIP_TAGS#,}"
@@ -1377,7 +1446,7 @@ if _can_use_dialog; then
   _create_become_password_file "${_become_pass}"
   unset _become_pass
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml")
-  PLAY_OPTS+=(-e nikos_update_mode=false)
+  PLAY_OPTS+=(-e nikos_update_mode=false -e "nikos_distrodeck_tools=${NIKOS_SELECTED_TOOLS}")
   PLAY_OPTS+=(--become-password-file "${BECOME_PASSWORD_FILE}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
@@ -1389,7 +1458,7 @@ if _can_use_dialog; then
 else
   echo "Running NikOS ${NIKOS_VERSION} playbook..."
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
-  PLAY_OPTS+=(-e nikos_update_mode=false)
+  PLAY_OPTS+=(-e nikos_update_mode=false -e "nikos_distrodeck_tools=${NIKOS_SELECTED_TOOLS}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"

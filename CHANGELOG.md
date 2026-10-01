@@ -28,6 +28,12 @@ All notable changes to NikOS are documented here.
   `editors` gains a role tag. `docs/profiles.md`
   assigns every role to a layer. `./test --profile=server` builds an Ubuntu
   Server 24.04 VM and checks that no desktop artefact is present.
+- **Pick distrodeck tools by category.** The installer, `nikos setup` and the
+  new `nikos add tools` offer distrodeck's own catalog (read at run time from
+  `install-tools --list-catalog --format tsv`), save the choice with the other
+  selections, and the `dev-tools` role installs exactly that list instead of
+  `install-tools --all`. A distrodeck without the flag skips the screen with a
+  note.
 - **A `mongodb` bundle.** MongoDB Community 8.0 from repo.mongodb.org (signed-by
   keyring), `mongosh`, the Atlas CLI and `pymongo`; `mongod` stays on
   `127.0.0.1:27017`. The Atlas local deployment is documented, not run.
