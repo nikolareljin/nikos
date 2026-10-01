@@ -116,8 +116,13 @@
          | map('regex_replace', '^[^\t]*\t[^\t]*\t([^\t]*).*$', '\1') | list }}
     dev_tools_wanted: "{{ nikos_distrodeck_tools.split(',') | map('trim') | select | list }}"
   ansible.builtin.set_fact:
-    dev_tools_selected: "{{ dev_tools_known | select('in', dev_tools_wanted) | list }}"
-    dev_tools_unknown: "{{ dev_tools_wanted | reject('in', dev_tools_known) | list }}"
+    dev_tools_selected: >-
+      {{ dev_tools_known | select('in', dev_tools_wanted)
+         | reject('in', nikos_distrodeck_owned_tools) | list }}
+    dev_tools_owned: "{{ dev_tools_wanted | select('in', nikos_distrodeck_owned_tools) | list }}"
+    dev_tools_unknown: >-
+      {{ dev_tools_wanted | reject('in', dev_tools_known)
+         | reject('in', nikos_distrodeck_owned_tools) | list }}
   when: (dev_tools_catalog.rc | default(1)) == 0
 
 - name: Warn about saved distrodeck tools this release does not have
@@ -128,6 +133,16 @@
   when:
     - (dev_tools_catalog.rc | default(1)) == 0
     - dev_tools_unknown | length > 0
+
+- name: Warn about saved distrodeck tools NikOS installs itself
+  ansible.builtin.debug:
+    msg: >-
+      Not installed through distrodeck: {{ dev_tools_owned | join(', ') }}.
+      NikOS owns these: Ollama comes from the ai-stack role, MongoDB from
+      `nikos add mongodb`. Run `nikos add tools` to save a list without them.
+  when:
+    - (dev_tools_catalog.rc | default(1)) == 0
+    - dev_tools_owned | length > 0
 
 - name: Install the selected distrodeck tools
   ansible.builtin.command:

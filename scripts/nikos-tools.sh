@@ -21,6 +21,11 @@
 # Prints the validated catalog. Returns 1 when the flag is unsupported or the
 # output is not the documented shape: at least six columns (distrodeck only
 # ever appends), and a tool name that is safe in a comma-separated list.
+# Tools NikOS installs itself, never through distrodeck: Ollama (ai-stack, the
+# one owner of the inference port) and MongoDB (`nikos add mongodb`). Keep in
+# step with nikos_distrodeck_owned_tools in vars/main.yml; a test checks it.
+NIKOS_DISTRODECK_OWNED_TOOLS="${NIKOS_DISTRODECK_OWNED_TOOLS:-ollama,mongodb}"
+
 nikos_tools_catalog() {
   local out
   out="$("$@" install-tools --list-catalog --format tsv 2>/dev/null)" || return 1
@@ -30,6 +35,29 @@ nikos_tools_catalog() {
     NF < 6 || $3 !~ /^[A-Za-z0-9._+-]+$/ || ($5 != "0" && $5 != "1") || ($6 != "0" && $6 != "1") { bad = 1 }
     END { exit bad }
   ' || return 1
+  # Owned tools never reach a selection screen.
+  printf '%s\n' "${out}" | awk -F'\t' -v owned=",${NIKOS_DISTRODECK_OWNED_TOOLS}," '
+    NF == 0 || !index(owned, "," $3 ",")'
+}
+
+# nikos_tools_drop_owned <csv> - the saved list without NikOS-owned tools, with
+# a note naming where each one comes from instead.
+nikos_tools_drop_owned() {
+  local csv="$1" name out=""
+  local -a names=()
+  IFS=, read -r -a names <<< "${csv}"
+  for name in "${names[@]}"; do
+    [[ -n "${name}" ]] || continue
+    if [[ ",${NIKOS_DISTRODECK_OWNED_TOOLS}," == *",${name},"* ]]; then
+      case "${name}" in
+        ollama) echo "NOTE: dropping distrodeck's ollama: NikOS installs Ollama itself (ai-stack role)." >&2 ;;
+        mongodb) echo "NOTE: dropping distrodeck's mongodb: use 'nikos add mongodb' instead." >&2 ;;
+        *) echo "NOTE: dropping distrodeck's ${name}: NikOS installs it itself." >&2 ;;
+      esac
+      continue
+    fi
+    out="${out:+${out},}${name}"
+  done
   printf '%s\n' "${out}"
 }
 
@@ -59,28 +87,35 @@ nikos_tools_filter() {
 }
 
 # nikos_tools_with_needs <tsv> <csv> - adds what a chosen tool cannot install
-# without, then filters. distrodeck fails the whole --tools run (exit 1) when a
-# container tool finds no docker or podman, or a Claude Code plugin finds no
-# claude, so a selection of qdrant alone would fail every later setup. The TSV
-# carries no dependency column: container tools are the ones whose label says
-# "(container)", plugins are the plugin-* names. Notes go to stderr.
+# without, then filters. distrodeck fails the whole --tools run (exit 1) when,
+# say, a container tool finds no docker or podman. A catalog with a 7th column
+# names the needs (comma list, "-" for none; "docker" is any container runtime,
+# so podman satisfies it). A 6-column catalog has no such column, and the label
+# is the only hint: "(container)" needs docker, plugin-* needs claude-code.
+# A need is met when chosen, installed, or owned by NikOS. Notes go to stderr.
 nikos_tools_with_needs() {
-  local tsv="$1" csv="$2" have
-  # Selected, or already installed on this machine.
-  have=",${csv},$(printf '%s\n' "${tsv}" | awk -F'\t' 'NF >= 6 && $6 == "1" { printf "%s,", $3 }')"
-  if printf '%s\n' "${tsv}" | awk -F'\t' -v want=",${csv}," '
-      NF >= 6 && index(want, "," $3 ",") && $4 ~ /\(container\)/ { found = 1 }
-      END { exit !found }' &&
-    [[ "${have}" != *",docker,"* && "${have}" != *",podman,"* ]] &&
-    printf '%s\n' "${tsv}" | awk -F'\t' '$3 == "docker" { found = 1 } END { exit !found }'; then
-    echo "NOTE: adding docker: a selected container tool needs docker or podman." >&2
-    csv="${csv},docker"
-  fi
-  if [[ ",${csv}," == *",plugin-"* && "${have}" != *",claude-code,"* ]] && ! command -v claude >/dev/null 2>&1 &&
-    printf '%s\n' "${tsv}" | awk -F'\t' '$3 == "claude-code" { found = 1 } END { exit !found }'; then
-    echo "NOTE: adding claude-code: the selected Claude Code plugins need it." >&2
-    csv="${csv},claude-code"
-  fi
+  local tsv="$1" csv="$2" have added=1 rows need tool
+  have=",${csv},${NIKOS_DISTRODECK_OWNED_TOOLS},$(printf '%s\n' "${tsv}" | awk -F'\t' 'NF >= 6 && $6 == "1" { printf "%s,", $3 }')"
+  while (( added )); do
+    added=0
+    # "tool<TAB>need" for every need of every chosen tool.
+    rows="$(printf '%s\n' "${tsv}" | awk -F'\t' -v want=",${csv}," '
+      NF < 6 || !index(want, "," $3 ",") { next }
+      NF >= 7 { if ($7 != "-" && $7 != "") { n = split($7, a, ","); for (i = 1; i <= n; i++) print $3 "\t" a[i] }; next }
+      $4 ~ /\(container\)/ { print $3 "\tdocker" }
+      $3 ~ /^plugin-/ { print $3 "\tclaude-code" }')"
+    while IFS=$'\t' read -r tool need; do
+      [[ -n "${need}" ]] || continue
+      [[ "${have}" == *",${need},"* ]] && continue
+      [[ "${need}" == "docker" && "${have}" == *",podman,"* ]] && continue
+      [[ "${need}" == "claude-code" ]] && command -v claude >/dev/null 2>&1 && continue
+      printf '%s\n' "${tsv}" | awk -F'\t' -v n="${need}" '$3 == n { f = 1 } END { exit !f }' || continue
+      echo "NOTE: adding ${need}: ${tool} needs it." >&2
+      csv="${csv:+${csv},}${need}"
+      have="${have}${need},"
+      added=1
+    done <<< "${rows}"
+  done
   nikos_tools_filter "${tsv}" "${csv}"
 }
 
@@ -92,7 +127,7 @@ nikos_tools_select_plain() {
   # Answers are split on spaces below; "*" or "?" must not expand to file names.
   local -
   set -f
-  default="$(nikos_tools_default "${tsv}" "$2")"
+  default="$(nikos_tools_default "${tsv}" "$(nikos_tools_drop_owned "$2")")"
   cat_ids="$(printf '%s\n' "${tsv}" | awk -F'\t' 'NF >= 6 && !seen[$1]++ { print $1 }')"
 
   printf '%s\n' "distrodeck tools, by category (Enter keeps the [preselection], - for none, * for all):" >/dev/tty
@@ -139,7 +174,7 @@ nikos_tools_select_plain() {
 nikos_tools_select_dialog() {
   local tsv="$1" default result status=0 n
   local -a items=()
-  default="$(nikos_tools_default "${tsv}" "$2")"
+  default="$(nikos_tools_default "${tsv}" "$(nikos_tools_drop_owned "$2")")"
   # Tab is IFS whitespace, so read would merge an empty label column into the
   # next one; split on the unit separator instead, which is not.
   while IFS=$'\037' read -r _cat cat_label tool label opt_in _installed; do

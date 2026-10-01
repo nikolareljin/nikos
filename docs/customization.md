@@ -258,13 +258,17 @@ category). The answer is saved as `NIKOS_DISTRODECK_TOOLS_SAVED` in
 `~/.config/nikos/selected-options.env`, and the `dev-tools` role installs
 exactly that list with `distrodeck install-tools --tools <list>`.
 
-Two adjustments are made to the list:
+Three adjustments are made to the list:
 
-- A tool that needs something to install is given it. A container tool (its
-  label says `(container)`, e.g. `qdrant`) adds `docker` unless `docker` or
-  `podman` is chosen or installed; a Claude Code plugin (`plugin-*`) adds
-  `claude-code` unless `claude` is already there. Without them distrodeck
-  fails the whole run.
+- distrodeck's `ollama` and `mongodb` are never offered or installed: NikOS
+  owns both (`nikos_distrodeck_owned_tools`). Ollama comes from the ai-stack
+  role, the one owner of the inference port; MongoDB from `nikos add mongodb`.
+  A saved list that names them is installed without them, with a warning.
+- A tool that needs something to install is given it, unless that is already
+  chosen or installed. A catalog with a 7th `needs` column names the needs
+  (`docker` is met by docker or podman). An older 6-column catalog has none,
+  so the label decides: a `(container)` tool needs `docker`, a `plugin-*`
+  needs `claude-code`. Without them distrodeck fails the whole run.
 - When `nikos update` has moved distrodeck to a newer release, saved names
   that release no longer lists are skipped with a warning rather than sent to
   distrodeck, which would reject the whole list.

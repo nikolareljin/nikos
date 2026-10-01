@@ -589,6 +589,7 @@ cmd_add() {
     tools)
       _select_tools || { print_error "Tool selection canceled; nothing was installed."; exit 130; }
       tools="$(_get_saved_tools)"
+      [[ "${_TOOLS_LIB_LOADED}" == "true" ]] && tools="$(nikos_tools_drop_owned "${tools}")"
       if [[ -z "${tools}" ]]; then
         print_info "No distrodeck tools selected. With a distrodeck that has no catalog, 'nikos setup' installs its default set."
         return 0

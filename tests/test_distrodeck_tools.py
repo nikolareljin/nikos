@@ -13,6 +13,7 @@ could lose or invent a tool:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -20,6 +21,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 LIB = REPO / "scripts" / "nikos-tools.sh"
@@ -28,7 +30,12 @@ NIKOS_CLI = REPO / "scripts" / "nikos"
 # tools, 23 categories). The installed column is whatever the capturing
 # machine had, so expectations are computed from the file, not typed in.
 FIXTURE = REPO / "tests" / "fixtures" / "distrodeck-catalog.tsv"
-ROWS = [line.split("\t") for line in FIXTURE.read_text(encoding="utf-8").splitlines()]
+ALL_ROWS = [line.split("\t") for line in FIXTURE.read_text(encoding="utf-8").splitlines()]
+# NikOS installs these itself; they never appear on a selection screen.
+OWNED = yaml.safe_load((REPO / "vars" / "main.yml").read_text(encoding="utf-8"))[
+    "nikos_distrodeck_owned_tools"
+]
+ROWS = [r for r in ALL_ROWS if r[2] not in OWNED]
 NAMES = [r[2] for r in ROWS]
 CATEGORIES = list(dict.fromkeys(r[0] for r in ROWS))
 INSTALLED = ",".join(r[2] for r in ROWS if r[5] == "1")
@@ -63,9 +70,10 @@ def test_catalog_is_read_and_validated(tmp_path: Path) -> None:
     dd = fake_distrodeck(tmp_path / "distrodeck", catalog=True)
     result = bash(f"nikos_tools_catalog {dd}")
     assert result.returncode == 0, result.stderr
-    assert result.stdout == FIXTURE.read_text(encoding="utf-8")
+    assert result.stdout == "".join("\t".join(r) + "\n" for r in ROWS)
     names = bash(f'nikos_tools_names "$(nikos_tools_catalog {dd})"').stdout.split()
-    assert names == NAMES and len(names) == 168
+    assert names == NAMES and len(ALL_ROWS) == 168
+    assert len(names) == 168 - len(OWNED)
     assert {"db-sql", "db-nosql", "db-vector", "claude-plugins"} <= set(CATEGORIES)
 
 
@@ -86,6 +94,7 @@ def test_a_catalog_with_appended_columns_is_accepted(tmp_path: Path) -> None:
     dd.write_text(f"#!/bin/sh\ncat {wide}\n", encoding="utf-8")
     dd.chmod(0o755)
     result = bash(f'c="$(nikos_tools_catalog {dd})" && nikos_tools_names "$c"')
+    assert not set(OWNED) & set(result.stdout.split())
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == NAMES
 
@@ -138,7 +147,8 @@ def test_a_malformed_catalog_is_rejected(tmp_path: Path, row: str) -> None:
 
 
 def test_default_is_saved_list_else_installed() -> None:
-    assert bash(f'nikos_tools_default "$(cat {FIXTURE})" ""').stdout.strip() == INSTALLED
+    every_installed = ",".join(r[2] for r in ALL_ROWS if r[5] == "1")
+    assert bash(f'nikos_tools_default "$(cat {FIXTURE})" ""').stdout.strip() == every_installed
     assert bash(f'nikos_tools_default "$(cat {FIXTURE})" "gimp"').stdout.strip() == "gimp"
     # Stale or unknown names never reach distrodeck; catalog order wins.
     out = bash(f'nikos_tools_filter "$(cat {FIXTURE})" "plugin-hookify,nosuch,qdrant,bat"').stdout.strip()
@@ -149,7 +159,7 @@ def _without(tmp_path: Path, *names: str) -> Path:
     """The fixture with `names` marked not installed."""
     out = tmp_path / "catalog.tsv"
     out.write_text(
-        "".join("\t".join(r[:5] + ["0" if r[2] in names else r[5]] + r[6:]) + "\n" for r in ROWS),
+        "".join("\t".join(r[:5] + ["0" if r[2] in names else r[5]] + r[6:]) + "\n" for r in ALL_ROWS),
         encoding="utf-8",
     )
     return out
@@ -180,13 +190,16 @@ def test_a_tool_brings_what_distrodeck_needs_to_install_it(
     assert result.stdout.strip() == expected, result.stderr
 
 
-def _run_plain(tmp_path: Path, answers: str, *, piped: bool, cwd: Path | None = None) -> str:
+def _run_plain(
+    tmp_path: Path, answers: str, *, piped: bool, cwd: Path | None = None, saved: str = ""
+) -> str:
+    dd = fake_distrodeck(tmp_path / "dd" / "distrodeck", catalog=True)
     program = tmp_path / "probe.sh"
     program.write_text(
         f"source {LIB}\n"
-        f'tsv="$(cat {FIXTURE})"\n'
+        f'tsv="$(nikos_tools_catalog {dd})"\n'
         'NIKOS_SELECTED_TOOLS=""\n'
-        'nikos_tools_select_plain "$tsv" ""\n'
+        f'nikos_tools_select_plain "$tsv" "{saved}"\n'
         "printf '\\nTOOLS=[%s]\\n' \"$NIKOS_SELECTED_TOOLS\"\n",
         encoding="utf-8",
     )
@@ -295,18 +308,18 @@ def test_nikos_add_tools_saves_and_installs_exactly_the_selection(tmp_path: Path
     )
     log = tmp_path / "calls.log"
     fake_distrodeck(tmp_path / "Projects" / "distrodeck" / "distrodeck", catalog=True, log=log)
-    answers = {"ai": "ollama", "media": "vlc"}
+    answers = {"ai": "aider", "media": "vlc"}
     text = "".join(answers.get(c, "-") + "\n" for c in CATEGORIES)
     result = _cli(tmp_path, home, "add", "tools", answers=text)
     out = result.stdout.decode(errors="replace")
     assert result.returncode == 0, out
 
     saved = _saved(config)
-    assert saved["NIKOS_DISTRODECK_TOOLS_SAVED"] == "ollama,vlc", saved
+    assert saved["NIKOS_DISTRODECK_TOOLS_SAVED"] == "aider,vlc", saved
     # The other selections survive the rewrite.
     assert saved["NIKOS_SKIP_TAGS_SAVED"] == "music"
     assert saved["NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED"] == "redis"
-    assert log.read_text(encoding="utf-8").split() == ["install-tools", "--tools", "ollama,vlc"]
+    assert log.read_text(encoding="utf-8").split() == ["install-tools", "--tools", "aider,vlc"]
 
 
 @needs_pty
@@ -370,6 +383,7 @@ def _run_dev_tools_selection(tmp_path: Path, *, catalog: bool, tools: str) -> li
             "ansible-playbook", "play.yml", "-i", "localhost,",
             "-e", f"nikos_home={tmp_path}", "-e", f"nikos_distrodeck_tools={tools}",
             "-e", "distrodeck_version=0.10.3",
+            "-e", json.dumps({"nikos_distrodeck_owned_tools": OWNED}),
         ],
         cwd=tmp_path, capture_output=True, text=True, timeout=120,
     )
@@ -378,9 +392,68 @@ def _run_dev_tools_selection(tmp_path: Path, *, catalog: bool, tools: str) -> li
 
 
 def test_dev_tools_installs_the_saved_list_when_the_catalog_exists(tmp_path: Path) -> None:
-    assert _run_dev_tools_selection(tmp_path, catalog=True, tools="ollama,vlc") == [
-        "install-tools --tools ollama,vlc"
+    assert _run_dev_tools_selection(tmp_path, catalog=True, tools="aider,vlc") == [
+        "install-tools --tools aider,vlc"
     ]
+
+
+def test_dev_tools_never_passes_a_nikos_owned_tool(tmp_path: Path) -> None:
+    # A list saved before NikOS hid ollama and mongodb must not install a
+    # second Ollama (a second owner of the inference port) or MongoDB.
+    assert _run_dev_tools_selection(tmp_path, catalog=True, tools="ollama,mongodb,vlc") == [
+        "install-tools --tools vlc"
+    ]
+
+
+def test_owned_tools_are_dropped_from_a_saved_list_with_a_note() -> None:
+    result = bash('nikos_tools_drop_owned "ollama,vlc,mongodb"')
+    assert result.stdout.strip() == "vlc"
+    assert "ai-stack" in result.stderr and "nikos add mongodb" in result.stderr
+
+
+def test_the_shell_owned_list_matches_the_playbook_var() -> None:
+    out = bash('printf "%s" "$NIKOS_DISTRODECK_OWNED_TOOLS"').stdout
+    assert out.split(",") == OWNED
+
+
+@needs_pty
+def test_a_saved_owned_tool_is_dropped_with_a_note(tmp_path: Path) -> None:
+    text = "\n" * len(CATEGORIES)
+    out = _run_plain(tmp_path, text, piped=True, saved="ollama,vlc")
+    assert _tools(out) == "vlc"
+    assert "NikOS installs Ollama itself" in out, out
+
+
+SEVEN = (
+    "devops\tDevOps\tdocker\tDocker\t0\t0\t-\n"
+    "devops\tDevOps\tpodman\tPodman\t0\t{podman}\t-\n"
+    "db-sql\tSQL\tpostgresql\tPostgreSQL\t1\t0\t-\n"
+    "db-sql\tSQL\tpgvector\tpgvector\t1\t0\tpostgresql\n"
+    "db-vector\tVector\tqdrant\tQdrant\t1\t0\tdocker\n"
+    "db-vector\tVector\tlabelonly\tX (container)\t1\t0\t-\n"
+)
+
+
+@pytest.mark.parametrize(
+    "chosen,podman,expected",
+    [
+        ("pgvector", "0", "postgresql,pgvector"),
+        ("qdrant", "0", "docker,qdrant"),
+        ("qdrant", "1", "qdrant"),
+        ("labelonly", "0", "labelonly"),
+    ],
+    ids=["needs-column", "docker-need", "podman-satisfies-docker", "column-beats-label"],
+)
+def test_the_needs_column_is_used_when_present(
+    tmp_path: Path, chosen: str, podman: str, expected: str
+) -> None:
+    tsv = tmp_path / "seven.tsv"
+    tsv.write_text(SEVEN.format(podman=podman), encoding="utf-8")
+    result = subprocess.run(
+        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "{chosen}"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+    )
+    assert result.stdout.strip() == expected, result.stderr
 
 
 def test_dev_tools_drops_saved_names_the_new_catalog_lacks(tmp_path: Path) -> None:

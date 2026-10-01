@@ -73,9 +73,13 @@ All notable changes to NikOS are documented here.
   Offline, or with local edits to tracked files, an existing clone is kept
   with a warning. Saved tool names the new release no longer lists are
   skipped with a warning instead of failing the run.
-- The tool selection adds `docker` for a container tool and `claude-code` for
-  a Claude Code plugin when neither is chosen or installed; distrodeck fails
-  the whole `--tools` run without them.
+- The tool selection adds what a chosen tool needs (distrodeck's `needs`
+  column when the catalog has one, otherwise `docker` for a container tool and
+  `claude-code` for a plugin) unless it is already chosen or installed;
+  distrodeck fails the whole `--tools` run without them.
+- distrodeck's `ollama` and `mongodb` are hidden from the tool selection and
+  dropped from saved lists with a warning: NikOS installs both itself
+  (`nikos_distrodeck_owned_tools`).
 - `nikos update` upgrades Ollama when GitHub has a newer release, by re-running
   the official installer, then restarts `ollama.service`; the NikOS drop-in is
   kept. Ollama is deliberately not pinned. The installer runs with
