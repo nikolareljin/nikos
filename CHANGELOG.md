@@ -18,6 +18,52 @@ All notable changes to NikOS are documented here.
   names `--list-tags` as the only complete view of the tags and then pastes its
   output; nothing had ever run the one against the other, and the pasted block
   had gone stale. `tests/test_bundles_doc.py` now compares them by name.
+- **A server profile.** `nikos_profile` (`desktop` by default, set in
+  `vars/local.yml`) decides whether the desktop layer runs. On `server`,
+  `desktop`, `theming`, `editors`, `music` and `education` are skipped even when
+  named in `--tags`. The installer asks for the profile in both selector paths,
+  says whether a display manager was found, and persists the answer; `nikos
+  update` does not ask again. `editors` gains a role tag. `docs/profiles.md`
+  assigns every role to a layer. `./test --profile=server` builds an Ubuntu
+  Server 24.04 VM and checks that no desktop artefact is present.
+- **A `mongodb` bundle.** MongoDB Community 8.0 from repo.mongodb.org (signed-by
+  keyring), `mongosh`, the Atlas CLI and `pymongo`; `mongod` stays on
+  `127.0.0.1:27017`. The Atlas local deployment is documented, not run.
+- **Several Java releases.** `nikos_java_versions` (default `[21]`) installs
+  `openjdk-N-jdk` for each entry and points `java`/`javac` at the first.
+- **One configured owner of the Ollama port.** `nikos_ollama_host` (default
+  `127.0.0.1:11434`, loopback only) is written to an `ollama.service` drop-in;
+  `nikos_ollama_mode` (`local`/`remote`) and `nikos_node_role` are read by the
+  play and the CLI. A port held by another process stops the run and names it.
+  `nikos status` prints mode, endpoint and node role; `nikos doctor` sends a
+  request to the endpoint, lists its models and fails when it does not answer.
+
+### Changed
+- **Ollama model groups match distrodeck.** Default `gemma4:e4b`; reasoning
+  `deepseek-r1:8b`, `qwen3:8b`, `gpt-oss:20b`; coding `qwen2.5-coder:7b`,
+  `qwen3-coder:30b`; text `granite4:micro`, `qwen3.5:9b`, `gemma4:12b`; vision
+  `qwen3-vl:4b`, `qwen3-vl:8b`; embedding `embeddinggemma:300m`,
+  `qwen3-embedding:0.6b`. Every group in full is about 75 GB. Models already on
+  disk are not removed.
+- `base` no longer installs `inkscape` or `xfconf`; `theming` and `desktop`
+  install what they use.
+- `nikos doctor` exits 1 when it finds a problem, prints the profile, and skips
+  the VS Code, Nordic and Papirus checks on a server.
+- Vendored `script-helpers` moves from 0.24.0 to 0.44.1. NikOS uses only
+  `logging` and `dialog` from it, and neither changed incompatibly.
+- `community.general` moves from 9.5.2 to 10.7.9, the newest release that still
+  supports the ansible-core 2.15 minimum `install.sh` enforces.
+- distrodeck is cloned at the release in `distrodeck_version` (`0.10.3`) rather
+  than `main`.
+
+### Fixed
+- The Ollama tasks managed a user-scope unit that does not exist and waited on
+  `/tmp/ollama.sock`, which Ollama never creates. Both failures were swallowed
+  on every run, after a 30 second timeout. Readiness is now an HTTP request to
+  `/api/version` that fails the run when Ollama does not answer.
+- `nikos doctor` exited 127 at the first optional check that failed on any
+  installed machine: it called `print_warn`, which script-helpers does not
+  define.
 
 ## [0.6.5] — 2026-09-05
 

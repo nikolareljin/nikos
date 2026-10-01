@@ -156,6 +156,11 @@ ollama_optional_models: >-
   {{ ollama_models_reasoning + ollama_models_coding + ollama_models_text
      + ollama_models_vision + ollama_models_embedding }}
 
+# ── distrodeck ──────────────────────────────────────────────────────────────
+# A release tag, not main, so an install is reproducible and an update moves
+# only when NikOS moves this pin.
+distrodeck_version: "0.10.3"
+
 # ── Java (optional bundle) ───────────────────────────────────────────────────
 # OpenJDK releases `nikos add java` installs. The first is the default java.
 nikos_java_versions: [21]

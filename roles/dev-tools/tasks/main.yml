@@ -11,7 +11,7 @@
   ansible.builtin.git:
     repo: https://github.com/nikolareljin/distrodeck.git
     dest: "{{ nikos_home }}/Projects/distrodeck"
-    version: main
+    version: "{{ distrodeck_version }}"
     update: "{{ nikos_update_mode | bool }}"
 
 - name: Install distrodeck PATH wrapper
