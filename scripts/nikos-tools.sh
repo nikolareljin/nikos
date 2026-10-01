@@ -58,6 +58,32 @@ nikos_tools_filter() {
     END { print "" }'
 }
 
+# nikos_tools_with_needs <tsv> <csv> - adds what a chosen tool cannot install
+# without, then filters. distrodeck fails the whole --tools run (exit 1) when a
+# container tool finds no docker or podman, or a Claude Code plugin finds no
+# claude, so a selection of qdrant alone would fail every later setup. The TSV
+# carries no dependency column: container tools are the ones whose label says
+# "(container)", plugins are the plugin-* names. Notes go to stderr.
+nikos_tools_with_needs() {
+  local tsv="$1" csv="$2" have
+  # Selected, or already installed on this machine.
+  have=",${csv},$(printf '%s\n' "${tsv}" | awk -F'\t' 'NF >= 6 && $6 == "1" { printf "%s,", $3 }')"
+  if printf '%s\n' "${tsv}" | awk -F'\t' -v want=",${csv}," '
+      NF >= 6 && index(want, "," $3 ",") && $4 ~ /\(container\)/ { found = 1 }
+      END { exit !found }' &&
+    [[ "${have}" != *",docker,"* && "${have}" != *",podman,"* ]] &&
+    printf '%s\n' "${tsv}" | awk -F'\t' '$3 == "docker" { found = 1 } END { exit !found }'; then
+    echo "NOTE: adding docker: a selected container tool needs docker or podman." >&2
+    csv="${csv},docker"
+  fi
+  if [[ ",${csv}," == *",plugin-"* && "${have}" != *",claude-code,"* ]] && ! command -v claude >/dev/null 2>&1 &&
+    printf '%s\n' "${tsv}" | awk -F'\t' '$3 == "claude-code" { found = 1 } END { exit !found }'; then
+    echo "NOTE: adding claude-code: the selected Claude Code plugins need it." >&2
+    csv="${csv},claude-code"
+  fi
+  nikos_tools_filter "${tsv}" "${csv}"
+}
+
 # nikos_tools_select_plain <tsv> <saved csv>
 # One prompt per category. Enter keeps the preselection, "-" clears it, "*"
 # takes the whole category, otherwise a space or comma separated list of names.
@@ -104,7 +130,7 @@ nikos_tools_select_plain() {
     for name in ${line}; do chosen="${chosen:+${chosen},}${name}"; done
   done <<< "${cat_ids}"
 
-  NIKOS_SELECTED_TOOLS="$(nikos_tools_filter "${tsv}" "${chosen}")"
+  NIKOS_SELECTED_TOOLS="$(nikos_tools_with_needs "${tsv}" "${chosen}")"
   return 0
 }
 
@@ -133,6 +159,6 @@ nikos_tools_select_dialog() {
   ) || status=$?
   (( status == 0 )) || return "${status}"
   result="${result//\"/}"
-  NIKOS_SELECTED_TOOLS="$(nikos_tools_filter "${tsv}" "${result// /,}")"
+  NIKOS_SELECTED_TOOLS="$(nikos_tools_with_needs "${tsv}" "${result// /,}")"
   return 0
 }

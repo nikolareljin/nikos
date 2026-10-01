@@ -24,7 +24,14 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 LIB = REPO / "scripts" / "nikos-tools.sh"
 NIKOS_CLI = REPO / "scripts" / "nikos"
+# Real `distrodeck install-tools --list-catalog --format tsv` output (168
+# tools, 23 categories). The installed column is whatever the capturing
+# machine had, so expectations are computed from the file, not typed in.
 FIXTURE = REPO / "tests" / "fixtures" / "distrodeck-catalog.tsv"
+ROWS = [line.split("\t") for line in FIXTURE.read_text(encoding="utf-8").splitlines()]
+NAMES = [r[2] for r in ROWS]
+CATEGORIES = list(dict.fromkeys(r[0] for r in ROWS))
+INSTALLED = ",".join(r[2] for r in ROWS if r[5] == "1")
 
 needs_pty = pytest.mark.skipif(
     shutil.which("script") is None, reason="util-linux `script` is required"
@@ -58,7 +65,8 @@ def test_catalog_is_read_and_validated(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert result.stdout == FIXTURE.read_text(encoding="utf-8")
     names = bash(f'nikos_tools_names "$(nikos_tools_catalog {dd})"').stdout.split()
-    assert names == ["vscode", "zed", "ollama", "claude-code", "vlc", "gimp"]
+    assert names == NAMES and len(names) == 168
+    assert {"db-sql", "db-nosql", "db-vector", "claude-plugins"} <= set(CATEGORIES)
 
 
 def test_an_older_distrodeck_is_reported_not_fatal(tmp_path: Path) -> None:
@@ -79,7 +87,7 @@ def test_a_catalog_with_appended_columns_is_accepted(tmp_path: Path) -> None:
     dd.chmod(0o755)
     result = bash(f'c="$(nikos_tools_catalog {dd})" && nikos_tools_names "$c"')
     assert result.returncode == 0, result.stderr
-    assert result.stdout.split() == ["vscode", "zed", "ollama", "claude-code", "vlc", "gimp"]
+    assert result.stdout.split() == NAMES
 
 
 @needs_pty
@@ -130,12 +138,46 @@ def test_a_malformed_catalog_is_rejected(tmp_path: Path, row: str) -> None:
 
 
 def test_default_is_saved_list_else_installed() -> None:
-    tsv = FIXTURE.read_text(encoding="utf-8")
-    assert bash(f'nikos_tools_default "$(cat {FIXTURE})" ""').stdout.strip() == "vscode,vlc"
+    assert bash(f'nikos_tools_default "$(cat {FIXTURE})" ""').stdout.strip() == INSTALLED
     assert bash(f'nikos_tools_default "$(cat {FIXTURE})" "gimp"').stdout.strip() == "gimp"
     # Stale or unknown names never reach distrodeck; catalog order wins.
-    out = bash(f'nikos_tools_filter "$(cat {FIXTURE})" "gimp,nosuch,vscode"').stdout.strip()
-    assert out == "vscode,gimp", tsv
+    out = bash(f'nikos_tools_filter "$(cat {FIXTURE})" "plugin-hookify,nosuch,qdrant,bat"').stdout.strip()
+    assert out == "bat,qdrant,plugin-hookify"
+
+
+def _without(tmp_path: Path, *names: str) -> Path:
+    """The fixture with `names` marked not installed."""
+    out = tmp_path / "catalog.tsv"
+    out.write_text(
+        "".join("\t".join(r[:5] + ["0" if r[2] in names else r[5]] + r[6:]) + "\n" for r in ROWS),
+        encoding="utf-8",
+    )
+    return out
+
+
+@pytest.mark.parametrize(
+    "chosen,missing,expected",
+    [
+        ("qdrant", ("docker", "podman"), "docker,qdrant"),
+        ("weaviate,podman", ("docker", "podman"), "podman,weaviate"),
+        ("qdrant", ("docker",), "qdrant"),
+        ("plugin-hookify", ("claude-code",), "claude-code,plugin-hookify"),
+        ("mongodb,redis", ("docker", "podman"), "mongodb,redis"),
+    ],
+    ids=["container-adds-docker", "podman-chosen", "podman-installed", "plugin-adds-claude",
+         "packaged-db-needs-nothing"],
+)
+def test_a_tool_brings_what_distrodeck_needs_to_install_it(
+    tmp_path: Path, chosen: str, missing: tuple[str, ...], expected: str
+) -> None:
+    # Without docker, distrodeck fails the whole --tools run on qdrant, and so
+    # every later `nikos setup` and `nikos update`.
+    tsv = _without(tmp_path, *missing)
+    result = subprocess.run(
+        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "{chosen}"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+    )
+    assert result.stdout.strip() == expected, result.stderr
 
 
 def _run_plain(tmp_path: Path, answers: str, *, piped: bool, cwd: Path | None = None) -> str:
@@ -170,9 +212,19 @@ def _tools(out: str) -> str:
 @needs_pty
 @pytest.mark.parametrize("piped", [False, True], ids=["terminal", "piped-stdin"])
 def test_plain_selection_round_trips_by_category(tmp_path: Path, piped: bool) -> None:
-    # IDEs: keep [vscode]; AI: a typo, then both; Media: none; Graphics: all.
-    answers = "\nollamaa\nollama claude-code\n-\n*\n"
-    assert _tools(_run_plain(tmp_path, answers, piped=piped)) == "vscode,ollama,claude-code,gimp"
+    # Shell: a typo, then two; Vector databases: one; Claude Code plugins: all;
+    # every other category: none.
+    answers = {"shell": "batt\nbat,eza", "db-vector": "qdrant", "claude-plugins": "*"}
+    text = "".join(answers.get(c, "-") + "\n" for c in CATEGORIES)
+    plugins = [n for n in NAMES if n.startswith("plugin-")]
+    want = ["bat", "eza", "qdrant", *plugins]
+    # docker and claude-code come along unless the capturing machine had them.
+    if not {"docker", "podman"} & set(INSTALLED.split(",")):
+        want.append("docker")
+    if "claude-code" not in INSTALLED.split(","):
+        want.append("claude-code")
+    want = [n for n in NAMES if n in want]
+    assert _tools(_run_plain(tmp_path, text, piped=piped)) == ",".join(want)
 
 
 @needs_pty
@@ -181,15 +233,15 @@ def test_a_pattern_answer_is_not_expanded_against_the_working_directory(tmp_path
     # current directory, "v*" was accepted as the tool vscode.
     work = tmp_path / "work"
     work.mkdir()
-    (work / "vscode").touch()
-    out = _run_plain(tmp_path, "v*\n-\n-\n-\n-\n", piped=False, cwd=work)
-    assert "Not in IDEs and editors: v*" in out, out
+    (work / "bat").touch()
+    out = _run_plain(tmp_path, "b*\n" + "-\n" * len(CATEGORIES), piped=False, cwd=work)
+    assert "Not in Shell & CLI: b*" in out, out
     assert _tools(out) == ""
 
 
 @needs_pty
 def test_enter_through_every_category_keeps_what_is_installed(tmp_path: Path) -> None:
-    assert _tools(_run_plain(tmp_path, "\n\n\n\n", piped=True)) == "vscode,vlc"
+    assert _tools(_run_plain(tmp_path, "\n" * len(CATEGORIES), piped=True)) == INSTALLED
 
 
 # ── persistence through scripts/nikos ────────────────────────────────────────
@@ -243,7 +295,9 @@ def test_nikos_add_tools_saves_and_installs_exactly_the_selection(tmp_path: Path
     )
     log = tmp_path / "calls.log"
     fake_distrodeck(tmp_path / "Projects" / "distrodeck" / "distrodeck", catalog=True, log=log)
-    result = _cli(tmp_path, home, "add", "tools", answers="-\nollama\n\n-\n")
+    answers = {"ai": "ollama", "media": "vlc"}
+    text = "".join(answers.get(c, "-") + "\n" for c in CATEGORIES)
+    result = _cli(tmp_path, home, "add", "tools", answers=text)
     out = result.stdout.decode(errors="replace")
     assert result.returncode == 0, out
 
@@ -326,6 +380,15 @@ def _run_dev_tools_selection(tmp_path: Path, *, catalog: bool, tools: str) -> li
 def test_dev_tools_installs_the_saved_list_when_the_catalog_exists(tmp_path: Path) -> None:
     assert _run_dev_tools_selection(tmp_path, catalog=True, tools="ollama,vlc") == [
         "install-tools --tools ollama,vlc"
+    ]
+
+
+def test_dev_tools_drops_saved_names_the_new_catalog_lacks(tmp_path: Path) -> None:
+    # `nikos update` moves distrodeck forward; one renamed tool in the saved
+    # list made distrodeck reject the whole run with exit 2. Catalog order
+    # puts docker before the container tool that needs it.
+    assert _run_dev_tools_selection(tmp_path, catalog=True, tools="qdrant,gone-tool,docker") == [
+        "install-tools --tools docker,qdrant"
     ]
 
 
