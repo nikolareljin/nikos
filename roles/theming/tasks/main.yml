@@ -99,7 +99,7 @@
 
 - name: Create GRUB themes directory
   ansible.builtin.file:
-    path: /boot/grub/themes
+    path: /usr/share/grub/themes
     state: directory
     mode: "0755"
 
@@ -122,7 +122,7 @@
 - name: Install Nordic GRUB theme
   ansible.builtin.copy:
     src: "{{ theming_nordic_grub_theme_dir }}/"
-    dest: /boot/grub/themes/Nordic/
+    dest: /usr/share/grub/themes/Nordic/
     remote_src: true
     mode: "0644"
     directory_mode: "0755"
@@ -144,7 +144,7 @@
   ansible.builtin.lineinfile:
     path: /etc/default/grub
     regexp: "^#?GRUB_THEME="
-    line: 'GRUB_THEME="/boot/grub/themes/Nordic/theme.txt"'
+    line: 'GRUB_THEME="/usr/share/grub/themes/Nordic/theme.txt"'
   when:
     - theming_grub_defaults.stat.exists
     - ansible_check_mode or theming_nordic_grub_theme_dir is defined

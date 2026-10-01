@@ -13,6 +13,12 @@ nikos_update_mode: true
 # install.sh asks once and writes the answer to vars/local.yml.
 nikos_profile: "desktop"
 
+# ── Boot ─────────────────────────────────────────────────────────────────────
+# Let GRUB list other operating systems (Windows on a dual-boot machine).
+# Ubuntu disables os-prober by default since GRUB 2.06. Only acts on an
+# installed system that boots with GRUB, never during an image build.
+nikos_grub_os_prober: true
+
 # ── Inference endpoint ──────────────────────────────────────────────────────
 # Exactly one process on a machine owns the Ollama port. The playbook and the
 # `nikos` CLI both read these names, so set them once, in vars/local.yml.

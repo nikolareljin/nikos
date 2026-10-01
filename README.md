@@ -257,6 +257,7 @@ aider / Claude Code / Continue  →  use in code
 - [Installation guide](docs/install.md) — detailed install, requirements, troubleshooting
 - [Customization](docs/customization.md) — vars, roles, optional bundles
 - [Profiles](docs/profiles.md) — desktop and server, and which roles each runs
+- [Dual boot](docs/dual-boot.md) — os-prober, boot order, UEFI vs legacy, Secure Boot
 - [Debugging](docs/debugging.md) — `nikos doctor`, common issues, logs
 - [Development](docs/development.md) — adding roles, testing, contributing
 

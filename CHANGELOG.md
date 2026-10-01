@@ -46,6 +46,11 @@ All notable changes to NikOS are documented here.
   `nikos status` prints mode, endpoint and node role; `nikos doctor` sends a
   request to the endpoint, lists its models and fails when it does not answer.
 
+- **Windows in the GRUB menu.** `nikos_grub_os_prober` (default true) installs
+  `os-prober` and ships `/etc/default/grub.d/60-nikos-os-prober.cfg` on an
+  installed GRUB system. `docs/dual-boot.md` covers boot order, UEFI vs legacy
+  and Secure Boot/SBAT.
+
 ### Changed
 - **Ollama model groups match distrodeck.** Default `gemma4:e4b`; reasoning
   `deepseek-r1:8b`, `qwen3:8b`, `gpt-oss:20b`; coding `qwen2.5-coder:7b`,
@@ -65,6 +70,10 @@ All notable changes to NikOS are documented here.
   than `main`.
 
 ### Fixed
+- An image build no longer runs `update-grub`, installs the GRUB theme under
+  `/usr/share/grub/themes` (the squashfs excludes `boot/grub`), and holds the
+  kernel packages during the `base` upgrade so the squashfs kernel matches the
+  live one. The holds are released before the play moves on.
 - The Ollama tasks managed a user-scope unit that does not exist and waited on
   `/tmp/ollama.sock`, which Ollama never creates. Both failures were swallowed
   on every run, after a 30 second timeout. Readiness is now an HTTP request to

@@ -1,0 +1,6 @@
+---
+# Never in an image build: there update-grub would probe the build host.
+- name: Base_update_grub
+  ansible.builtin.command: update-grub
+  changed_when: true
+  when: not (nikos_image_build | default(false) | bool)

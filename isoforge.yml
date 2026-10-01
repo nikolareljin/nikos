@@ -19,6 +19,7 @@ provisioning:
     tags: [base, desktop, theming]
     extra_vars:
       nikos_home: /etc/skel
+      nikos_image_build: true
       nikos_user: root
 overlay:
   target: []

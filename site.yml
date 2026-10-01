@@ -44,6 +44,17 @@
         quiet: true
       tags: [always]
 
+    # An ISO build runs this play in a chroot with /etc/skel as the home. Boot
+    # loader and kernel changes there would act on the build host's view of
+    # /boot, not on the machine the image is installed onto.
+    - name: Detect an image build
+      ansible.builtin.set_fact:
+        nikos_image_build: >-
+          {{ (nikos_image_build | default(false) | bool)
+             or (ansible_facts.is_chroot | default(false) | bool)
+             or nikos_home == '/etc/skel' }}
+      tags: [always]
+
     - name: Check whether playbook directory is a git checkout
       ansible.builtin.stat:
         path: "{{ playbook_dir }}/.git"
