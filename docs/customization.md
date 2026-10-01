@@ -268,7 +268,9 @@ Three adjustments are made to the list:
   chosen or installed. A catalog with a 7th `needs` column names the needs
   (`docker` is met by docker or podman). An older 6-column catalog has none,
   so the label decides: a `(container)` tool needs `docker`, a `plugin-*`
-  needs `claude-code`. Without them distrodeck fails the whole run.
+  needs `claude-code`. Without them distrodeck fails the whole run. Needs are
+  listed before the tool that needs them (`postgresql` before `pgvector`),
+  because distrodeck installs in the order given.
 - When `nikos update` has moved distrodeck to a newer release, saved names
   that release no longer lists are skipped with a warning rather than sent to
   distrodeck, which would reject the whole list.

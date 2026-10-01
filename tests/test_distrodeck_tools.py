@@ -458,10 +458,10 @@ def test_the_needs_column_is_used_when_present(
 
 def test_dev_tools_drops_saved_names_the_new_catalog_lacks(tmp_path: Path) -> None:
     # `nikos update` moves distrodeck forward; one renamed tool in the saved
-    # list made distrodeck reject the whole run with exit 2. Catalog order
-    # puts docker before the container tool that needs it.
-    assert _run_dev_tools_selection(tmp_path, catalog=True, tools="qdrant,gone-tool,docker") == [
-        "install-tools --tools docker,qdrant"
+    # list made distrodeck reject the whole run with exit 2. The saved order,
+    # needs first, is kept.
+    assert _run_dev_tools_selection(tmp_path, catalog=True, tools="postgresql,gone-tool,pgvector") == [
+        "install-tools --tools postgresql,pgvector"
     ]
 
 
@@ -517,3 +517,31 @@ def test_installer_catalog_clone_brings_the_submodules(tmp_path: Path) -> None:
     assert result.stdout.strip() == f"{stale}/distrodeck"
     assert "--recurse-submodules" in log.read_text(encoding="utf-8")
     assert (stale / "scripts" / "script-helpers" / "helpers.sh").exists()
+
+
+def test_real_catalog_needs_column_pulls_in_postgresql(tmp_path: Path) -> None:
+    tsv = _without(tmp_path, "postgresql")
+    result = subprocess.run(
+        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "pgvector"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+    )
+    assert result.stdout.strip() == "postgresql,pgvector", result.stderr
+
+
+@pytest.mark.parametrize(
+    "chosen,expected", [("qdrant", "docker,qdrant"), ("pgvector", "pgvector")],
+    ids=["label-container", "no-label-hint"],
+)
+def test_a_six_column_catalog_falls_back_to_the_label(tmp_path: Path, chosen: str, expected: str) -> None:
+    # Before distrodeck added `needs`, only the label said a tool runs in a container.
+    six = tmp_path / "six.tsv"
+    six.write_text(
+        "".join("\t".join(r[:5] + ["0" if r[2] in ("docker", "podman", "postgresql") else r[5]]) + "\n"
+                for r in ALL_ROWS),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {six})" "{chosen}"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+    )
+    assert result.stdout.strip() == expected, result.stderr

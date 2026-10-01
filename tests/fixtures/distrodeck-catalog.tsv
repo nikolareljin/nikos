@@ -1,168 +1,168 @@
-shell	Shell & CLI	bat	bat - cat with syntax highlighting	0	1
-shell	Shell & CLI	eza	eza - modern ls replacement	0	0
-shell	Shell & CLI	fd	fd - fast find alternative	0	0
-shell	Shell & CLI	fzf	fzf - fuzzy finder	0	0
-shell	Shell & CLI	glow	glow - terminal markdown viewer	0	1
-shell	Shell & CLI	jq	jq - JSON processor	0	1
-shell	Shell & CLI	ripgrep	ripgrep (rg) - fast grep	0	1
-shell	Shell & CLI	tldr	tldr - simplified man pages	0	1
-shell	Shell & CLI	tree	tree - directory listing	0	1
-shell	Shell & CLI	yq	yq - YAML processor	0	0
-shell	Shell & CLI	zoxide	zoxide - smart cd command	0	0
-shell	Shell & CLI	zsh	zsh - Z shell	0	0
-editors	Editors & Terminal	mc	mc - Midnight Commander	0	1
-editors	Editors & Terminal	meld	Meld - visual diff/merge tool	0	1
-editors	Editors & Terminal	micro	micro - terminal text editor	0	0
-editors	Editors & Terminal	neovim	Neovim - vim fork	0	0
-editors	Editors & Terminal	screen	screen - terminal multiplexer	0	1
-editors	Editors & Terminal	tmux	tmux - terminal multiplexer	0	1
-system	System & Monitoring	bandwhich	bandwhich - bandwidth by process	0	0
-system	System & Monitoring	cron	cron - task scheduler	0	1
-system	System & Monitoring	duf	duf - disk usage viewer	0	1
-system	System & Monitoring	htop	htop - process viewer	0	1
-system	System & Monitoring	lm-sensors	lm-sensors - hardware sensors	0	1
-system	System & Monitoring	ncdu	ncdu - disk usage analyzer	0	1
-system	System & Monitoring	pciutils	pciutils - lspci	0	1
-system	System & Monitoring	usbutils	usbutils - lsusb	0	1
-network	Networking	bind-tools	bind-tools - dig/nslookup	0	1
-network	Networking	curl	curl - HTTP client	0	1
-network	Networking	iperf3	iperf3 - network benchmark	0	0
-network	Networking	mtr	mtr - traceroute + ping	0	1
-network	Networking	net-tools	net-tools - ifconfig/netstat	0	1
-network	Networking	nmap	nmap - network scanner	0	1
-network	Networking	tcpdump	tcpdump - packet analyzer	0	1
-network	Networking	tor	Tor - anonymous browsing	0	0
-network	Networking	traceroute	traceroute	0	1
-network	Networking	ufw	ufw - firewall	0	1
-network	Networking	wget	wget - file downloader	0	1
-backup	Backup & Storage	borgbackup	borgbackup - deduplicating backup	0	1
-backup	Backup & Storage	duplicity	duplicity - encrypted backup	0	0
-backup	Backup & Storage	fdupes	fdupes - find duplicate files	0	1
-backup	Backup & Storage	lz4	lz4 - fast compression	0	0
-backup	Backup & Storage	tar	tar - archiver	0	1
-backup	Backup & Storage	unzip	unzip - ZIP extractor	0	1
-dev	Development	bfg	BFG - git repo cleaner	0	1
-dev	Development	build-tools	build-essential / toolchain	0	1
-dev	Development	composer	Composer - PHP package manager	0	0
-dev	Development	delta	delta - better git diff	0	0
-dev	Development	gh	GitHub CLI	0	1
-dev	Development	git	git - version control	0	1
-dev	Development	git-lantern	git-lantern - local and GitHub repo dashboard	0	0
-dev	Development	git-lfs	git-lfs - large file storage	0	0
-dev	Development	lazygit	LazyGit - git TUI	0	1
-dev	Development	tokei	tokei - code statistics	0	0
-ai	AI tools	aider	aider - AI pair programming	1	0
-ai	AI tools	ai-runner	ai-runner - pick and run local Ollama models	0	0
-ai	AI tools	claude-code	Claude Code	1	1
-ai	AI tools	codex	OpenAI Codex CLI	1	1
-ai	AI tools	copilot	GitHub Copilot CLI	1	0
-ai	AI tools	gemini	Gemini CLI	1	1
-ai	AI tools	ollama	Ollama local models	1	1
-ides	IDEs	antigravity	Antigravity - AI development environment	1	1
-ides	IDEs	cursor	Cursor IDE / Agent	1	0
-ides	IDEs	intellij-idea-community	IntelliJ IDEA Community	1	0
-ides	IDEs	kiro	Kiro IDE / CLI	1	1
-ides	IDEs	pycharm-community	PyCharm Community	1	0
-ides	IDEs	vscode	Visual Studio Code	1	1
-ides	IDEs	zed	Zed editor	1	0
-lang	Languages & Runtimes	go	Go	0	1
-lang	Languages & Runtimes	java	Java JDK 21 (17/21/25)	0	1
-lang	Languages & Runtimes	node	Node.js 24 LTS + nvm (24/22 switchable)	0	1
-lang	Languages & Runtimes	php	PHP	0	0
-lang	Languages & Runtimes	ruby	Ruby	0	1
-lang	Languages & Runtimes	rust	Rust (rustc/cargo)	0	1
-devops	DevOps & Containers	ansible	Ansible	0	1
-devops	DevOps & Containers	docker	Docker Engine	0	1
-devops	DevOps & Containers	k9s	k9s - Kubernetes TUI	0	0
-devops	DevOps & Containers	lazydocker	LazyDocker - docker TUI	0	0
-devops	DevOps & Containers	podman	Podman - container engine	0	1
-media	Media	audacity	Audacity - audio editor	0	0
-media	Media	ffmpeg	FFmpeg - audio/video converter	0	1
-media	Media	handbrake	HandBrake - video transcoder	0	0
-media	Media	kdenlive	Kdenlive - video editor	0	0
-media	Media	mpv	mpv - media player	0	0
-media	Media	obs-studio	OBS Studio - recording and streaming	0	0
-media	Media	vlc	VLC - media player	0	1
-graphics	Graphics	blender	Blender - 3D creation	0	0
-graphics	Graphics	darktable	darktable - photo workflow	0	0
-graphics	Graphics	gimp	GIMP - image editor	0	1
-graphics	Graphics	inkscape	Inkscape - vector graphics	0	1
-graphics	Graphics	krita	Krita - digital painting	0	0
-util	Utilities	adb	adb - Android Debug Bridge	0	1
-util	Utilities	dialog	dialog - TUI dialogs	0	1
-util	Utilities	flatpak	Flatpak - app packaging	0	1
-util	Utilities	nala	Nala - prettier apt	0	1
-util	Utilities	ntfs	ntfs-3g - NTFS filesystem	0	1
-util	Utilities	wine	Wine - Windows compatibility	0	1
-db-sql	Relational databases	mariadb	MariaDB server (127.0.0.1)	1	0
-db-sql	Relational databases	mysql	MySQL server (127.0.0.1)	1	0
-db-sql	Relational databases	oracle-free	Oracle Database Free (container)	1	0
-db-sql	Relational databases	pgvector	pgvector - vector search for PostgreSQL	1	0
-db-sql	Relational databases	postgresql	PostgreSQL server (127.0.0.1)	1	0
-db-sql	Relational databases	sqlite	SQLite CLI	1	1
-db-nosql	NoSQL & graph databases	atlas	MongoDB Atlas CLI (local deployments)	1	0
-db-nosql	NoSQL & graph databases	cassandra	Apache Cassandra (Apache repo)	1	0
-db-nosql	NoSQL & graph databases	couchdb	Apache CouchDB	1	0
-db-nosql	NoSQL & graph databases	mongodb	MongoDB Community server + mongosh	1	0
-db-nosql	NoSQL & graph databases	neo4j	Neo4j graph database (Neo4j repo)	1	0
-db-nosql	NoSQL & graph databases	redis	Redis server (127.0.0.1)	1	0
-db-nosql	NoSQL & graph databases	valkey	Valkey server (127.0.0.1)	1	0
-db-vector	Vector databases	chroma	Chroma (pipx)	1	0
-db-vector	Vector databases	milvus	Milvus standalone (container)	1	0
-db-vector	Vector databases	qdrant	Qdrant (container)	1	0
-db-vector	Vector databases	weaviate	Weaviate (container)	1	0
-storage	Object storage	minio	MinIO server (Homebrew)	1	0
-storage	Object storage	minio-client	MinIO client mcli (brew: conflicts with mc)	0	0
-storage	Object storage	rclone	rclone - cloud storage sync	0	0
-storage	Object storage	s3cmd	s3cmd - S3 command line	0	0
-storage	Object storage	seaweedfs	SeaweedFS S3 server (container)	1	0
-db-admin	Database admin	beekeeper-studio	Beekeeper Studio	1	0
-db-admin	Database admin	dbeaver-ce	DBeaver Community	1	0
-db-admin	Database admin	litecli	litecli - SQLite CLI	0	0
-db-admin	Database admin	mongodb-compass	MongoDB Compass	1	0
-db-admin	Database admin	mycli	mycli - MySQL CLI	0	0
-db-admin	Database admin	pgadmin4	pgAdmin 4	1	0
-db-admin	Database admin	pgcli	pgcli - PostgreSQL CLI	0	0
-db-admin	Database admin	sqlitebrowser	DB Browser for SQLite	1	0
-db-admin	Database admin	usql	usql - universal SQL CLI	0	0
-sysadmin	System admin	btop	btop - resource monitor	0	0
-sysadmin	System admin	cockpit	Cockpit web console (127.0.0.1:9090)	1	0
-sysadmin	System admin	glances	Glances - system monitor	0	1
-sysadmin	System admin	lnav	lnav - log navigator	0	0
-web	Web services	apache2	Apache httpd (127.0.0.1)	1	0
-web	Web services	caddy	Caddy (127.0.0.1)	1	0
-web	Web services	certbot	certbot - Let's Encrypt client	0	0
-web	Web services	haproxy	HAProxy	1	0
-web	Web services	mkcert	mkcert - local TLS certificates	0	1
-web	Web services	nginx	nginx (127.0.0.1)	1	0
-prog	Programming tools	bruno	Bruno - API client	1	0
-prog	Programming tools	clang	Clang/LLVM	0	1
-prog	Programming tools	cmake	CMake	0	1
-prog	Programming tools	dotnet-sdk	.NET SDK	1	0
-prog	Programming tools	gdb	GDB debugger	0	1
-prog	Programming tools	httpie	HTTPie - HTTP client	0	0
-prog	Programming tools	kotlin	Kotlin compiler	0	0
-prog	Programming tools	ninja	Ninja build	0	1
-prog	Programming tools	nvm	nvm - Node versions	0	1
-prog	Programming tools	pipx	pipx - Python app installer	0	1
-prog	Programming tools	pre-commit	pre-commit	0	0
-prog	Programming tools	pyenv	pyenv - Python versions	0	0
-prog	Programming tools	sdkman	SDKMAN - JVM SDKs	1	0
-prog	Programming tools	shellcheck	ShellCheck	0	1
-prog	Programming tools	uv	uv - Python package manager	0	1
-prog	Programming tools	valgrind	Valgrind	0	0
-claude-plugins	Claude Code plugins	plugin-claude-md-management	claude-md-management plugin (claude-plugins-official)	1	1
-claude-plugins	Claude Code plugins	plugin-code-review	code-review plugin (claude-plugins-official)	1	1
-claude-plugins	Claude Code plugins	plugin-code-simplifier	code-simplifier plugin (claude-plugins-official)	1	1
-claude-plugins	Claude Code plugins	plugin-commit-commands	commit-commands plugin (claude-plugins-official)	1	1
-claude-plugins	Claude Code plugins	plugin-feature-dev	feature-dev plugin (claude-plugins-official)	1	1
-claude-plugins	Claude Code plugins	plugin-frontend-design	frontend-design plugin (claude-plugins-official)	1	1
-claude-plugins	Claude Code plugins	plugin-hookify	hookify plugin (claude-plugins-official)	1	1
-claude-plugins	Claude Code plugins	plugin-pr-review-toolkit	pr-review-toolkit plugin (claude-plugins-official)	1	1
-claude-plugins	Claude Code plugins	plugin-security-guidance	security-guidance plugin (claude-plugins-official)	1	1
-claude-plugins	Claude Code plugins	plugin-skill-creator	skill-creator plugin (claude-plugins-official)	1	1
-apps	Apps	image-view	image-view - terminal image viewer	0	1
-apps	Apps	isoforge	Isoforge - ISO burner	0	0
-apps	Apps	nemo	Nemo - file manager	0	1
-apps	Apps	rustdesk	RustDesk - remote desktop	0	1
-apps	Apps	streamcontroller	StreamController - Stream Deck	0	1
+shell	Shell & CLI	bat	bat - cat with syntax highlighting	0	1	-
+shell	Shell & CLI	eza	eza - modern ls replacement	0	0	-
+shell	Shell & CLI	fd	fd - fast find alternative	0	0	-
+shell	Shell & CLI	fzf	fzf - fuzzy finder	0	0	-
+shell	Shell & CLI	glow	glow - terminal markdown viewer	0	1	-
+shell	Shell & CLI	jq	jq - JSON processor	0	1	-
+shell	Shell & CLI	ripgrep	ripgrep (rg) - fast grep	0	1	-
+shell	Shell & CLI	tldr	tldr - simplified man pages	0	1	-
+shell	Shell & CLI	tree	tree - directory listing	0	1	-
+shell	Shell & CLI	yq	yq - YAML processor	0	0	-
+shell	Shell & CLI	zoxide	zoxide - smart cd command	0	0	-
+shell	Shell & CLI	zsh	zsh - Z shell	0	0	-
+editors	Editors & Terminal	mc	mc - Midnight Commander	0	1	-
+editors	Editors & Terminal	meld	Meld - visual diff/merge tool	0	1	-
+editors	Editors & Terminal	micro	micro - terminal text editor	0	0	-
+editors	Editors & Terminal	neovim	Neovim - vim fork	0	0	-
+editors	Editors & Terminal	screen	screen - terminal multiplexer	0	1	-
+editors	Editors & Terminal	tmux	tmux - terminal multiplexer	0	1	-
+system	System & Monitoring	bandwhich	bandwhich - bandwidth by process	0	0	-
+system	System & Monitoring	cron	cron - task scheduler	0	1	-
+system	System & Monitoring	duf	duf - disk usage viewer	0	1	-
+system	System & Monitoring	htop	htop - process viewer	0	1	-
+system	System & Monitoring	lm-sensors	lm-sensors - hardware sensors	0	1	-
+system	System & Monitoring	ncdu	ncdu - disk usage analyzer	0	1	-
+system	System & Monitoring	pciutils	pciutils - lspci	0	1	-
+system	System & Monitoring	usbutils	usbutils - lsusb	0	1	-
+network	Networking	bind-tools	bind-tools - dig/nslookup	0	1	-
+network	Networking	curl	curl - HTTP client	0	1	-
+network	Networking	iperf3	iperf3 - network benchmark	0	0	-
+network	Networking	mtr	mtr - traceroute + ping	0	1	-
+network	Networking	net-tools	net-tools - ifconfig/netstat	0	1	-
+network	Networking	nmap	nmap - network scanner	0	1	-
+network	Networking	tcpdump	tcpdump - packet analyzer	0	1	-
+network	Networking	tor	Tor - anonymous browsing	0	0	-
+network	Networking	traceroute	traceroute	0	1	-
+network	Networking	ufw	ufw - firewall	0	1	-
+network	Networking	wget	wget - file downloader	0	1	-
+backup	Backup & Storage	borgbackup	borgbackup - deduplicating backup	0	1	-
+backup	Backup & Storage	duplicity	duplicity - encrypted backup	0	0	-
+backup	Backup & Storage	fdupes	fdupes - find duplicate files	0	1	-
+backup	Backup & Storage	lz4	lz4 - fast compression	0	0	-
+backup	Backup & Storage	tar	tar - archiver	0	1	-
+backup	Backup & Storage	unzip	unzip - ZIP extractor	0	1	-
+dev	Development	bfg	BFG - git repo cleaner	0	1	-
+dev	Development	build-tools	build-essential / toolchain	0	1	-
+dev	Development	composer	Composer - PHP package manager	0	0	-
+dev	Development	delta	delta - better git diff	0	0	-
+dev	Development	gh	GitHub CLI	0	1	-
+dev	Development	git	git - version control	0	1	-
+dev	Development	git-lantern	git-lantern - local and GitHub repo dashboard	0	0	-
+dev	Development	git-lfs	git-lfs - large file storage	0	0	-
+dev	Development	lazygit	LazyGit - git TUI	0	1	-
+dev	Development	tokei	tokei - code statistics	0	0	-
+ai	AI tools	aider	aider - AI pair programming	1	0	-
+ai	AI tools	ai-runner	ai-runner - pick and run local Ollama models	0	0	-
+ai	AI tools	claude-code	Claude Code	1	1	-
+ai	AI tools	codex	OpenAI Codex CLI	1	1	-
+ai	AI tools	copilot	GitHub Copilot CLI	1	0	-
+ai	AI tools	gemini	Gemini CLI	1	1	-
+ai	AI tools	ollama	Ollama local models	1	1	-
+ides	IDEs	antigravity	Antigravity - AI development environment	1	1	-
+ides	IDEs	cursor	Cursor IDE / Agent	1	0	-
+ides	IDEs	intellij-idea-community	IntelliJ IDEA Community	1	0	-
+ides	IDEs	kiro	Kiro IDE / CLI	1	1	-
+ides	IDEs	pycharm-community	PyCharm Community	1	0	-
+ides	IDEs	vscode	Visual Studio Code	1	1	-
+ides	IDEs	zed	Zed editor	1	0	-
+lang	Languages & Runtimes	go	Go	0	1	-
+lang	Languages & Runtimes	java	Java JDK 21 (17/21/25)	0	1	-
+lang	Languages & Runtimes	node	Node.js 24 LTS + nvm (24/22 switchable)	0	1	-
+lang	Languages & Runtimes	php	PHP	0	0	-
+lang	Languages & Runtimes	ruby	Ruby	0	1	-
+lang	Languages & Runtimes	rust	Rust (rustc/cargo)	0	1	-
+devops	DevOps & Containers	ansible	Ansible	0	1	-
+devops	DevOps & Containers	docker	Docker Engine	0	1	-
+devops	DevOps & Containers	k9s	k9s - Kubernetes TUI	0	0	-
+devops	DevOps & Containers	lazydocker	LazyDocker - docker TUI	0	0	-
+devops	DevOps & Containers	podman	Podman - container engine	0	1	-
+media	Media	audacity	Audacity - audio editor	0	0	-
+media	Media	ffmpeg	FFmpeg - audio/video converter	0	1	-
+media	Media	handbrake	HandBrake - video transcoder	0	0	-
+media	Media	kdenlive	Kdenlive - video editor	0	0	-
+media	Media	mpv	mpv - media player	0	0	-
+media	Media	obs-studio	OBS Studio - recording and streaming	0	0	-
+media	Media	vlc	VLC - media player	0	1	-
+graphics	Graphics	blender	Blender - 3D creation	0	0	-
+graphics	Graphics	darktable	darktable - photo workflow	0	0	-
+graphics	Graphics	gimp	GIMP - image editor	0	1	-
+graphics	Graphics	inkscape	Inkscape - vector graphics	0	1	-
+graphics	Graphics	krita	Krita - digital painting	0	0	-
+util	Utilities	adb	adb - Android Debug Bridge	0	1	-
+util	Utilities	dialog	dialog - TUI dialogs	0	1	-
+util	Utilities	flatpak	Flatpak - app packaging	0	1	-
+util	Utilities	nala	Nala - prettier apt	0	1	-
+util	Utilities	ntfs	ntfs-3g - NTFS filesystem	0	1	-
+util	Utilities	wine	Wine - Windows compatibility	0	1	-
+db-sql	Relational databases	mariadb	MariaDB server (127.0.0.1)	1	0	-
+db-sql	Relational databases	mysql	MySQL server (127.0.0.1)	1	0	-
+db-sql	Relational databases	oracle-free	Oracle Database Free (container)	1	0	docker
+db-sql	Relational databases	pgvector	pgvector - vector search for PostgreSQL	1	0	postgresql
+db-sql	Relational databases	postgresql	PostgreSQL server (127.0.0.1)	1	0	-
+db-sql	Relational databases	sqlite	SQLite CLI	1	1	-
+db-nosql	NoSQL & graph databases	atlas	MongoDB Atlas CLI (local deployments)	1	0	-
+db-nosql	NoSQL & graph databases	cassandra	Apache Cassandra (Apache repo)	1	0	-
+db-nosql	NoSQL & graph databases	couchdb	Apache CouchDB	1	0	-
+db-nosql	NoSQL & graph databases	mongodb	MongoDB Community server + mongosh	1	0	-
+db-nosql	NoSQL & graph databases	neo4j	Neo4j graph database (Neo4j repo)	1	0	-
+db-nosql	NoSQL & graph databases	redis	Redis server (127.0.0.1)	1	0	-
+db-nosql	NoSQL & graph databases	valkey	Valkey server (127.0.0.1)	1	0	-
+db-vector	Vector databases	chroma	Chroma (pipx)	1	0	pipx
+db-vector	Vector databases	milvus	Milvus standalone (container)	1	0	docker
+db-vector	Vector databases	qdrant	Qdrant (container)	1	0	docker
+db-vector	Vector databases	weaviate	Weaviate (container)	1	0	docker
+storage	Object storage	minio	MinIO server (Homebrew; archived upstream)	1	0	-
+storage	Object storage	minio-client	MinIO client mcli (brew: conflicts with mc)	0	0	-
+storage	Object storage	rclone	rclone - cloud storage sync	0	0	-
+storage	Object storage	s3cmd	s3cmd - S3 command line	0	0	-
+storage	Object storage	seaweedfs	SeaweedFS S3 server (container)	1	0	docker
+db-admin	Database admin	beekeeper-studio	Beekeeper Studio	1	0	-
+db-admin	Database admin	dbeaver-ce	DBeaver Community	1	0	-
+db-admin	Database admin	litecli	litecli - SQLite CLI	0	0	-
+db-admin	Database admin	mongodb-compass	MongoDB Compass	1	0	-
+db-admin	Database admin	mycli	mycli - MySQL CLI	0	0	-
+db-admin	Database admin	pgadmin4	pgAdmin 4	1	0	-
+db-admin	Database admin	pgcli	pgcli - PostgreSQL CLI	0	0	-
+db-admin	Database admin	sqlitebrowser	DB Browser for SQLite	1	0	-
+db-admin	Database admin	usql	usql - universal SQL CLI	0	0	-
+sysadmin	System admin	btop	btop - resource monitor	0	0	-
+sysadmin	System admin	cockpit	Cockpit web console (127.0.0.1:9090)	1	0	-
+sysadmin	System admin	glances	Glances - system monitor	0	1	-
+sysadmin	System admin	lnav	lnav - log navigator	0	0	-
+web	Web services	apache2	Apache httpd (127.0.0.1)	1	0	-
+web	Web services	caddy	Caddy (127.0.0.1)	1	0	-
+web	Web services	certbot	certbot - Let's Encrypt client	0	0	-
+web	Web services	haproxy	HAProxy	1	0	-
+web	Web services	mkcert	mkcert - local TLS certificates	0	1	-
+web	Web services	nginx	nginx (127.0.0.1)	1	0	-
+prog	Programming tools	bruno	Bruno - API client	1	0	-
+prog	Programming tools	clang	Clang/LLVM	0	1	-
+prog	Programming tools	cmake	CMake	0	1	-
+prog	Programming tools	dotnet-sdk	.NET SDK	1	0	-
+prog	Programming tools	gdb	GDB debugger	0	1	-
+prog	Programming tools	httpie	HTTPie - HTTP client	0	0	-
+prog	Programming tools	kotlin	Kotlin compiler	0	0	-
+prog	Programming tools	ninja	Ninja build	0	1	-
+prog	Programming tools	nvm	nvm - Node versions	0	1	-
+prog	Programming tools	pipx	pipx - Python app installer	0	1	-
+prog	Programming tools	pre-commit	pre-commit	0	0	-
+prog	Programming tools	pyenv	pyenv - Python versions	0	0	-
+prog	Programming tools	sdkman	SDKMAN - JVM SDKs	1	0	-
+prog	Programming tools	shellcheck	ShellCheck	0	1	-
+prog	Programming tools	uv	uv - Python package manager	0	1	-
+prog	Programming tools	valgrind	Valgrind	0	0	-
+claude-plugins	Claude Code plugins	plugin-claude-md-management	claude-md-management plugin (claude-plugins-official)	1	1	claude-code
+claude-plugins	Claude Code plugins	plugin-code-review	code-review plugin (claude-plugins-official)	1	1	claude-code
+claude-plugins	Claude Code plugins	plugin-code-simplifier	code-simplifier plugin (claude-plugins-official)	1	1	claude-code
+claude-plugins	Claude Code plugins	plugin-commit-commands	commit-commands plugin (claude-plugins-official)	1	1	claude-code
+claude-plugins	Claude Code plugins	plugin-feature-dev	feature-dev plugin (claude-plugins-official)	1	1	claude-code
+claude-plugins	Claude Code plugins	plugin-frontend-design	frontend-design plugin (claude-plugins-official)	1	1	claude-code
+claude-plugins	Claude Code plugins	plugin-hookify	hookify plugin (claude-plugins-official)	1	1	claude-code
+claude-plugins	Claude Code plugins	plugin-pr-review-toolkit	pr-review-toolkit plugin (claude-plugins-official)	1	1	claude-code
+claude-plugins	Claude Code plugins	plugin-security-guidance	security-guidance plugin (claude-plugins-official)	1	1	claude-code
+claude-plugins	Claude Code plugins	plugin-skill-creator	skill-creator plugin (claude-plugins-official)	1	1	claude-code
+apps	Apps	image-view	image-view - terminal image viewer	0	1	-
+apps	Apps	isoforge	Isoforge - ISO burner	0	0	-
+apps	Apps	nemo	Nemo - file manager	0	1	-
+apps	Apps	rustdesk	RustDesk - remote desktop	0	1	-
+apps	Apps	streamcontroller	StreamController - Stream Deck	0	1	-

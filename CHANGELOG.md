@@ -75,8 +75,9 @@ All notable changes to NikOS are documented here.
   skipped with a warning instead of failing the run.
 - The tool selection adds what a chosen tool needs (distrodeck's `needs`
   column when the catalog has one, otherwise `docker` for a container tool and
-  `claude-code` for a plugin) unless it is already chosen or installed;
-  distrodeck fails the whole `--tools` run without them.
+  `claude-code` for a plugin) unless it is already chosen or installed, and
+  puts it ahead of the tool that needs it; distrodeck fails the whole
+  `--tools` run without them.
 - distrodeck's `ollama` and `mongodb` are hidden from the tool selection and
   dropped from saved lists with a warning: NikOS installs both itself
   (`nikos_distrodeck_owned_tools`).

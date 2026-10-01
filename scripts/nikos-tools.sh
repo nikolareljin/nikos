@@ -116,7 +116,33 @@ nikos_tools_with_needs() {
       added=1
     done <<< "${rows}"
   done
-  nikos_tools_filter "${tsv}" "${csv}"
+  nikos_tools_order "${tsv}" "$(nikos_tools_filter "${tsv}" "${csv}")"
+}
+
+# nikos_tools_order <tsv> <csv> - catalog order, except that a tool's chosen
+# needs come before it: the catalog lists pgvector ahead of postgresql, and
+# distrodeck installs in the order given.
+nikos_tools_order() {
+  printf '%s\n' "$1" | awk -F'\t' -v list="$2" '
+    function visit(t,   n, a, i) {
+      if (t in seen) return
+      seen[t] = 1
+      n = split(needs[t], a, ",")
+      for (i = 1; i <= n; i++) {
+        if (a[i] == "docker" && !(a[i] in chosen) && ("podman" in chosen)) a[i] = "podman"
+        if (a[i] in chosen) visit(a[i])
+      }
+      out = out (out == "" ? "" : ",") t
+    }
+    NF >= 7 { needs[$3] = ($7 == "-" ? "" : $7); next }
+    NF >= 6 && $4 ~ /\(container\)/ { needs[$3] = "docker" }
+    NF >= 6 && $3 ~ /^plugin-/ { needs[$3] = "claude-code" }
+    END {
+      k = split(list, order, ",")
+      for (i = 1; i <= k; i++) chosen[order[i]] = 1
+      for (i = 1; i <= k; i++) visit(order[i])
+      print out
+    }'
 }
 
 # nikos_tools_select_plain <tsv> <saved csv>
