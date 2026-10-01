@@ -5,6 +5,14 @@
 # normal setup and add flows conservative.
 nikos_update_mode: true
 
+# ── Profile ──────────────────────────────────────────────────────────────────
+# desktop (default) - the full workstation: Xfce, theming, VS Code
+# server            - no desktop role at all: no display manager, no Xfce, no
+#                     wallpaper, no Plymouth theme, no GUI editor. SSH, the AI
+#                     stack, containers and the database bundles stay.
+# install.sh asks once and writes the answer to vars/local.yml.
+nikos_profile: "desktop"
+
 # ── Inference endpoint ──────────────────────────────────────────────────────
 # Exactly one process on a machine owns the Ollama port. The playbook and the
 # `nikos` CLI both read these names, so set them once, in vars/local.yml.
@@ -53,6 +61,7 @@ nikos_desktop_packages:
     - xfce4
 
 nikos_desktop_extra_packages:
+  - xfconf  # the desktop role writes Xfce settings with it
   - xfce4-goodies
   - xfce4-terminal
   - lightdm

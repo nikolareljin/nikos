@@ -31,7 +31,7 @@ across roles rather than gathered in one:
 | `ollama-models`, `ollama-reasoning`, `ollama-coding`, `ollama-text`, `ollama-vision`, `ollama-embedding` | `roles/ai-stack/tasks/main.yml` |
 
 That is thirteen tags `site.yml` never mentions. It carries the other
-twenty-four names, two of which — `always` and `never` — are Ansible keywords
+twenty-six names, two of which — `always` and `never` — are Ansible keywords
 rather than bundles. So reading `site.yml` finds a list missing well over a
 third of what exists, and grepping the roles finds the rest only if you
 already know which roles to open. Only
@@ -44,11 +44,11 @@ default inventory, so the command fails without it.
 $ ansible-playbook site.yml -i inventory/local --list-tags
       TASK TAGS: [act, ai-claude, ai-copilot-cli, ai-gemini, ai-local,
       ai-node, ai-runner, ai-vision, ai-vscode, always, base, bitnet,
-      bun, desktop, education, fabric, java, k8s-tools, mistral-rs,
-      monitoring, music, neovim, network, never, ollama-coding,
-      ollama-embedding, ollama-models, ollama-reasoning, ollama-text,
-      ollama-vision, openclaw, podman, postgres, qdrant, redis, theming,
-      zsh]
+      bun, desktop, editors, education, fabric, java, k8s-tools,
+      mistral-rs, mongodb, monitoring, music, neovim, network, never,
+      ollama-coding, ollama-embedding, ollama-models, ollama-reasoning,
+      ollama-text, ollama-vision, openclaw, podman, postgres, qdrant,
+      redis, theming, zsh]
 ```
 
 With that in mind, two things decide whether a bundle lands on a machine, and
@@ -59,28 +59,31 @@ disagree today and reading only one of them gives the wrong answer.
 
 Taking the playbook first.
 
-**Core image roles.** `base`, `desktop` and `theming` carry explicit role
-tags. This lets an image build select exactly the system core with `--tags
-base,desktop,theming`; it does not make them optional in an ordinary untagged
-run. They remain core system roles, not installer bundles.
+**Core image roles.** `base`, `desktop`, `theming` and `editors` carry explicit
+role tags. This lets an image build select exactly the system core with `--tags
+base,desktop,theming`, and lets `--skip-tags desktop,theming,editors` leave the
+desktop out; it does not make them optional in an ordinary untagged run. They
+remain core system roles, not installer bundles. On a server profile
+(`nikos_profile: server`, see `docs/profiles.md`) `desktop`, `theming`,
+`editors`, `music` and `education` do not run at all, whatever tags are passed.
 
 What keeps them out of the bundle list is now `nikos add`'s allowlist rather
-than the absence of a tag. Before these three tags existed the playbook made
+than the absence of a tag. Before these tags existed the playbook made
 the guarantee itself — an untagged role cannot be named in `--tags` or
 `--skip-tags` at all — and it no longer does, so anything that offers bundles
 has to say which names it accepts instead of deriving them from the tag list.
 
 **Always.** Roles carried in `site.yml` with no role-level tag —
-`github-setup`, `editors`, `cloud-ai-cli`, `agent-dev`, `dev-tools` — cannot
+`github-setup`, `cloud-ai-cli`, `agent-dev`, `dev-tools` — cannot
 be named in `--tags` or `--skip-tags` and run in an ordinary untagged play.
 `docs/debugging.md` points theming changes at `nikos setup`, which re-runs the
 intended setup while honouring saved `--skip-tags`. This distinction is
 deliberate: the untagged roles are not bundles and must not be offered as if
 they were.
 
-Four of the untagged roles do contain individually tagged tasks — `editors`,
-`cloud-ai-cli`, `agent-dev` and `dev-tools` each hold one of the AI sub-tools
-above. Skipping that tag drops those tasks; the rest of the role still runs.
+Three of the untagged roles, and the tagged `editors`, contain individually
+tagged tasks — `editors`, `cloud-ai-cli`, `agent-dev` and `dev-tools` each hold
+one of the AI sub-tools above. Skipping that tag drops those tasks; the rest of the role still runs.
 The role is what is unconditional here, not every task in it.
 
 **Skip to remove.** A plain tag, carrying no `never`: `network`, `music`,

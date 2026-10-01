@@ -32,15 +32,20 @@ The script will:
      when the configured value differs from the detected one)
    - **Custom** — enter any IANA timezone string (e.g. `America/New_York`, `Asia/Tokyo`)
    The chosen timezone is written to `vars/local.yml` before the playbook runs.
-9. Run `ansible-playbook` from the local clone, behind a per-role progress gauge
+9. Ask for the profile, `desktop` (default) or `server`, saying whether a display
+   manager was found, and write it to `vars/local.yml`. See [profiles.md](profiles.md).
+10. Run `ansible-playbook` from the local clone, behind a per-role progress gauge
 
 ## What the playbook does (in order)
 
+Roles marked *desktop* run only on the `desktop` profile; see
+[profiles.md](profiles.md).
+
 | Role | What it installs |
 |---|---|
-| `base` | apt update, nala, core build deps, flatpak, tmux, pipx, sqlite3, locale, timezone, NTP sync |
-| `desktop` | Xubuntu desktop, LightDM, xfce4-terminal, display manager and default session handover |
-| `theming` | Nordic GTK theme, Papirus-Dark icons, GRUB theme, LightDM greeter, wallpaper |
+| `base` | apt update, nala, core build deps, flatpak, tmux, pipx, sqlite3, openssh-server, locale, timezone, NTP sync |
+| `desktop` (*desktop*) | Xubuntu desktop, LightDM, xfce4-terminal, display manager and default session handover |
+| `theming` (*desktop*) | Nordic GTK theme, Papirus-Dark icons, GRUB theme, LightDM greeter, wallpaper |
 | `github-setup` | gh CLI, first-login wizard (SSH key, git identity) |
 | `ai-stack` | Ollama + qwen2.5-coder:7b, llama.cpp, Miniforge, nikos-ai conda env, aider, uv |
 | `editors` | VS Code + AI extensions + Nord theme + JetBrains Mono |
@@ -213,6 +218,10 @@ if SSH is still unavailable, the script now tries to install and start `openssh-
 through VirtualBox guest control before retrying the SSH checks. During `./test -b`,
 the unattended Xubuntu desktop boot now also forces the ISO straight into the installer
 instead of stopping at the live session.
+
+`--profile=server` runs the same flow against Ubuntu Server 24.04 in its own VM,
+with the server profile and a checklist that asserts no desktop artefact is
+present (`./test -b --profile=server`). See [profiles.md](profiles.md).
 
 To rebuild the VM from scratch and re-run the full OS + NikOS install flow:
 

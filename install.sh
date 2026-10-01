@@ -829,6 +829,75 @@ _select_timezone_plain() {
   return 0
 }
 
+# Profile ──────────────────────────────────────────────────────────
+# desktop (default) or server. Persisted to vars/local.yml next to the
+# timezone, which is what `nikos update` and every later run read, so it is
+# asked once. It is not an optional bundle and does not go in
+# selected-options.env.
+_get_configured_profile() {
+  local file="${NIKOS_HOME}/${LOCAL_VARS_REL}"
+  if [[ -f "${file}" ]]; then
+    grep -oP '^nikos_profile:\s*["\x27]?\K[^"\x27\s]+' "${file}" 2>/dev/null | tail -n 1 || true
+  fi
+}
+
+_set_profile_in_local_vars() {
+  local profile="$1"
+  local file="${NIKOS_HOME}/${LOCAL_VARS_REL}"
+
+  mkdir -p "$(dirname "${file}")"
+  if [[ ! -f "${file}" ]]; then
+    printf -- '---\nnikos_profile: "%s"\n' "${profile}" > "${file}"
+    return
+  fi
+  if grep -q '^nikos_profile:' "${file}"; then
+    sed -i "s|^nikos_profile:.*|nikos_profile: \"${profile}\"|" "${file}"
+  else
+    printf 'nikos_profile: "%s"\n' "${profile}" >> "${file}"
+  fi
+}
+
+# Says what was found rather than choosing from it: a headless machine is not
+# necessarily a server, and a server with a monitor is not a desktop.
+_display_manager_note() {
+  if [[ -s /etc/X11/default-display-manager ]]; then
+    printf 'Display manager found: %s\n' "$(cat /etc/X11/default-display-manager)"
+  else
+    printf 'No display manager found on this machine.\n'
+  fi
+}
+
+_select_profile_dialog() {
+  local default_profile="$1" note="$2"
+  dialog_init
+  dialog --stdout \
+    --title "NikOS ${NIKOS_VERSION} — Profile" \
+    --default-item "${default_profile}" \
+    --menu "${note}\nWhich kind of machine is this?" \
+    "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 2 \
+    "desktop" "Workstation: Xfce desktop, theming, VS Code (default)" \
+    "server"  "Server: no desktop, SSH, AI stack, containers, databases" 0</dev/tty
+}
+
+# Fills _chosen_profile in the caller's scope; prose goes to /dev/tty.
+_select_profile_plain() {
+  local default_profile="$1" note="$2" choice=""
+
+  _say_tty "Profile:"
+  _say_tty "  ${note}"
+  _say_tty "  desktop - workstation: Xfce desktop, theming, VS Code"
+  _say_tty "  server  - no desktop: SSH, AI stack, containers, databases"
+  while :; do
+    _ask_tty choice "  Profile [${default_profile}]: "
+    choice="${choice:-${default_profile}}"
+    case "${choice,,}" in
+      desktop | d) _chosen_profile="desktop"; return 0 ;;
+      server | s) _chosen_profile="server"; return 0 ;;
+      *) _say_tty "  Answer desktop or server." ;;
+    esac
+  done
+}
+
 # Clone (or update) the repo with submodules to a persistent location
 mkdir -p "$(dirname "${NIKOS_HOME}")"
 if [[ "${SKIP_REPO_SYNC}" == "1" ]]; then
@@ -1214,6 +1283,28 @@ fi
 
 _set_timezone_in_local_vars "${_chosen_tz}"
 _logfile "Timezone: ${_chosen_tz} (detected: ${_detected_tz}, was: ${_configured_tz:-unset})"
+
+# Profile ──────────────────────────────────────────────────────────
+# Defaults to desktop (or to what an earlier install recorded), so pressing
+# Enter through the installer reproduces a desktop install. Asked after the
+# timezone because it uses the same /dev/tty prompt helpers.
+_configured_profile="$(_get_configured_profile)"
+case "${_configured_profile}" in
+  desktop | server) _default_profile="${_configured_profile}" ;;
+  *) _default_profile="desktop" ;;
+esac
+_chosen_profile=""
+if _can_use_dialog; then
+  if ! _chosen_profile=$(_select_profile_dialog "${_default_profile}" "$(_display_manager_note)"); then
+    echo "Installer canceled during profile selection." >&2
+    exit 130
+  fi
+else
+  _require_tty_for_selection
+  _select_profile_plain "${_default_profile}" "$(_display_manager_note)"
+fi
+_set_profile_in_local_vars "${_chosen_profile}"
+_logfile "Profile: ${_chosen_profile} (was: ${_configured_profile:-unset}; $(_display_manager_note))"
 
 # Build ansible tag args ───────────────────────────────────────────
 # Turns SELECTED_BUNDLES and SELECTED_AI_TOOLS into SKIP_TAGS and

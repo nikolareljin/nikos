@@ -570,6 +570,8 @@ cmd_status() {
   endpoint="$(_ollama_endpoint)"
   print_info "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
   echo ""
+  echo "Profile:     $(_nikos_var nikos_profile desktop)"
+  echo ""
   echo "Inference:"
   echo "  mode:      $(_nikos_var nikos_ollama_mode local)"
   echo "  endpoint:  ${endpoint:-unset}"
@@ -591,6 +593,11 @@ cmd_status() {
 
 cmd_doctor() {
   local issues=0
+  # Ubuntu 24.04 socket-activates sshd, so ssh.service is inactive until the
+  # first connection; either unit being active means a login will be accepted.
+  ssh_listening() {
+    systemctl is-active --quiet ssh.socket || systemctl is-active --quiet ssh
+  }
   conda_env_exists() {
     local conda_bin="$1"
     test -f "${conda_bin}" && "${conda_bin}" env list | grep -q nikos-ai
@@ -638,13 +645,14 @@ cmd_doctor() {
       issues=$((issues + 1))
     fi
   }
-  print_info "NikOS Doctor — checking system health..."
+  local profile
+  profile="$(_nikos_var nikos_profile desktop)"
+  print_info "NikOS Doctor — checking system health (profile: ${profile})..."
   check "ansible installed" command -v ansible-playbook
   check "dialog installed" command -v dialog
   check "gh CLI installed" command -v gh
   check "tmux installed" command -v tmux
   _doctor_inference
-  check "VS Code installed" command -v code
   check "distrodeck installed" command -v distrodeck
   optional_check "llama.cpp installed" command -v llama-server
   optional_check "shell-gpt installed" command -v sgpt
@@ -654,8 +662,17 @@ cmd_doctor() {
   optional_check "nikos-ai env exists" conda_env_exists "${HOME}/miniforge3/bin/conda"
   optional_check "Claude Code installed" command -v claude
   optional_check "Gemini CLI installed" command -v gemini
-  check "Nordic GTK theme" test -d /usr/share/themes/Nordic
-  check "Papirus icons" test -d /usr/share/icons/Papirus-Dark
+  # The desktop checks are hard failures on a desktop install and are not run
+  # at all on a server one, where their absence is the correct result.
+  if [[ "${profile}" == "desktop" ]]; then
+    check "VS Code installed" command -v code
+    check "Nordic GTK theme" test -d /usr/share/themes/Nordic
+    check "Papirus icons" test -d /usr/share/icons/Papirus-Dark
+  else
+    print_info "Skipping desktop checks (VS Code, Nordic, Papirus) for profile ${profile}"
+  fi
+  check "SSH server installed" test -x /usr/sbin/sshd
+  check "SSH accepting connections" ssh_listening
   optional_check "GitHub configured" test -f "${HOME}/.config/nikos/github-configured"
   check "NikOS repo present" test -d "${NIKOS_HOME}/.git"
   check "script-helpers present" test -f "${HELPERS}"

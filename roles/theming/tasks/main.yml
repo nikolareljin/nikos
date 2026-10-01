@@ -1,4 +1,11 @@
 ---
+# Renders the SVG wallpaper to PNG below. Installed here rather than in base so
+# a server install does not pull a vector graphics editor.
+- name: Install inkscape for the wallpaper export
+  ansible.builtin.apt:
+    name: inkscape
+    state: present
+
 - name: Create NikOS asset directory
   ansible.builtin.file:
     path: /usr/share/nikos

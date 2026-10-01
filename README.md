@@ -29,6 +29,12 @@ The TUI follows the controlling terminal rather than stdin, so the one-liner abo
 `curl ... | bash` leaves the script's own bytes on stdin, which is not a terminal on any machine.
 Set `NIKOS_USE_DIALOG=0` to force the plain-prompt fallback.
 
+The installer also asks for a **profile**: `desktop` (the default, the full
+workstation) or `server` (Ubuntu Server or any headless machine: no desktop,
+no theming, no VS Code; SSH, the AI stack, containers and databases stay).
+A single laptop remains the default and complete install; see
+[docs/profiles.md](docs/profiles.md) for the layers each profile gets.
+
 Pass `--ref <branch-or-tag>` to install something other than the latest release.
 
 Coming from Xubuntu, log out and back in. Coming from Ubuntu, reboot: the installer moves
@@ -250,6 +256,7 @@ aider / Claude Code / Continue  →  use in code
 
 - [Installation guide](docs/install.md) — detailed install, requirements, troubleshooting
 - [Customization](docs/customization.md) — vars, roles, optional bundles
+- [Profiles](docs/profiles.md) — desktop and server, and which roles each runs
 - [Debugging](docs/debugging.md) — `nikos doctor`, common issues, logs
 - [Development](docs/development.md) — adding roles, testing, contributing
 

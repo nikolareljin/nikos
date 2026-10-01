@@ -6,6 +6,8 @@
 #   ./test -b               # rebuild: recreate VM + reinstall OS + run NikOS
 #   ./test --build          # same as -b
 #   ./test --vm-name=myvm   # override VM name
+#   ./test --profile=server # Ubuntu Server 24.04 + the server profile and its
+#                           # checklist (default VM name NikOS-test-server)
 #
 # -b pauses once after OS install so you can type the VM password
 # into ssh-copy-id (sets up key-based auth for all subsequent steps).
@@ -26,6 +28,8 @@ VM_HOST="nikos-test-vm.local"
 
 XUBUNTU_ISO="${HOME}/Downloads/xubuntu-24.04.4-desktop-amd64.iso"
 XUBUNTU_ISO_URL="https://cdimage.ubuntu.com/xubuntu/releases/24.04/release/xubuntu-24.04.4-desktop-amd64.iso"
+SERVER_ISO="${HOME}/Downloads/ubuntu-24.04.5-live-server-amd64.iso"
+SERVER_ISO_URL="https://releases.ubuntu.com/24.04/ubuntu-24.04.5-live-server-amd64.iso"
 
 SSH_KEY="${HOME}/.ssh/nikos_test_vm"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,13 +40,30 @@ SOURCE_ARCHIVE_REMOTE="/tmp/nikos-test-src.tar"
 SOURCE_DIR_REMOTE="/home/${VM_USER}/.local/share/nikos"
 
 BUILD=false
+PROFILE="desktop"
+VM_NAME_SET=false
 
 for arg in "$@"; do
   case "$arg" in
     -b|--build)   BUILD=true ;;
-    --vm-name=*)  VM_NAME="${arg#--vm-name=}" ;;
+    --vm-name=*)  VM_NAME="${arg#--vm-name=}"; VM_NAME_SET=true ;;
+    --profile=*)  PROFILE="${arg#--profile=}" ;;
   esac
 done
+
+case "${PROFILE}" in
+  desktop)
+    OS_ISO="${XUBUNTU_ISO}"; OS_ISO_URL="${XUBUNTU_ISO_URL}"; OS_LABEL="Xubuntu 24.04"
+    OS_ISO_MIN_BYTES=1000000000
+    ;;
+  server)
+    OS_ISO="${SERVER_ISO}"; OS_ISO_URL="${SERVER_ISO_URL}"; OS_LABEL="Ubuntu Server 24.04"
+    OS_ISO_MIN_BYTES=500000000
+    # A separate VM by default, so a server run never reuses a desktop guest.
+    [[ "${VM_NAME_SET}" == "true" || -n "${NIKOS_TEST_VM:-}" ]] || VM_NAME="NikOS-test-server"
+    ;;
+  *) printf '[test] ERROR: --profile must be desktop or server, got: %s\n' "${PROFILE}" >&2; exit 1 ;;
+esac
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 log() { printf '\n[test] %s\n' "$*"; }
@@ -194,6 +215,9 @@ run_installer() {
   vm_scp "${INSTALL_SH_LOCAL}" "${VM_USER}@localhost:${INSTALL_SH_REMOTE}"
 
   vm_ssh "mkdir -p '${SOURCE_DIR_REMOTE}' && tar -xf '${SOURCE_ARCHIVE_REMOTE}' -C '${SOURCE_DIR_REMOTE}'"
+  # The installer's profile prompt defaults to what vars/local.yml records, so
+  # pressing Enter at it gives the profile under test.
+  vm_ssh "mkdir -p '${SOURCE_DIR_REMOTE}/vars' && printf -- '---\\nnikos_profile: \"%s\"\\n' '${PROFILE}' > '${SOURCE_DIR_REMOTE}/vars/local.yml'"
 
   hr
   log "Running NikOS installer in the VM."
@@ -222,11 +246,11 @@ fi
 if $BUILD; then
 
   # ISO
-  if [[ ! -f "${XUBUNTU_ISO}" ]] || [[ $(stat -c%s "${XUBUNTU_ISO}") -lt 1000000000 ]]; then
-    log "Downloading Xubuntu 24.04 ISO (~4 GB)..."
-    curl -L "${XUBUNTU_ISO_URL}" -o "${XUBUNTU_ISO}" --progress-bar
+  if [[ ! -f "${OS_ISO}" ]] || [[ $(stat -c%s "${OS_ISO}") -lt ${OS_ISO_MIN_BYTES} ]]; then
+    log "Downloading ${OS_LABEL} ISO..."
+    curl -L "${OS_ISO_URL}" -o "${OS_ISO}" --progress-bar
   fi
-  log "ISO ready: ${XUBUNTU_ISO}"
+  log "ISO ready: ${OS_ISO}"
 
   # Wipe existing VM
   if vm_exists; then
@@ -263,16 +287,19 @@ if $BUILD; then
     --storagectl SATA --port 0 --device 0 --type hdd --medium "${disk}"
 
   # Unattended OS install — VirtualBox handles preseed, no GUI needed
-  log "Starting unattended Xubuntu install (headless) — this takes ~10-15 min..."
+  # only-ubiquity selects the Xubuntu desktop installer; the server ISO has none.
+  unattended_extra=()
+  [[ "${PROFILE}" == "desktop" ]] && unattended_extra+=(--extra-install-kernel-parameters="only-ubiquity")
+  log "Starting unattended ${OS_LABEL} install (headless) — this takes ~10-15 min..."
   VBoxManage unattended install "${VM_NAME}" \
-    --iso="${XUBUNTU_ISO}" \
+    --iso="${OS_ISO}" \
     --user="${VM_USER}" \
     --password="${VM_PASS}" \
     --hostname="${VM_HOST}" \
     --country=US \
     --time-zone=UTC \
     --locale=en_US \
-    --extra-install-kernel-parameters="only-ubiquity" \
+    "${unattended_extra[@]}" \
     --install-additions \
     --start-vm=headless
 
@@ -321,8 +348,29 @@ log "═══ nikos doctor ═══"
 vm_ssh "nikos doctor" || true
 
 hr
-log "═══ Verification checklist ═══"
-checks=(
+log "═══ Verification checklist (${PROFILE}) ═══"
+# Both profiles: the CLI, the AI stack answering on loopback, and SSH.
+common_checks=(
+  "command -v nikos"
+  "nikos doctor"
+  "command -v ollama"
+  "curl -fsS --max-time 5 http://127.0.0.1:11434/api/version"
+  "systemctl is-active --quiet ssh.socket || systemctl is-active --quiet ssh"
+  "grep -q 'nikos_profile: \"${PROFILE}\"' '${SOURCE_DIR_REMOTE}/vars/local.yml'"
+)
+# Server: the absence of every desktop artefact, not only the presence of the
+# server ones.
+server_checks=(
+  "! test -e /etc/X11/default-display-manager"
+  "! dpkg-query -W -f='\${Status}' lightdm 2>/dev/null | grep -q 'install ok'"
+  "! dpkg-query -W -f='\${Status}' xfce4-session 2>/dev/null | grep -q 'install ok'"
+  "! dpkg-query -W -f='\${Status}' inkscape 2>/dev/null | grep -q 'install ok'"
+  "! command -v code"
+  "! test -e /usr/share/themes/Nordic"
+  "! test -e /usr/share/nikos/wallpaper.png"
+  "! test -e /usr/share/plymouth/themes/nikos"
+)
+desktop_checks=(
   "command -v code"
   "code --list-extensions 2>/dev/null | grep -q arcticicestudio"
   "command -v ollama"
@@ -344,6 +392,13 @@ checks=(
   "grep -Eq '^GRUB_CMDLINE_LINUX_DEFAULT=\"([^\"]*[[:space:]])?splash([[:space:]][^\"]*)?\"' /etc/default/grub"
   "test -f /etc/X11/default-display-manager && grep -qx '/usr/sbin/lightdm' /etc/X11/default-display-manager"
 )
+
+checks=("${common_checks[@]}")
+if [[ "${PROFILE}" == "server" ]]; then
+  checks+=("${server_checks[@]}")
+else
+  checks+=("${desktop_checks[@]}")
+fi
 
 pass=0; fail=0
 for c in "${checks[@]}"; do

@@ -12,24 +12,25 @@
     update_cache: false
     cache_valid_time: 3600
 
+# Every package here has to make sense on a machine with no screen; the server
+# profile runs this role. xfconf and inkscape used to be here only because the
+# desktop and theming roles need them, and now live in those roles.
 - name: Install core dependencies
   ansible.builtin.apt:
     name:
       - git
       - curl
       - wget
-      - build-essential
+      - build-essential  # native builds: llama.cpp tools, pip wheels, bitnet
       - python3-pip
       - python3-venv
-      - flatpak
-      - gnupg
+      - flatpak  # distrodeck and the music/education bundles install through it
+      - gnupg  # vendor apt keys
       - lsb-release
       - ca-certificates
-      - software-properties-common
+      - software-properties-common  # add-apt-repository
       - dialog  # TUI prompts used by install.sh and nikos scripts
-      - xfconf
-      - inkscape  # required by theming role to export wallpaper SVG to PNG
-      - openssh-server  # enables remote access and SSH-based management
+      - openssh-server  # remote access; the only way into a server install
       - tmux
       - pipx
       - sqlite3
