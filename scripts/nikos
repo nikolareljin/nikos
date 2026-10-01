@@ -99,6 +99,11 @@ if [[ -f "${HELPERS}" ]]; then
   # shellcheck source=/dev/null
   source "${HELPERS}"
   shlib_import logging
+  # script-helpers names it print_warning. Without this, the first optional
+  # check that failed in `nikos doctor` aborted the whole run with exit 127.
+  if ! declare -F print_warn >/dev/null; then
+    print_warn() { print_warning "$@"; }
+  fi
 else
   # Minimal fallback: plain print functions so the rest of the script is uniform
   print_info()    { echo "[info] $*"; }

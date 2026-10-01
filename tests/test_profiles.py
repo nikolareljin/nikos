@@ -194,6 +194,10 @@ def _fake_home(tmp_path: Path, profile: str) -> Path:
     home = tmp_path / "nikos"
     (home / "vars").mkdir(parents=True)
     shutil.copy(REPO / "vars" / "main.yml", home / "vars" / "main.yml")
+    # The real helpers, so the doctor output goes through script-helpers'
+    # print functions exactly as on an installed machine.
+    (home / "scripts").mkdir()
+    (home / "scripts" / "script-helpers").symlink_to(REPO / "scripts" / "script-helpers")
     # Port 9 (discard) on loopback: nothing answers, so the endpoint check fails.
     (home / "vars" / "local.yml").write_text(
         f'---\nnikos_profile: "{profile}"\nnikos_ollama_host: "127.0.0.1:9"\n',
@@ -205,15 +209,21 @@ def _fake_home(tmp_path: Path, profile: str) -> Path:
 @pytest.mark.parametrize("profile", ["server", "desktop"])
 def test_doctor_checks_desktop_items_only_on_a_desktop(tmp_path: Path, profile: str) -> None:
     home = _fake_home(tmp_path, profile)
-    env = dict(os.environ, NIKOS_HOME=str(home), HOME=str(tmp_path))
+    # A PATH with none of the optional tools, so optional checks take their
+    # warning branch.
+    env = dict(os.environ, NIKOS_HOME=str(home), HOME=str(tmp_path), PATH="/usr/bin:/bin")
     result = subprocess.run(
         ["bash", str(NIKOS_CLI), "doctor"], capture_output=True, text=True, env=env, timeout=60
     )
-    out = result.stdout + result.stderr
+    out = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout + result.stderr)
+    assert "command not found" not in out, out
+    assert "All checks passed" in out or "issue(s) found" in out, out
     assert f"profile: {profile}" in out, out
-    desktop_lines = [l for l in out.splitlines() if "VS Code installed" in l or "Nordic" in l]
+    desktop_lines = [
+        l for l in out.splitlines() if "VS Code installed" in l or "Nordic GTK theme" in l
+    ]
     if profile == "server":
-        assert not any(l.startswith("[error]") or "✗" in l for l in desktop_lines), out
+        assert not desktop_lines, out
         assert "Skipping desktop checks" in out
     else:
         assert desktop_lines, out
