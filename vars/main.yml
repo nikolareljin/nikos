@@ -163,9 +163,10 @@ ollama_optional_models: >-
      + ollama_models_vision + ollama_models_embedding }}
 
 # ── distrodeck ──────────────────────────────────────────────────────────────
-# A release tag, not main, so an install is reproducible and an update moves
-# only when NikOS moves this pin.
-distrodeck_version: "0.10.3"
+# "latest" follows distrodeck's newest X.Y.Z release tag, resolved at run
+# time; `nikos update` moves an existing clone to it. Set a release such as
+# "0.10.3" in vars/local.yml to pin. Never main: only tagged releases install.
+distrodeck_version: "latest"
 # Comma-separated distrodeck tools to install. install.sh and `nikos add tools`
 # set it from the saved selection (~/.config/nikos/selected-options.env); empty
 # installs none.

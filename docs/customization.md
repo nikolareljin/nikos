@@ -262,9 +262,10 @@ exactly that list with `distrodeck install-tools --tools <list>`.
 nikos add tools      # choose again and install the new list now
 ```
 
-The catalog flag needs a distrodeck release that has it. With an older pinned
-release (`distrodeck_version` in `vars/main.yml`) the screen is skipped with a
-one-line note and the `dev-tools` role falls back to the previous behaviour,
+The catalog flag needs a distrodeck release that has it. `distrodeck_version`
+defaults to `latest`, the newest release tag; a release that predates the flag
+(0.10.3 and earlier, or one pinned in `vars/local.yml`) skips the screen with a
+one-line note, and the `dev-tools` role falls back to the previous behaviour,
 `distrodeck install-tools --all`.
 
 ## Changing the wallpaper

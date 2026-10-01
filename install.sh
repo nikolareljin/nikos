@@ -901,17 +901,24 @@ _select_profile_plain() {
 }
 
 # distrodeck tools ─────────────────────────────────────────────────
-# The catalog comes from the distrodeck release NikOS pins, which the playbook
-# has not cloned yet on a first install, so read it from a shallow clone of
-# that tag in the cache.
+# The catalog comes from the distrodeck release the playbook will install,
+# which it has not cloned yet on a first install, so read it from a shallow
+# clone of that tag in the cache. "latest" is resolved the same way the
+# dev-tools role resolves it; an empty result (offline) skips the screen.
 _pinned_distrodeck_version() {
-  local file value=""
+  local file value="" resolver
   for file in "${NIKOS_HOME}/${LOCAL_VARS_REL}" "${NIKOS_HOME}/vars/main.yml"; do
     [[ -f "${file}" ]] || continue
     value="$(grep -oP '^distrodeck_version:\s*["\x27]?\K[^"\x27\s]+' "${file}" 2>/dev/null | tail -n 1 || true)"
     [[ -n "${value}" ]] && break
   done
-  printf '%s\n' "${value}"
+  for resolver in "${NIKOS_HOME}/scripts/distrodeck-version.sh" "${SCRIPT_DIR}/scripts/distrodeck-version.sh"; do
+    if [[ -f "${resolver}" ]]; then
+      bash "${resolver}" "${value:-latest}" || true
+      return 0
+    fi
+  done
+  [[ "${value:-latest}" == "latest" ]] || printf '%s\n' "${value}"
 }
 
 _distrodeck_for_catalog() {
@@ -1383,7 +1390,11 @@ if [[ "${_TOOLS_LIB_LOADED}" == "true" ]] &&
     nikos_tools_select_plain "${_dd_catalog}" "${_saved_tools}" || exit 130
   fi
 else
-  echo "NOTE: distrodeck ${_dd_version:-?} has no tool catalog (install-tools --list-catalog); skipping tool selection; the playbook installs its default set with --all." >&2
+  if [[ -z "${_dd_version}" ]]; then
+    echo "NOTE: could not resolve the distrodeck release (offline?); skipping tool selection." >&2
+  else
+    echo "NOTE: distrodeck ${_dd_version} has no tool catalog (install-tools --list-catalog); skipping tool selection; the playbook installs its default set with --all." >&2
+  fi
   _logfile "distrodeck tool selection skipped: no catalog from ${_dd_version:-unknown}"
 fi
 _logfile "distrodeck tools: ${NIKOS_SELECTED_TOOLS:-none}"

@@ -7,12 +7,49 @@
 
 # ── distrodeck (installs Rust/cargo, bat, eza, fzf, lazygit, gh, go, docker…) ──
 
+# distrodeck_version "latest" follows distrodeck's newest release tag, so
+# `nikos update` moves an existing clone forward; any other value pins.
+# Offline, an existing clone is kept with a warning; with none there is
+# nothing to fall back to.
+- name: Resolve the distrodeck release
+  ansible.builtin.command:
+    argv:
+      - "{{ playbook_dir }}/scripts/distrodeck-version.sh"
+      - "{{ distrodeck_version }}"
+  register: dev_tools_distrodeck_resolve
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check for an existing distrodeck clone
+  ansible.builtin.stat:
+    path: "{{ nikos_home }}/Projects/distrodeck/.git"
+  register: dev_tools_distrodeck_clone
+
+- name: Stop when no distrodeck release can be resolved and none is cloned
+  ansible.builtin.fail:
+    msg: >-
+      Could not read distrodeck's release tags (offline?) and there is no
+      clone at {{ nikos_home }}/Projects/distrodeck. Connect and re-run, or set
+      distrodeck_version to a release in vars/local.yml.
+  when:
+    - dev_tools_distrodeck_resolve.rc != 0
+    - not dev_tools_distrodeck_clone.stat.exists
+
+- name: Warn that the existing distrodeck clone is kept
+  ansible.builtin.debug:
+    msg: >-
+      Could not resolve distrodeck {{ distrodeck_version }} (offline?); keeping
+      the existing clone at {{ nikos_home }}/Projects/distrodeck as it is.
+  when: dev_tools_distrodeck_resolve.rc != 0
+
 - name: Clone distrodeck
   ansible.builtin.git:
     repo: https://github.com/nikolareljin/distrodeck.git
     dest: "{{ nikos_home }}/Projects/distrodeck"
-    version: "{{ distrodeck_version }}"
-    update: "{{ nikos_update_mode | bool }}"
+    version: "{{ dev_tools_distrodeck_resolve.stdout | trim }}"
+    update: "{{ (nikos_update_mode | bool) or not dev_tools_distrodeck_clone.stat.exists }}"
+  when: dev_tools_distrodeck_resolve.rc == 0
 
 - name: Install distrodeck PATH wrapper
   ansible.builtin.copy:
@@ -28,6 +65,7 @@
 # it installs exactly the list chosen at install time or with
 # `nikos add tools`. An older release (0.10.3 and before) has no catalog to
 # choose from, so it keeps the previous behaviour: the whole default set.
+# Both paths stay, so NikOS works on either side of the release that adds it.
 - name: Check whether this distrodeck publishes a tool catalog
   ansible.builtin.command:
     argv:
@@ -66,7 +104,7 @@
 - name: Note that this distrodeck has no tool catalog
   ansible.builtin.debug:
     msg: >-
-      distrodeck {{ distrodeck_version }} has no tool catalog
+      distrodeck {{ dev_tools_distrodeck_resolve.stdout | default('') | trim | default(distrodeck_version, true) }} has no tool catalog
       (install-tools --list-catalog); installing its default set with --all.
   when: (dev_tools_catalog.rc | default(1)) != 0
 

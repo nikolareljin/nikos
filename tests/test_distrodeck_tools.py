@@ -342,9 +342,10 @@ def test_dev_tools_falls_back_to_all_on_an_older_distrodeck(tmp_path: Path) -> N
     ]
 
 
-def test_dev_tools_clone_is_pinned() -> None:
+def test_dev_tools_clones_a_resolved_release_tag() -> None:
+    # Never main: the clone takes what scripts/distrodeck-version.sh resolved.
     role = (REPO / "roles" / "dev-tools" / "tasks" / "main.yml").read_text(encoding="utf-8")
-    assert 'version: "{{ distrodeck_version }}"' in role
+    assert 'version: "{{ dev_tools_distrodeck_resolve.stdout | trim }}"' in role
 
 
 def test_installer_catalog_clone_brings_the_submodules(tmp_path: Path) -> None:
