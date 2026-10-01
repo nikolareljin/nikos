@@ -54,7 +54,56 @@
   args:
     creates: /usr/local/bin/ollama
     executable: /bin/bash
+  # The role runs unprivileged; the installer writes /usr/local and a system
+  # unit, and its own sudo cannot prompt under Ansible.
+  become: true
   when: nikos_ollama_mode == 'local'
+  register: ai_stack_ollama_install
+
+# Ollama is not pinned: `nikos update` (nikos_update_mode) moves the engine to
+# the newest release. The installer is idempotent but downloads the whole
+# engine, so it is re-run only when GitHub's latest release is newer than the
+# installed binary. It rewrites ollama.service; the NikOS drop-in lives in
+# ollama.service.d and survives, and the restart below picks up both.
+- name: Read the installed Ollama version
+  ansible.builtin.command: /usr/local/bin/ollama --version
+  register: ai_stack_ollama_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - nikos_ollama_mode == 'local'
+    - nikos_update_mode | bool
+
+- name: Read the latest Ollama release
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/ollama/ollama/releases/latest
+    return_content: true
+  register: ai_stack_ollama_latest
+  failed_when: false
+  check_mode: false
+  when:
+    - nikos_ollama_mode == 'local'
+    - nikos_update_mode | bool
+
+- name: Update Ollama to the latest release
+  vars:
+    ai_stack_ollama_have: "{{ (ai_stack_ollama_installed.stdout | default('')) | regex_search('[0-9]+[.][0-9]+[.][0-9]+') | default('', true) }}"
+    ai_stack_ollama_want: "{{ ((ai_stack_ollama_latest.json | default({})).tag_name | default('')) | regex_replace('^v', '') }}"
+  ansible.builtin.shell: curl -fsSL https://ollama.com/install.sh | sh  # noqa: command-instead-of-module risky-shell-pipe
+  args:
+    executable: /bin/bash
+  become: true
+  # Only reached when a newer release exists, so running it is the change.
+  changed_when: true
+  register: ai_stack_ollama_update
+  when:
+    - nikos_ollama_mode == 'local'
+    - nikos_update_mode | bool
+    - not ansible_check_mode
+    - ai_stack_ollama_install is not changed
+    - ai_stack_ollama_want is match('^[0-9]+[.][0-9]+[.][0-9]+$')
+    - ai_stack_ollama_have | length == 0 or ai_stack_ollama_want is version(ai_stack_ollama_have, '>')
 
 - name: Create the Ollama unit drop-in directory
   ansible.builtin.file:
@@ -81,7 +130,7 @@
     name: ollama
     enabled: true
     daemon_reload: true
-    state: "{{ 'restarted' if ai_stack_ollama_dropin is changed else 'started' }}"
+    state: "{{ 'restarted' if (ai_stack_ollama_dropin is changed or ai_stack_ollama_update is changed) else 'started' }}"
   become: true
   when:
     - nikos_ollama_mode == 'local'

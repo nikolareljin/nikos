@@ -118,6 +118,18 @@ nikos update --ref release/0.6.0  # a specific branch or tag
 updates submodules and re-runs the playbook. All roles are idempotent —
 already-installed components are skipped.
 
+Two components follow their upstream releases on every `nikos update` rather
+than a version NikOS pins:
+
+- **Ollama.** When the newest release on GitHub is newer than
+  `ollama --version`, the official installer is re-run and `ollama.service`
+  restarted. The NikOS drop-in (`ollama.service.d/nikos.conf`, the listen
+  address) is kept. `nikos setup` installs Ollama once and does not upgrade it.
+- **distrodeck.** `distrodeck_version: latest` (the default) moves
+  `~/Projects/distrodeck` to the newest `X.Y.Z` release tag. Set a release,
+  e.g. `distrodeck_version: "0.10.3"`, in `vars/local.yml` to pin it. Offline,
+  the existing clone is kept and the run prints a warning.
+
 The target is chosen from what is currently checked out:
 
 - **On a release tag** — advances to the newest release, and only if it really
