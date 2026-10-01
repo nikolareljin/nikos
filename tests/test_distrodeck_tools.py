@@ -66,10 +66,61 @@ def test_an_older_distrodeck_is_reported_not_fatal(tmp_path: Path) -> None:
     assert bash(f"nikos_tools_catalog {dd}").returncode == 1
 
 
+def test_a_catalog_with_appended_columns_is_accepted(tmp_path: Path) -> None:
+    # distrodeck's contract is append-only. Requiring exactly six columns made
+    # the next added column look like "no catalog" and fall back to --all.
+    wide = tmp_path / "wide.tsv"
+    wide.write_text(
+        "".join(line + "\textra\n" for line in FIXTURE.read_text(encoding="utf-8").splitlines()),
+        encoding="utf-8",
+    )
+    dd = tmp_path / "distrodeck"
+    dd.write_text(f"#!/bin/sh\ncat {wide}\n", encoding="utf-8")
+    dd.chmod(0o755)
+    result = bash(f'c="$(nikos_tools_catalog {dd})" && nikos_tools_names "$c"')
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == ["vscode", "zed", "ollama", "claude-code", "vlc", "gimp"]
+
+
+@needs_pty
+def test_dialog_keeps_columns_aligned_when_a_label_is_empty(tmp_path: Path) -> None:
+    # IFS=tab read merges empty fields, which moved opt_in into the label.
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    log = tmp_path / "dialog.args"
+    (fake / "dialog").write_text(
+        f'#!/bin/sh\nfor a in "$@"; do printf "%s\\n" "$a"; done > {log}\nexit 0\n',
+        encoding="utf-8",
+    )
+    (fake / "dialog").chmod(0o755)
+    program = tmp_path / "probe.sh"
+    program.write_text(
+        f"source {LIB}\n"
+        "nikos_tools_select_dialog \"$(printf 'ai\\tAI tools\\tollama\\t\\t1\\t0')\" ''\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["script", "-qec", f"bash {program}", "/dev/null"],
+        capture_output=True, timeout=30,
+        env={"PATH": f"{fake}:/usr/bin:/bin", "TERM": "xterm"},
+        stdin=subprocess.DEVNULL,
+    )
+    assert result.returncode == 0, result.stdout
+    args = log.read_text(encoding="utf-8").splitlines()
+    i = args.index("ollama")
+    assert args[i + 1 : i + 3] == ["[AI tools]  (opt-in)", "off"], args
+
+
 @pytest.mark.parametrize(
     "row",
-    ["ides\tIDEs\tvscode\tVS Code\t0", "ides\tIDEs\tvscode\tVS Code\tyes\t1", "\t\t\t\t0\t0"],
-    ids=["five-columns", "bad-flag", "no-tool-name"],
+    [
+        "ides\tIDEs\tvscode\tVS Code\t0",
+        "ides\tIDEs\tvscode\tVS Code\tyes\t1",
+        "\t\t\t\t0\t0",
+        "ides\tIDEs\tvs,code\tVS Code\t0\t0",
+        "ides\tIDEs\tvs code\tVS Code\t0\t0",
+    ],
+    ids=["five-columns", "bad-flag", "no-tool-name", "comma-in-name", "space-in-name"],
 )
 def test_a_malformed_catalog_is_rejected(tmp_path: Path, row: str) -> None:
     dd = tmp_path / "distrodeck"
@@ -87,7 +138,7 @@ def test_default_is_saved_list_else_installed() -> None:
     assert out == "vscode,gimp", tsv
 
 
-def _run_plain(tmp_path: Path, answers: str, *, piped: bool) -> str:
+def _run_plain(tmp_path: Path, answers: str, *, piped: bool, cwd: Path | None = None) -> str:
     program = tmp_path / "probe.sh"
     program.write_text(
         f"source {LIB}\n"
@@ -105,6 +156,7 @@ def _run_plain(tmp_path: Path, answers: str, *, piped: bool) -> str:
         capture_output=True,
         timeout=30,
         env={"PATH": "/usr/bin:/bin", "TERM": "xterm", "HOME": str(tmp_path)},
+        cwd=cwd,
     )
     return result.stdout.decode(errors="replace").replace("\r", "")
 
@@ -121,6 +173,18 @@ def test_plain_selection_round_trips_by_category(tmp_path: Path, piped: bool) ->
     # IDEs: keep [vscode]; AI: a typo, then both; Media: none; Graphics: all.
     answers = "\nollamaa\nollama claude-code\n-\n*\n"
     assert _tools(_run_plain(tmp_path, answers, piped=piped)) == "vscode,ollama,claude-code,gimp"
+
+
+@needs_pty
+def test_a_pattern_answer_is_not_expanded_against_the_working_directory(tmp_path: Path) -> None:
+    # Unquoted word splitting also globbed: with a file named vscode in the
+    # current directory, "v*" was accepted as the tool vscode.
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "vscode").touch()
+    out = _run_plain(tmp_path, "v*\n-\n-\n-\n-\n", piped=False, cwd=work)
+    assert "Not in IDEs and editors: v*" in out, out
+    assert _tools(out) == ""
 
 
 @needs_pty
@@ -281,3 +345,38 @@ def test_dev_tools_falls_back_to_all_on_an_older_distrodeck(tmp_path: Path) -> N
 def test_dev_tools_clone_is_pinned() -> None:
     role = (REPO / "roles" / "dev-tools" / "tasks" / "main.yml").read_text(encoding="utf-8")
     assert 'version: "{{ distrodeck_version }}"' in role
+
+
+def test_installer_catalog_clone_brings_the_submodules(tmp_path: Path) -> None:
+    # install-tools sources scripts/script-helpers. A clone without it fails
+    # the catalog request, so the selection screen never appears. A cache left
+    # by the old clone (no submodule) is replaced, not reused.
+    text = (REPO / "install.sh").read_text(encoding="utf-8")
+    func = re.search(r"^_distrodeck_for_catalog\(\) \{.*?^\}", text, re.M | re.S)
+    assert func, "install.sh no longer defines _distrodeck_for_catalog"
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    log = tmp_path / "git.args"
+    (fake / "git").write_text(
+        "#!/bin/bash\n"
+        f'echo "$*" >> {log}\n'
+        'dir="${!#}"; mkdir -p "$dir/scripts/script-helpers"\n'
+        'printf "#!/bin/sh\\n" > "$dir/distrodeck"; chmod +x "$dir/distrodeck"\n'
+        'case " $* " in *" --recurse-submodules "*) touch "$dir/scripts/script-helpers/helpers.sh";; esac\n',
+        encoding="utf-8",
+    )
+    (fake / "git").chmod(0o755)
+    stale = tmp_path / "cache" / "nikos" / "distrodeck-0.11.0"
+    stale.mkdir(parents=True)
+    (stale / "distrodeck").write_text("#!/bin/sh\n", encoding="utf-8")
+    (stale / "distrodeck").chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-c", f"{func.group(0)}\n_distrodeck_for_catalog 0.11.0"],
+        capture_output=True, text=True, timeout=30,
+        env={"PATH": f"{fake}:/usr/bin:/bin", "HOME": str(tmp_path),
+             "XDG_CACHE_HOME": str(tmp_path / "cache")},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f"{stale}/distrodeck"
+    assert "--recurse-submodules" in log.read_text(encoding="utf-8")
+    assert (stale / "scripts" / "script-helpers" / "helpers.sh").exists()

@@ -19,14 +19,15 @@
 
 # nikos_tools_catalog <distrodeck command...>
 # Prints the validated catalog. Returns 1 when the flag is unsupported or the
-# output is not the documented six-column shape.
+# output is not the documented shape: at least six columns (distrodeck only
+# ever appends), and a tool name that is safe in a comma-separated list.
 nikos_tools_catalog() {
   local out
   out="$("$@" install-tools --list-catalog --format tsv 2>/dev/null)" || return 1
   [[ -n "${out}" ]] || return 1
   printf '%s\n' "${out}" | awk -F'\t' '
     NF == 0 { next }
-    NF != 6 || $3 == "" || ($5 != "0" && $5 != "1") || ($6 != "0" && $6 != "1") { bad = 1 }
+    NF < 6 || $3 !~ /^[A-Za-z0-9._+-]+$/ || ($5 != "0" && $5 != "1") || ($6 != "0" && $6 != "1") { bad = 1 }
     END { exit bad }
   ' || return 1
   printf '%s\n' "${out}"
@@ -34,7 +35,7 @@ nikos_tools_catalog() {
 
 # nikos_tools_names <tsv> - every tool name, one per line.
 nikos_tools_names() {
-  printf '%s\n' "$1" | awk -F'\t' 'NF == 6 { print $3 }'
+  printf '%s\n' "$1" | awk -F'\t' 'NF >= 6 { print $3 }'
 }
 
 # nikos_tools_default <tsv> <saved csv> - what is preselected: the saved list
@@ -45,7 +46,7 @@ nikos_tools_default() {
     printf '%s\n' "${saved}"
     return 0
   fi
-  printf '%s\n' "${tsv}" | awk -F'\t' 'NF == 6 && $6 == "1" { printf "%s%s", sep, $3; sep = "," } END { print "" }'
+  printf '%s\n' "${tsv}" | awk -F'\t' 'NF >= 6 && $6 == "1" { printf "%s%s", sep, $3; sep = "," } END { print "" }'
 }
 
 # nikos_tools_filter <tsv> <csv> - keeps only names the catalog knows, in
@@ -53,7 +54,7 @@ nikos_tools_default() {
 nikos_tools_filter() {
   local tsv="$1" csv="$2"
   printf '%s\n' "${tsv}" | awk -F'\t' -v want=",${csv}," '
-    NF == 6 && index(want, "," $3 ",") { printf "%s%s", sep, $3; sep = "," }
+    NF >= 6 && index(want, "," $3 ",") { printf "%s%s", sep, $3; sep = "," }
     END { print "" }'
 }
 
@@ -62,8 +63,11 @@ nikos_tools_filter() {
 # takes the whole category, otherwise a space or comma separated list of names.
 nikos_tools_select_plain() {
   local tsv="$1" default cat_ids cat label tools line answer name chosen="" pre ok
+  # Answers are split on spaces below; "*" or "?" must not expand to file names.
+  local -
+  set -f
   default="$(nikos_tools_default "${tsv}" "$2")"
-  cat_ids="$(printf '%s\n' "${tsv}" | awk -F'\t' 'NF == 6 && !seen[$1]++ { print $1 }')"
+  cat_ids="$(printf '%s\n' "${tsv}" | awk -F'\t' 'NF >= 6 && !seen[$1]++ { print $1 }')"
 
   printf '%s\n' "distrodeck tools, by category (Enter keeps the [preselection], - for none, * for all):" >/dev/tty
   while IFS= read -r cat; do
@@ -110,13 +114,15 @@ nikos_tools_select_dialog() {
   local tsv="$1" default result status=0 n
   local -a items=()
   default="$(nikos_tools_default "${tsv}" "$2")"
-  while IFS=$'\t' read -r _cat cat_label tool label opt_in _installed; do
+  # Tab is IFS whitespace, so read would merge an empty label column into the
+  # next one; split on the unit separator instead, which is not.
+  while IFS=$'\037' read -r _cat cat_label tool label opt_in _installed; do
     [[ -n "${tool}" ]] || continue
     local state=off
     [[ ",${default}," == *",${tool},"* ]] && state=on
     [[ "${opt_in}" == "1" ]] && label="${label} (opt-in)"
     items+=("${tool}" "[${cat_label}] ${label}" "${state}")
-  done <<< "${tsv}"
+  done <<< "${tsv//$'\t'/$'\037'}"
   n=$(( ${#items[@]} / 3 ))
   result=$(
     dialog --stdout \

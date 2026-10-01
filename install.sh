@@ -918,10 +918,13 @@ _distrodeck_for_catalog() {
   local ver="$1" dir
   [[ -n "${ver}" ]] || return 1
   dir="${XDG_CACHE_HOME:-${HOME}/.cache}/nikos/distrodeck-${ver}"
-  if [[ ! -x "${dir}/distrodeck" ]]; then
+  # install-tools sources scripts/script-helpers, a submodule: without it the
+  # catalog request fails and the selection screen is skipped on every run.
+  if [[ ! -x "${dir}/distrodeck" || ! -f "${dir}/scripts/script-helpers/helpers.sh" ]]; then
     rm -rf "${dir}"
     mkdir -p "$(dirname "${dir}")"
-    git clone -q --depth 1 --branch "${ver}" https://github.com/nikolareljin/distrodeck.git "${dir}" >/dev/null 2>&1 || return 1
+    git clone -q --depth 1 --recurse-submodules --shallow-submodules --branch "${ver}" \
+      https://github.com/nikolareljin/distrodeck.git "${dir}" >/dev/null 2>&1 || return 1
   fi
   printf '%s\n' "${dir}/distrodeck"
 }
