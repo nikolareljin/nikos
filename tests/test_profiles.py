@@ -230,3 +230,17 @@ def test_doctor_checks_desktop_items_only_on_a_desktop(tmp_path: Path, profile: 
     # Nothing listens on the endpoint, so doctor must say so and fail.
     assert "does not answer at http://127.0.0.1:9" in out, out
     assert result.returncode != 0
+
+
+@pytest.mark.parametrize("bundle", ["music", "education"])
+def test_nikos_add_refuses_a_desktop_bundle_on_a_server(tmp_path: Path, bundle: str) -> None:
+    """site.yml would skip it and the run would report success anyway."""
+    home = _fake_home(tmp_path, "server")
+    env = dict(os.environ, NIKOS_HOME=str(home), HOME=str(tmp_path), PATH="/usr/bin:/bin")
+    result = subprocess.run(
+        ["bash", str(NIKOS_CLI), "add", bundle], capture_output=True, text=True, env=env, timeout=60
+    )
+    out = result.stdout + result.stderr
+    assert result.returncode == 1, out
+    assert "desktop bundle" in out and "vars/local.yml" in out, out
+    assert "Installing optional bundle" not in out, out

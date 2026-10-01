@@ -516,6 +516,13 @@ cmd_add() {
   local role="${1:-}"
   case "${role}" in
     network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
+      # site.yml skips the desktop layer on a server, so this would report
+      # success and install nothing.
+      if [[ "${role}" == "music" || "${role}" == "education" ]] &&
+        [[ "$(_nikos_var nikos_profile desktop)" != "desktop" ]]; then
+        print_error "${role} is a desktop bundle and this machine's profile is $(_nikos_var nikos_profile desktop) (vars/local.yml)."
+        exit 1
+      fi
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
       case "${role}" in

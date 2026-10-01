@@ -39,6 +39,10 @@ so a server run skips them even when they are named in `--tags`. On a desktop
 they can also be left out for one run with
 `--skip-tags desktop,theming,editors`.
 
+On a server, `nikos add music` and `nikos add education` stop with an error
+instead of reporting success for a role that would not run, and the installer
+says when a desktop bundle was selected but will be skipped.
+
 `base` holds only what makes sense with no screen. `inkscape` (wallpaper
 export) lives in `theming` and `xfconf` (Xfce settings) in `desktop`.
 

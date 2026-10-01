@@ -1304,6 +1304,16 @@ else
   _select_profile_plain "${_default_profile}" "$(_display_manager_note)"
 fi
 _set_profile_in_local_vars "${_chosen_profile}"
+# The bundles were chosen before the profile. site.yml skips the desktop layer
+# on a server, so say so here rather than let a selected bundle vanish.
+if [[ "${_chosen_profile}" == "server" ]]; then
+  for _bundle in music education; do
+    if printf '%s\n' "${SELECTED_BUNDLES[@]}" | grep -qx "${_bundle}"; then
+      echo "NOTE: ${_bundle} is a desktop bundle and is not installed on the server profile." >&2
+      _logfile "Profile server: desktop bundle ${_bundle} selected and skipped"
+    fi
+  done
+fi
 _logfile "Profile: ${_chosen_profile} (was: ${_configured_profile:-unset}; $(_display_manager_note))"
 
 # Build ansible tag args ───────────────────────────────────────────
