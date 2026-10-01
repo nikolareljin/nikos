@@ -234,7 +234,8 @@ nikos add ollama-models # Pull every optional Ollama model; about 75 GB
 ### MongoDB
 
 `nikos add mongodb` adds the vendor apt repository for the series in
-`mongodb_series` (default `8.0`), installs `mongodb-org`, `mongosh` and the
+`mongodb_series` (default `8.2`, signed with the 8.0 key in
+`mongodb_key_series`), installs `mongodb-org`, `mongosh` and the
 Atlas CLI, starts `mongod` bound to `127.0.0.1:27017`, and installs `pymongo`
 into the `nikos-ai` env. Nothing logs in to MongoDB Atlas.
 
@@ -263,8 +264,8 @@ nikos add tools      # choose again and install the new list now
 
 The catalog flag needs a distrodeck release that has it. With an older pinned
 release (`distrodeck_version` in `vars/main.yml`) the screen is skipped with a
-one-line note, the saved list is kept, and a machine with no saved list gets no
-distrodeck tools.
+one-line note and the `dev-tools` role falls back to the previous behaviour,
+`distrodeck install-tools --all`.
 
 ## Changing the wallpaper
 

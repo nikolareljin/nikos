@@ -1,19 +1,20 @@
 ---
 # MongoDB Community from the vendor's apt repository. Ubuntu ships no MongoDB
-# server package. 8.0 is the newest series that both has noble packages and a
-# published signing key at pgp.mongodb.com; the 9.0 noble repository carries
-# no mongodb-atlas-cli and its key is not published there yet.
+# server package. 8.2 is the series distrodeck uses; its noble repository has
+# mongodb-org, mongodb-mongosh and mongodb-atlas-cli, and its Release file is
+# signed with the 8.0 key (4B0752C1...4E7DCA05). The 9.0 noble repository has
+# no mongodb-atlas-cli.
 - name: Install the MongoDB repository signing key
   ansible.builtin.get_url:
-    url: "https://pgp.mongodb.com/server-{{ mongodb_series }}.asc"
-    dest: "/usr/share/keyrings/mongodb-server-{{ mongodb_series }}.asc"
+    url: "https://pgp.mongodb.com/server-{{ mongodb_key_series }}.asc"
+    dest: "/usr/share/keyrings/mongodb-server-{{ mongodb_key_series }}.asc"
     mode: "0644"
   become: true
 
 - name: Add the MongoDB apt repository
   ansible.builtin.apt_repository:
     repo: >-
-      deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-{{ mongodb_series }}.asc]
+      deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-{{ mongodb_key_series }}.asc]
       https://repo.mongodb.org/apt/ubuntu {{ ansible_distribution_release }}/mongodb-org/{{ mongodb_series }} multiverse
     filename: "mongodb-org-{{ mongodb_series }}"
     state: present

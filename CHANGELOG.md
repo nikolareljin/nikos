@@ -32,9 +32,10 @@ All notable changes to NikOS are documented here.
   new `nikos add tools` offer distrodeck's own catalog (read at run time from
   `install-tools --list-catalog --format tsv`), save the choice with the other
   selections, and the `dev-tools` role installs exactly that list instead of
-  `install-tools --all`. A distrodeck without the flag skips the screen with a
-  note.
-- **A `mongodb` bundle.** MongoDB Community 8.0 from repo.mongodb.org (signed-by
+  `install-tools --all`. A distrodeck without the flag (0.10.3, the current
+  pin) skips the screen with a note and installs its default set with `--all`
+  as before.
+- **A `mongodb` bundle.** MongoDB Community 8.2 from repo.mongodb.org (signed-by
   keyring), `mongosh`, the Atlas CLI and `pymongo`; `mongod` stays on
   `127.0.0.1:27017`. The Atlas local deployment is documented, not run.
 - **Several Java releases.** `nikos_java_versions` (default `[21]`) installs
@@ -71,7 +72,9 @@ All notable changes to NikOS are documented here.
 
 ### Fixed
 - An image build no longer runs `update-grub`, installs the GRUB theme under
-  `/usr/share/grub/themes` (the squashfs excludes `boot/grub`), and holds the
+  `/usr/share/grub/themes` (the squashfs excludes `boot/grub`; installed systems
+  with a separate `/boot` or an encrypted root also get a `/boot` copy that
+  `GRUB_THEME` points at), and holds the
   kernel packages during the `base` upgrade so the squashfs kernel matches the
   live one. The holds are released before the play moves on.
 - The Ollama tasks managed a user-scope unit that does not exist and waited on

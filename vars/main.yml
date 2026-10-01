@@ -176,7 +176,10 @@ nikos_distrodeck_tools: ""
 nikos_java_versions: [21]
 
 # ── MongoDB (optional bundle) ────────────────────────────────────────────────
-mongodb_series: "8.0"
+# The 8.2 noble repository is signed with the 8.0 release key; MongoDB
+# publishes no server-8.2.asc. Matches distrodeck's series.
+mongodb_series: "8.2"
+mongodb_key_series: "8.0"
 
 # ── Node.js for the npm-only CLIs ────────────────────────────────────────────
 # Gemini CLI and OpenClaw publish through npm only - the Gemini release carries
