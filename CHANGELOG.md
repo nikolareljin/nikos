@@ -70,10 +70,17 @@ All notable changes to NikOS are documented here.
 - distrodeck is cloned at a release tag rather than `main`.
   `distrodeck_version: latest` (the default) resolves the newest `X.Y.Z` tag at
   run time and `nikos update` moves the clone to it; any other value pins.
-  Offline, an existing clone is kept with a warning.
+  Offline, or with local edits to tracked files, an existing clone is kept
+  with a warning. Saved tool names the new release no longer lists are
+  skipped with a warning instead of failing the run.
+- The tool selection adds `docker` for a container tool and `claude-code` for
+  a Claude Code plugin when neither is chosen or installed; distrodeck fails
+  the whole `--tools` run without them.
 - `nikos update` upgrades Ollama when GitHub has a newer release, by re-running
   the official installer, then restarts `ollama.service`; the NikOS drop-in is
-  kept. Ollama is deliberately not pinned.
+  kept. Ollama is deliberately not pinned. The installer runs with
+  `pipefail`, so a failed download fails the task instead of reporting an
+  update and restarting the old engine.
 
 ### Fixed
 - An image build no longer runs `update-grub`, installs the GRUB theme under

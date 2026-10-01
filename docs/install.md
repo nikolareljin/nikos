@@ -125,10 +125,14 @@ than a version NikOS pins:
   `ollama --version`, the official installer is re-run and `ollama.service`
   restarted. The NikOS drop-in (`ollama.service.d/nikos.conf`, the listen
   address) is kept. `nikos setup` installs Ollama once and does not upgrade it.
+  When GitHub cannot be read (offline, or its unauthenticated API limit of 60
+  requests an hour) or the installed version cannot be read, Ollama is left as
+  it is and the run says so.
 - **distrodeck.** `distrodeck_version: latest` (the default) moves
   `~/Projects/distrodeck` to the newest `X.Y.Z` release tag. Set a release,
   e.g. `distrodeck_version: "0.10.3"`, in `vars/local.yml` to pin it. Offline,
-  the existing clone is kept and the run prints a warning.
+  or when the clone has uncommitted edits to tracked files, the existing clone
+  is kept and the run prints a warning.
 
 The target is chosen from what is currently checked out:
 

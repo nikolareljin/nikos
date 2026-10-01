@@ -121,8 +121,10 @@ disk and bandwidth rather than idle memory.
 | Python + Jupyter | Official MS extensions |
 
 ### Developer tools
-Installed via [distrodeck](https://github.com/nikolareljin/distrodeck):
-`bat` · `eza` · `fzf` · `lazygit` · `gh` · `rust` · `go` · `docker` · and more
+Installed via [distrodeck](https://github.com/nikolareljin/distrodeck): the
+tools you pick from its catalog at install time or with `nikos add tools`
+(`bat`, `eza`, `fzf`, `lazygit`, `gh`, `rust`, `go`, `docker`, databases and
+more). A distrodeck release without a catalog installs its default set.
 
 Additional tools installed directly:
 | Tool | Command | Purpose |
