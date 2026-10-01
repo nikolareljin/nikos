@@ -167,6 +167,8 @@ ollama_optional_models: >-
 # time; `nikos update` moves an existing clone to it. Set a release such as
 # "0.10.3" in vars/local.yml to pin. Never main: only tagged releases install.
 distrodeck_version: "latest"
+# Where the dev-tools role clones and resolves distrodeck from (tests point it
+# at a local repository). install.sh reads its catalog preview from GitHub.
 distrodeck_repo_url: "https://github.com/nikolareljin/distrodeck.git"
 # Comma-separated distrodeck tools to install. install.sh and `nikos add tools`
 # set it from the saved selection (~/.config/nikos/selected-options.env); empty
