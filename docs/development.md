@@ -32,6 +32,7 @@ nikos/
 │       ├── bun/                    # Bun JavaScript runtime
 │       ├── redis/                  # Redis server
 │       ├── postgres/               # PostgreSQL + pgvector
+│       ├── mongodb/                # MongoDB, mongosh, Atlas CLI
 │       ├── qdrant/                 # Qdrant vector database
 │       ├── zsh/                    # Zsh + Starship
 │       ├── act/                    # Local GitHub Actions runner

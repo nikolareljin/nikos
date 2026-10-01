@@ -145,6 +145,7 @@ nikos add java       # install optional: OpenJDK 21
 nikos add podman     # install optional: Podman
 nikos add bun        # install optional: Bun JavaScript runtime
 nikos add postgres   # install optional: PostgreSQL + pgvector
+nikos add mongodb    # install optional: MongoDB, mongosh, Atlas CLI
 nikos add redis      # install optional: Redis
 nikos add qdrant     # install optional: Qdrant vector database
 nikos add zsh        # install optional: Zsh + Starship

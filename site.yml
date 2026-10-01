@@ -121,6 +121,9 @@
     - role: postgres
       become: false
       tags: [never, postgres]
+    - role: mongodb
+      become: false
+      tags: [never, mongodb]
     - role: zsh
       become: false
       tags: [never, zsh]

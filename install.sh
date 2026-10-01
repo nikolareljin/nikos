@@ -984,7 +984,7 @@ _select_bundles_dialog() {
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
       --checklist "Space to toggle, Enter to confirm:" \
-      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 19 \
+      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 20 \
       "network"       "Network tools (nmap, wireshark, OpenVPN)"     off \
       "music"         "Music tools (LMMS, Ardour, Audacity)"         off \
       "education"     "Education tools (LibreOffice, draw.io, Anki)" off \
@@ -995,6 +995,7 @@ _select_bundles_dialog() {
       "openclaw"      "OpenClaw LLM gateway CLI"                     off \
       "ollama-models" "Every optional Ollama model, about 104 GB"     off \
       "postgres"      "PostgreSQL with pgvector"                     off \
+      "mongodb"       "MongoDB Community, mongosh and Atlas CLI"     off \
       "redis"         "Redis server and Python client"               off \
       "qdrant"        "Qdrant vector database container"             off \
       "k8s-tools"     "kubectl and Helm"                             off \
@@ -1097,7 +1098,7 @@ _require_tty_for_selection() {
 _select_bundles_plain() {
   local opt_network="" opt_music="" opt_education="" opt_neovim="" opt_zsh="" \
     opt_java="" opt_bun="" opt_openclaw="" opt_ollama_models="" opt_bitnet="" \
-    opt_mistral_rs="" opt_postgres="" opt_redis="" opt_qdrant="" \
+    opt_mistral_rs="" opt_postgres="" opt_mongodb="" opt_redis="" opt_qdrant="" \
     opt_k8s_tools="" opt_podman="" opt_act="" opt_monitoring="" opt_fabric=""
 
   SELECTED_BUNDLES=()
@@ -1120,6 +1121,7 @@ _select_bundles_plain() {
   _say_tty ""
   _say_tty "Databases:"
   _ask_tty opt_postgres "  Install PostgreSQL + pgvector? [y/N] "
+  _ask_tty opt_mongodb "  Install MongoDB + mongosh + Atlas CLI? [y/N] "
   _ask_tty opt_redis "  Install Redis? [y/N] "
   _ask_tty opt_qdrant "  Install Qdrant? [y/N] "
   _say_tty ""
@@ -1143,6 +1145,7 @@ _select_bundles_plain() {
   [[ "${opt_bitnet,,}" == "y" ]] && SELECTED_BUNDLES+=("bitnet")
   [[ "${opt_mistral_rs,,}" == "y" ]] && SELECTED_BUNDLES+=("mistral-rs")
   [[ "${opt_postgres,,}" == "y" ]] && SELECTED_BUNDLES+=("postgres")
+  [[ "${opt_mongodb,,}" == "y" ]] && SELECTED_BUNDLES+=("mongodb")
   [[ "${opt_redis,,}" == "y" ]] && SELECTED_BUNDLES+=("redis")
   [[ "${opt_qdrant,,}" == "y" ]] && SELECTED_BUNDLES+=("qdrant")
   [[ "${opt_k8s_tools,,}" == "y" ]] && SELECTED_BUNDLES+=("k8s-tools")
@@ -1230,7 +1233,7 @@ _build_tag_args() {
     fi
   done
 
-  for _bundle in neovim java bun redis postgres qdrant k8s-tools podman zsh act fabric bitnet mistral-rs monitoring ollama-models openclaw; do
+  for _bundle in neovim java bun redis postgres mongodb qdrant k8s-tools podman zsh act fabric bitnet mistral-rs monitoring ollama-models openclaw; do
     if printf '%s\n' "${SELECTED_BUNDLES[@]}" | grep -qx "${_bundle}"; then
       EXPLICIT_OPTIONAL_TAGS="${EXPLICIT_OPTIONAL_TAGS},${_bundle}"
     fi

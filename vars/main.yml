@@ -153,6 +153,9 @@ ollama_optional_models: >-
   {{ ollama_models_reasoning + ollama_models_coding + ollama_models_text
      + ollama_models_vision + ollama_models_embedding }}
 
+# ── MongoDB (optional bundle) ────────────────────────────────────────────────
+mongodb_series: "8.0"
+
 # ── Node.js for the npm-only CLIs ────────────────────────────────────────────
 # Gemini CLI and OpenClaw publish through npm only - the Gemini release carries
 # macOS binaries and a JS bundle, nothing native for Linux - so a Node new

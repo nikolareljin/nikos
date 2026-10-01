@@ -222,6 +222,7 @@ nikos add podman     # Podman container runtime
 nikos add bun        # Bun JavaScript runtime
 nikos add redis      # Redis server and Python client
 nikos add postgres   # PostgreSQL with pgvector and psycopg2
+nikos add mongodb    # MongoDB Community, mongosh, Atlas CLI and pymongo
 nikos add qdrant     # Qdrant vector database via Docker user service
 nikos add zsh        # Zsh plus Starship prompt
 nikos add act        # Run GitHub Actions locally
@@ -232,6 +233,21 @@ nikos add mistral-rs # mistral.rs Rust LLM server
 nikos add monitoring # Netdata monitoring dashboard
 nikos add openclaw   # OpenClaw LLM gateway CLI
 nikos add ollama-models # Pull every optional Ollama model; about 104 GB
+```
+
+### MongoDB
+
+`nikos add mongodb` adds the vendor apt repository for the series in
+`mongodb_series` (default `8.0`), installs `mongodb-org`, `mongosh` and the
+Atlas CLI, starts `mongod` bound to `127.0.0.1:27017`, and installs `pymongo`
+into the `nikos-ai` env. Nothing logs in to MongoDB Atlas.
+
+With Docker installed, the Atlas CLI can also run a local Atlas deployment,
+which adds Atlas Search and Vector Search. NikOS does not start one; run it
+yourself when you want it:
+
+```bash
+atlas deployments setup --type local
 ```
 
 ## Changing the wallpaper

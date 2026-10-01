@@ -93,7 +93,7 @@ installs all of them. Declining one at the prompt is what puts it in
 
 **Named to run.** Declared `tags: [never, <name>]`, so they never run unless asked
 for by name: `neovim`, `java`, `podman`, `openclaw`, `bun`, `redis`,
-`postgres`, `zsh`, `act`, `fabric`, `k8s-tools`, `qdrant`, `bitnet`,
+`postgres`, `mongodb`, `zsh`, `act`, `fabric`, `k8s-tools`, `qdrant`, `bitnet`,
 `mistral-rs` and `monitoring` on roles in `site.yml`, and `ollama-models` plus
 the five per-family tags `ollama-reasoning`, `ollama-coding`, `ollama-text`,
 `ollama-vision` and `ollama-embedding` on tasks inside `roles/ai-stack`. Each

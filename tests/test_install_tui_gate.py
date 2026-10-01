@@ -184,7 +184,7 @@ def test_gate_fails_when_dialog_is_absent(tmp_path):
 
 # One `y` per bundle prompt, in the order _select_bundles_plain asks them, then
 # the AI-tool prompts. Only BitNet is wanted, and only Claude Code is declined.
-BUNDLE_ANSWERS = ["n"] * 19
+BUNDLE_ANSWERS = ["n"] * 20
 BUNDLE_ANSWERS[9] = "y"  # "Install BitNet.cpp?"
 AI_ANSWERS = ["", "", "n", "", "", ""]  # Claude Code declined, rest defaulted
 

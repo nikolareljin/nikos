@@ -214,7 +214,7 @@ Usage:
   nikos setup            Run full NikOS playbook (first install)
   nikos update           Move to the newest release, then re-run playbook (idempotent)
   nikos update --ref <r> Update to a specific branch or tag instead
-  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw
+  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw
   nikos status           Show NikOS version, Ollama models, installed roles
   nikos doctor           Check for broken configs and missing dependencies
   nikos log [N]          Show last N lines of the latest playbook log (default 50)
@@ -261,7 +261,7 @@ _save_skip_tags() {
 _migrate_saved_optional_tags() {
   local skip_tags optional_tags="" tag
   local -a optional_role_tags=(
-    neovim java bun redis postgres qdrant k8s-tools podman zsh act fabric
+    neovim java bun redis postgres mongodb qdrant k8s-tools podman zsh act fabric
     bitnet mistral-rs monitoring openclaw ollama-models ollama-reasoning
     ollama-coding ollama-text ollama-vision ollama-embedding
   )
@@ -510,11 +510,11 @@ cmd_update() {
 cmd_add() {
   local role="${1:-}"
   case "${role}" in
-    network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
+    network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
       case "${role}" in
-        neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
+        neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
           _add_optional_tag "${role}"
           ;;
       esac
@@ -522,7 +522,7 @@ cmd_add() {
       ;;
     *)
       print_error "Unknown optional role: ${role}"
-      echo "Available: network, music, education, neovim, java, bun, redis, postgres, qdrant, k8s-tools, podman, zsh, act, fabric, bitnet, mistral-rs, monitoring, ollama-models, openclaw"
+      echo "Available: network, music, education, neovim, java, bun, redis, postgres, mongodb, qdrant, k8s-tools, podman, zsh, act, fabric, bitnet, mistral-rs, monitoring, ollama-models, ollama-reasoning, ollama-coding, ollama-text, ollama-vision, ollama-embedding, openclaw"
       exit 1
       ;;
   esac
