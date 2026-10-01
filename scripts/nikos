@@ -99,12 +99,24 @@ if [[ -f "${HELPERS}" ]]; then
   # shellcheck source=/dev/null
   source "${HELPERS}"
   shlib_import logging
+  # script-helpers names it print_warning. Without this, the first optional
+  # check that failed in `nikos doctor` aborted the whole run with exit 127.
+  if ! declare -F print_warn >/dev/null; then
+    print_warn() { print_warning "$@"; }
+  fi
 else
   # Minimal fallback: plain print functions so the rest of the script is uniform
   print_info()    { echo "[info] $*"; }
   print_error()   { echo "[error] $*" >&2; }
   print_success() { echo "[ok] $*"; }
   print_warn()    { echo "[warn] $*"; }
+fi
+
+_TOOLS_LIB_LOADED=false
+if [[ -f "${NIKOS_HOME}/scripts/nikos-tools.sh" ]]; then
+  # shellcheck source=scripts/nikos-tools.sh
+  source "${NIKOS_HOME}/scripts/nikos-tools.sh"
+  _TOOLS_LIB_LOADED=true
 fi
 
 if [[ -f "${REPO_SYNC_HELPERS}" ]]; then
@@ -214,7 +226,8 @@ Usage:
   nikos setup            Run full NikOS playbook (first install)
   nikos update           Move to the newest release, then re-run playbook (idempotent)
   nikos update --ref <r> Update to a specific branch or tag instead
-  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw
+  nikos add tools        Choose distrodeck tools by category and install them
+  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw
   nikos status           Show NikOS version, Ollama models, installed roles
   nikos doctor           Check for broken configs and missing dependencies
   nikos log [N]          Show last N lines of the latest playbook log (default 50)
@@ -243,7 +256,13 @@ _get_default_skip_tags() {
 }
 
 _save_skip_tags() {
-  local optional_tags="${2:-}" migrated="${3:-}"
+  local optional_tags="${2:-}" migrated="${3:-}" tools="${NIKOS_TOOLS_TO_SAVE-}"
+  # The distrodeck tool list rides along unchanged unless the caller sets
+  # NIKOS_TOOLS_TO_SAVE, so rewriting the skip tags can never drop it.
+  if [[ -z "${NIKOS_TOOLS_TO_SAVE+set}" && -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    tools="$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_DISTRODECK_TOOLS_SAVED:-}")"
+  fi
   if [[ $# -lt 3 && -f "${SELECTIONS_FILE}" ]]; then
     # shellcheck source=/dev/null
     source "${SELECTIONS_FILE}"
@@ -255,13 +274,14 @@ _save_skip_tags() {
     printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
     printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${optional_tags}"
     printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "${migrated}"
+    printf "NIKOS_DISTRODECK_TOOLS_SAVED=%q\n" "${tools}"
   } > "${SELECTIONS_FILE}"
 }
 
 _migrate_saved_optional_tags() {
   local skip_tags optional_tags="" tag
   local -a optional_role_tags=(
-    neovim java bun redis postgres qdrant k8s-tools podman zsh act fabric
+    neovim java bun redis postgres mongodb qdrant k8s-tools podman zsh act fabric
     bitnet mistral-rs monitoring openclaw ollama-models ollama-reasoning
     ollama-coding ollama-text ollama-vision ollama-embedding
   )
@@ -291,6 +311,25 @@ _get_saved_optional_tags() {
   fi
 }
 
+
+_get_saved_tools() {
+  [[ -f "${SELECTIONS_FILE}" ]] || { printf '\n'; return 0; }
+  # shellcheck source=/dev/null
+  ( source "${SELECTIONS_FILE}"; printf '%s\n' "${NIKOS_DISTRODECK_TOOLS_SAVED:-}" )
+}
+
+# _save_tools <csv> - replaces the saved distrodeck tool list, keeping the rest.
+_save_tools() {
+  local skip optional migrated=""
+  skip="$(_get_default_skip_tags)"
+  if [[ -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    optional="$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED:-}")"
+    # shellcheck source=/dev/null
+    migrated="$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_OPTIONAL_TAGS_MIGRATED:-}")"
+  fi
+  NIKOS_TOOLS_TO_SAVE="$1" _save_skip_tags "${skip}" "${optional:-}" "${migrated}"
+}
 
 _add_optional_tag() {
   local tag="$1" optional_tags
@@ -348,6 +387,7 @@ _playbook() {
     skip_tags="$(_get_default_skip_tags)"
   fi
   [[ -n "${skip_tags}" ]] && playbook_args+=(--skip-tags "${skip_tags}")
+  playbook_args+=(-e "nikos_distrodeck_tools=$(_get_saved_tools)")
   playbook_args+=("${extra_args[@]}")
 
   if _can_use_gauge && _collect_become_password; then
@@ -419,7 +459,43 @@ _playbook() {
   return "${_rc}"
 }
 
+# The distrodeck NikOS installed, or the one on PATH.
+_distrodeck_bin() {
+  if [[ -x "${HOME}/Projects/distrodeck/distrodeck" ]]; then
+    printf '%s\n' "${HOME}/Projects/distrodeck/distrodeck"
+  else
+    command -v distrodeck
+  fi
+}
+
+# Offers distrodeck's catalog by category and saves the answer. Returns 0 with
+# nothing changed when there is no terminal or the installed distrodeck has no
+# catalog; returns non-zero only when the user cancels.
+_select_tools() {
+  local bin catalog saved
+  [[ "${_TOOLS_LIB_LOADED}" == "true" ]] || return 0
+  if ! [[ -e /dev/tty ]] || ! { : >/dev/tty; } 2>/dev/null; then
+    return 0
+  fi
+  saved="$(_get_saved_tools)"
+  if ! bin="$(_distrodeck_bin)" || ! catalog="$(nikos_tools_catalog "${bin}")"; then
+    print_info "This distrodeck has no tool catalog (install-tools --list-catalog); skipping tool selection."
+    return 0
+  fi
+  NIKOS_SELECTED_TOOLS="${saved}"
+  if [[ "${USE_DIALOG}" != "0" ]] && command -v dialog >/dev/null 2>&1; then
+    declare -F dialog_init >/dev/null 2>&1 && dialog_init
+    nikos_tools_select_dialog "${catalog}" "${saved}" || return $?
+    _restore_terminal_cursor
+  else
+    nikos_tools_select_plain "${catalog}" "${saved}" || return $?
+  fi
+  _save_tools "${NIKOS_SELECTED_TOOLS}"
+  print_info "distrodeck tools: ${NIKOS_SELECTED_TOOLS:-none}"
+}
+
 cmd_setup() {
+  _select_tools || { print_error "Tool selection canceled; nothing was run."; exit 130; }
   print_info "Running full NikOS setup..."
   _playbook -e nikos_update_mode=false
 }
@@ -508,13 +584,31 @@ cmd_update() {
 }
 
 cmd_add() {
-  local role="${1:-}"
+  local role="${1:-}" bin tools
   case "${role}" in
-    network | music | education | neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
+    tools)
+      _select_tools || { print_error "Tool selection canceled; nothing was installed."; exit 130; }
+      tools="$(_get_saved_tools)"
+      [[ "${_TOOLS_LIB_LOADED}" == "true" ]] && tools="$(nikos_tools_drop_owned "${tools}")"
+      if [[ -z "${tools}" ]]; then
+        print_info "No distrodeck tools selected. With a distrodeck that has no catalog, 'nikos setup' installs its default set."
+        return 0
+      fi
+      bin="$(_distrodeck_bin)" || { print_error "distrodeck not found. Run 'nikos setup' first."; exit 1; }
+      "${bin}" install-tools --tools "${tools}"
+      ;;
+    network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
+      # site.yml skips the desktop layer on a server, so this would report
+      # success and install nothing.
+      if [[ "${role}" == "music" || "${role}" == "education" ]] &&
+        [[ "$(_nikos_var nikos_profile desktop)" != "desktop" ]]; then
+        print_error "${role} is a desktop bundle and this machine's profile is $(_nikos_var nikos_profile desktop) (vars/local.yml)."
+        exit 1
+      fi
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
       case "${role}" in
-        neovim | java | bun | redis | postgres | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
+        neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
           _add_optional_tag "${role}"
           ;;
       esac
@@ -522,17 +616,63 @@ cmd_add() {
       ;;
     *)
       print_error "Unknown optional role: ${role}"
-      echo "Available: network, music, education, neovim, java, bun, redis, postgres, qdrant, k8s-tools, podman, zsh, act, fabric, bitnet, mistral-rs, monitoring, ollama-models, openclaw"
+      echo "Available: network, music, education, neovim, java, bun, redis, postgres, mongodb, qdrant, k8s-tools, podman, zsh, act, fabric, bitnet, mistral-rs, monitoring, ollama-models, ollama-reasoning, ollama-coding, ollama-text, ollama-vision, ollama-embedding, openclaw"
       exit 1
       ;;
   esac
 }
 
+# _nikos_var <name> <default>
+#
+# Reads a top-level scalar from vars/local.yml, then vars/main.yml - the same
+# precedence the playbook uses - so the CLI and the play agree on one value.
+# Only `name: value` lines are understood; anything templated falls back.
+_nikos_var() {
+  local name="$1" default="${2:-}" file value
+  for file in "${NIKOS_HOME}/vars/local.yml" "${NIKOS_HOME}/vars/main.yml"; do
+    [[ -r "${file}" ]] || continue
+    value="$(sed -nE "s/^${name}:[[:space:]]*[\"']?([^\"'#]*[^\"'#[:space:]])?[\"']?[[:space:]]*(#.*)?$/\\1/p" "${file}" | tail -n 1)"
+    if [[ -n "${value}" && "${value}" != *"{{"* ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  done
+  printf '%s\n' "${default}"
+}
+
+# The URL clients should use for Ollama on this machine.
+_ollama_endpoint() {
+  if [[ "$(_nikos_var nikos_ollama_mode local)" == "remote" ]]; then
+    _nikos_var nikos_ollama_remote_url ""
+  else
+    printf 'http://%s\n' "$(_nikos_var nikos_ollama_host 127.0.0.1:11434)"
+  fi
+}
+
+# Prints the model names an endpoint reports. Fails when it does not answer.
+_ollama_endpoint_models() {
+  local endpoint="$1" body
+  [[ -n "${endpoint}" ]] || return 1
+  curl -fsS --max-time 5 "${endpoint%/}/api/version" >/dev/null 2>&1 || return 1
+  body="$(curl -fsS --max-time 5 "${endpoint%/}/api/tags" 2>/dev/null)" || return 1
+  printf '%s' "${body}" | grep -oE '"name":"[^"]+"' | sed 's/^"name":"//; s/"$//'
+  return 0
+}
+
 cmd_status() {
+  local endpoint
+  endpoint="$(_ollama_endpoint)"
   print_info "NikOS ${NIKOS_VERSION} — Neural Innovation for Knowledge OS"
   echo ""
+  echo "Profile:     $(_nikos_var nikos_profile desktop)"
+  echo ""
+  echo "Inference:"
+  echo "  mode:      $(_nikos_var nikos_ollama_mode local)"
+  echo "  endpoint:  ${endpoint:-unset}"
+  echo "  node role: $(_nikos_var nikos_node_role workstation)"
+  echo ""
   echo "Ollama models:"
-  ollama list 2>/dev/null || echo "  Ollama not running"
+  _ollama_endpoint_models "${endpoint}" | sed 's/^/  /' || echo "  endpoint not answering"
   echo ""
   echo "distrodeck:"
   distrodeck --version 2>/dev/null || echo "  distrodeck not found"
@@ -547,6 +687,11 @@ cmd_status() {
 
 cmd_doctor() {
   local issues=0
+  # Ubuntu 24.04 socket-activates sshd, so ssh.service is inactive until the
+  # first connection; either unit being active means a login will be accepted.
+  ssh_listening() {
+    systemctl is-active --quiet ssh.socket || systemctl is-active --quiet ssh
+  }
   conda_env_exists() {
     local conda_bin="$1"
     test -f "${conda_bin}" && "${conda_bin}" env list | grep -q nikos-ai
@@ -570,13 +715,38 @@ cmd_doctor() {
       print_warn "${label} (optional or pending first login)"
     fi
   }
-  print_info "NikOS Doctor — checking system health..."
+  # A binary on PATH says nothing about whether anything answers. Issue a
+  # request and read the reply, in every mode: a remote node can be off or
+  # moved, and only a request finds that out.
+  _doctor_inference() {
+    local mode endpoint models
+    mode="$(_nikos_var nikos_ollama_mode local)"
+    endpoint="$(_ollama_endpoint)"
+    print_info "Inference: mode=${mode} endpoint=${endpoint:-unset} node role=$(_nikos_var nikos_node_role workstation)"
+    if [[ "${mode}" == "local" ]]; then
+      check "Ollama installed" command -v ollama
+      check "Ollama service active" systemctl is-active --quiet ollama
+    fi
+    if models="$(_ollama_endpoint_models "${endpoint}")"; then
+      print_success "Ollama endpoint answers at ${endpoint}"
+      if [[ -n "${models}" ]]; then
+        printf '  models: %s\n' "$(printf '%s' "${models}" | paste -sd ' ' -)"
+      else
+        printf '  models: none pulled yet\n'
+      fi
+    else
+      print_error "Ollama endpoint does not answer at ${endpoint:-unset}"
+      issues=$((issues + 1))
+    fi
+  }
+  local profile
+  profile="$(_nikos_var nikos_profile desktop)"
+  print_info "NikOS Doctor — checking system health (profile: ${profile})..."
   check "ansible installed" command -v ansible-playbook
   check "dialog installed" command -v dialog
   check "gh CLI installed" command -v gh
   check "tmux installed" command -v tmux
-  check "Ollama installed" command -v ollama
-  check "VS Code installed" command -v code
+  _doctor_inference
   check "distrodeck installed" command -v distrodeck
   optional_check "llama.cpp installed" command -v llama-server
   optional_check "shell-gpt installed" command -v sgpt
@@ -586,8 +756,17 @@ cmd_doctor() {
   optional_check "nikos-ai env exists" conda_env_exists "${HOME}/miniforge3/bin/conda"
   optional_check "Claude Code installed" command -v claude
   optional_check "Gemini CLI installed" command -v gemini
-  check "Nordic GTK theme" test -d /usr/share/themes/Nordic
-  check "Papirus icons" test -d /usr/share/icons/Papirus-Dark
+  # The desktop checks are hard failures on a desktop install and are not run
+  # at all on a server one, where their absence is the correct result.
+  if [[ "${profile}" == "desktop" ]]; then
+    check "VS Code installed" command -v code
+    check "Nordic GTK theme" test -d /usr/share/themes/Nordic
+    check "Papirus icons" test -d /usr/share/icons/Papirus-Dark
+  else
+    print_info "Skipping desktop checks (VS Code, Nordic, Papirus) for profile ${profile}"
+  fi
+  check "SSH server installed" test -x /usr/sbin/sshd
+  check "SSH accepting connections" ssh_listening
   optional_check "GitHub configured" test -f "${HOME}/.config/nikos/github-configured"
   check "NikOS repo present" test -d "${NIKOS_HOME}/.git"
   check "script-helpers present" test -f "${HELPERS}"
@@ -596,6 +775,7 @@ cmd_doctor() {
     print_success "All checks passed."
   else
     print_error "${issues} issue(s) found. Run 'nikos update' to attempt repair."
+    return 1
   fi
 }
 

@@ -33,6 +33,7 @@ NIKOS_LOG_DIR="${NIKOS_CONFIG_DIR}/logs"
 INSTALL_LOG="${NIKOS_LOG_DIR}/install-$(date +%Y%m%d-%H%M%S).log"
 REPO_SYNC_HELPERS_REL="scripts/repo-sync.sh"
 PROGRESS_LIB_REL="scripts/nikos-progress.sh"
+TOOLS_LIB_REL="scripts/nikos-tools.sh"
 USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
 # Read by _migrate_local_vars in scripts/repo-sync.sh, which is sourced at runtime.
 # shellcheck disable=SC2034
@@ -689,6 +690,7 @@ _persist_selected_options() {
     printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
     printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${2}"
     printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "1"
+    printf "NIKOS_DISTRODECK_TOOLS_SAVED=%q\n" "${3:-}"
   } > "${SELECTIONS_FILE}"
 }
 
@@ -829,6 +831,117 @@ _select_timezone_plain() {
   return 0
 }
 
+# Profile ──────────────────────────────────────────────────────────
+# desktop (default) or server. Persisted to vars/local.yml next to the
+# timezone, which is what `nikos update` and every later run read, so it is
+# asked once. It is not an optional bundle and does not go in
+# selected-options.env.
+_get_configured_profile() {
+  local file="${NIKOS_HOME}/${LOCAL_VARS_REL}"
+  if [[ -f "${file}" ]]; then
+    grep -oP '^nikos_profile:\s*["\x27]?\K[^"\x27\s]+' "${file}" 2>/dev/null | tail -n 1 || true
+  fi
+}
+
+_set_profile_in_local_vars() {
+  local profile="$1"
+  local file="${NIKOS_HOME}/${LOCAL_VARS_REL}"
+
+  mkdir -p "$(dirname "${file}")"
+  if [[ ! -f "${file}" ]]; then
+    printf -- '---\nnikos_profile: "%s"\n' "${profile}" > "${file}"
+    return
+  fi
+  if grep -q '^nikos_profile:' "${file}"; then
+    sed -i "s|^nikos_profile:.*|nikos_profile: \"${profile}\"|" "${file}"
+  else
+    printf 'nikos_profile: "%s"\n' "${profile}" >> "${file}"
+  fi
+}
+
+# Says what was found rather than choosing from it: a headless machine is not
+# necessarily a server, and a server with a monitor is not a desktop.
+_display_manager_note() {
+  if [[ -s /etc/X11/default-display-manager ]]; then
+    printf 'Display manager found: %s\n' "$(cat /etc/X11/default-display-manager)"
+  else
+    printf 'No display manager found on this machine.\n'
+  fi
+}
+
+_select_profile_dialog() {
+  local default_profile="$1" note="$2"
+  dialog_init
+  dialog --stdout \
+    --title "NikOS ${NIKOS_VERSION} — Profile" \
+    --default-item "${default_profile}" \
+    --menu "${note}\nWhich kind of machine is this?" \
+    "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 2 \
+    "desktop" "Workstation: Xfce desktop, theming, VS Code (default)" \
+    "server"  "Server: no desktop, SSH, AI stack, containers, databases" 0</dev/tty
+}
+
+# Fills _chosen_profile in the caller's scope; prose goes to /dev/tty.
+_select_profile_plain() {
+  local default_profile="$1" note="$2" choice=""
+
+  _say_tty "Profile:"
+  _say_tty "  ${note}"
+  _say_tty "  desktop - workstation: Xfce desktop, theming, VS Code"
+  _say_tty "  server  - no desktop: SSH, AI stack, containers, databases"
+  while :; do
+    _ask_tty choice "  Profile [${default_profile}]: "
+    choice="${choice:-${default_profile}}"
+    case "${choice,,}" in
+      desktop | d) _chosen_profile="desktop"; return 0 ;;
+      server | s) _chosen_profile="server"; return 0 ;;
+      *) _say_tty "  Answer desktop or server." ;;
+    esac
+  done
+}
+
+# distrodeck tools ─────────────────────────────────────────────────
+# The catalog comes from the distrodeck release the playbook will install,
+# which it has not cloned yet on a first install, so read it from a shallow
+# clone of that tag in the cache. "latest" is resolved the same way the
+# dev-tools role resolves it; an empty result (offline) skips the screen.
+_pinned_distrodeck_version() {
+  local file value="" resolver
+  for file in "${NIKOS_HOME}/${LOCAL_VARS_REL}" "${NIKOS_HOME}/vars/main.yml"; do
+    [[ -f "${file}" ]] || continue
+    value="$(grep -oP '^distrodeck_version:\s*["\x27]?\K[^"\x27\s]+' "${file}" 2>/dev/null | tail -n 1 || true)"
+    [[ -n "${value}" ]] && break
+  done
+  for resolver in "${NIKOS_HOME}/scripts/distrodeck-version.sh" "${SCRIPT_DIR}/scripts/distrodeck-version.sh"; do
+    if [[ -f "${resolver}" ]]; then
+      bash "${resolver}" "${value:-latest}" || true
+      return 0
+    fi
+  done
+  [[ "${value:-latest}" == "latest" ]] || printf '%s\n' "${value}"
+}
+
+_distrodeck_for_catalog() {
+  local ver="$1" dir
+  [[ -n "${ver}" ]] || return 1
+  dir="${XDG_CACHE_HOME:-${HOME}/.cache}/nikos/distrodeck-${ver}"
+  # install-tools sources scripts/script-helpers, a submodule: without it the
+  # catalog request fails and the selection screen is skipped on every run.
+  if [[ ! -x "${dir}/distrodeck" || ! -f "${dir}/scripts/script-helpers/helpers.sh" ]]; then
+    rm -rf "${dir}"
+    mkdir -p "$(dirname "${dir}")"
+    git clone -q --depth 1 --recurse-submodules --shallow-submodules --branch "${ver}" \
+      https://github.com/nikolareljin/distrodeck.git "${dir}" >/dev/null 2>&1 || return 1
+  fi
+  printf '%s\n' "${dir}/distrodeck"
+}
+
+_saved_distrodeck_tools() {
+  [[ -f "${SELECTIONS_FILE}" ]] || return 0
+  # shellcheck source=/dev/null
+  ( source "${SELECTIONS_FILE}"; printf '%s\n' "${NIKOS_DISTRODECK_TOOLS_SAVED:-}" )
+}
+
 # Clone (or update) the repo with submodules to a persistent location
 mkdir -p "$(dirname "${NIKOS_HOME}")"
 if [[ "${SKIP_REPO_SYNC}" == "1" ]]; then
@@ -963,6 +1076,18 @@ for _progress_lib in "${NIKOS_HOME}/${PROGRESS_LIB_REL}" "${SCRIPT_DIR}/${PROGRE
   fi
 done
 unset _progress_lib
+
+# distrodeck tool selection. Optional for the same reason.
+_TOOLS_LIB_LOADED=false
+for _tools_lib in "${NIKOS_HOME}/${TOOLS_LIB_REL}" "${SCRIPT_DIR}/${TOOLS_LIB_REL}"; do
+  if [[ -f "${_tools_lib}" ]]; then
+    # shellcheck source=scripts/nikos-tools.sh
+    source "${_tools_lib}"
+    _TOOLS_LIB_LOADED=true
+    break
+  fi
+done
+unset _tools_lib
 [[ "${_PROGRESS_LIB_LOADED}" == "true" ]] || \
   _safe_logfile "[WARNING] ${PROGRESS_LIB_REL} not found; using the plain progress view"
 
@@ -984,7 +1109,7 @@ _select_bundles_dialog() {
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
       --checklist "Space to toggle, Enter to confirm:" \
-      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 19 \
+      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 20 \
       "network"       "Network tools (nmap, wireshark, OpenVPN)"     off \
       "music"         "Music tools (LMMS, Ardour, Audacity)"         off \
       "education"     "Education tools (LibreOffice, draw.io, Anki)" off \
@@ -993,8 +1118,9 @@ _select_bundles_dialog() {
       "java"          "OpenJDK 21"                                   off \
       "bun"           "Bun JavaScript runtime"                       off \
       "openclaw"      "OpenClaw LLM gateway CLI"                     off \
-      "ollama-models" "Optional Ollama models, about 26 GB"          off \
+      "ollama-models" "Every optional Ollama model, about 75 GB"      off \
       "postgres"      "PostgreSQL with pgvector"                     off \
+      "mongodb"       "MongoDB Community, mongosh and Atlas CLI"     off \
       "redis"         "Redis server and Python client"               off \
       "qdrant"        "Qdrant vector database container"             off \
       "k8s-tools"     "kubectl and Helm"                             off \
@@ -1097,7 +1223,7 @@ _require_tty_for_selection() {
 _select_bundles_plain() {
   local opt_network="" opt_music="" opt_education="" opt_neovim="" opt_zsh="" \
     opt_java="" opt_bun="" opt_openclaw="" opt_ollama_models="" opt_bitnet="" \
-    opt_mistral_rs="" opt_postgres="" opt_redis="" opt_qdrant="" \
+    opt_mistral_rs="" opt_postgres="" opt_mongodb="" opt_redis="" opt_qdrant="" \
     opt_k8s_tools="" opt_podman="" opt_act="" opt_monitoring="" opt_fabric=""
 
   SELECTED_BUNDLES=()
@@ -1114,12 +1240,13 @@ _select_bundles_plain() {
   _say_tty ""
   _say_tty "LLM tools:"
   _ask_tty opt_openclaw "  Install OpenClaw? [y/N] "
-  _ask_tty opt_ollama_models "  Pre-pull optional Ollama models? (~26 GB) [y/N] "
+  _ask_tty opt_ollama_models "  Pre-pull every optional Ollama model? (~75 GB) [y/N] "
   _ask_tty opt_bitnet "  Install BitNet.cpp? [y/N] "
   _ask_tty opt_mistral_rs "  Install mistral.rs? [y/N] "
   _say_tty ""
   _say_tty "Databases:"
   _ask_tty opt_postgres "  Install PostgreSQL + pgvector? [y/N] "
+  _ask_tty opt_mongodb "  Install MongoDB + mongosh + Atlas CLI? [y/N] "
   _ask_tty opt_redis "  Install Redis? [y/N] "
   _ask_tty opt_qdrant "  Install Qdrant? [y/N] "
   _say_tty ""
@@ -1143,6 +1270,7 @@ _select_bundles_plain() {
   [[ "${opt_bitnet,,}" == "y" ]] && SELECTED_BUNDLES+=("bitnet")
   [[ "${opt_mistral_rs,,}" == "y" ]] && SELECTED_BUNDLES+=("mistral-rs")
   [[ "${opt_postgres,,}" == "y" ]] && SELECTED_BUNDLES+=("postgres")
+  [[ "${opt_mongodb,,}" == "y" ]] && SELECTED_BUNDLES+=("mongodb")
   [[ "${opt_redis,,}" == "y" ]] && SELECTED_BUNDLES+=("redis")
   [[ "${opt_qdrant,,}" == "y" ]] && SELECTED_BUNDLES+=("qdrant")
   [[ "${opt_k8s_tools,,}" == "y" ]] && SELECTED_BUNDLES+=("k8s-tools")
@@ -1212,6 +1340,65 @@ fi
 _set_timezone_in_local_vars "${_chosen_tz}"
 _logfile "Timezone: ${_chosen_tz} (detected: ${_detected_tz}, was: ${_configured_tz:-unset})"
 
+# Profile ──────────────────────────────────────────────────────────
+# Defaults to desktop (or to what an earlier install recorded), so pressing
+# Enter through the installer reproduces a desktop install. Asked after the
+# timezone because it uses the same /dev/tty prompt helpers.
+_configured_profile="$(_get_configured_profile)"
+case "${_configured_profile}" in
+  desktop | server) _default_profile="${_configured_profile}" ;;
+  *) _default_profile="desktop" ;;
+esac
+_chosen_profile=""
+if _can_use_dialog; then
+  if ! _chosen_profile=$(_select_profile_dialog "${_default_profile}" "$(_display_manager_note)"); then
+    echo "Installer canceled during profile selection." >&2
+    exit 130
+  fi
+else
+  _require_tty_for_selection
+  _select_profile_plain "${_default_profile}" "$(_display_manager_note)"
+fi
+_set_profile_in_local_vars "${_chosen_profile}"
+# The bundles were chosen before the profile. site.yml skips the desktop layer
+# on a server, so say so here rather than let a selected bundle vanish.
+if [[ "${_chosen_profile}" == "server" ]]; then
+  for _bundle in music education; do
+    if printf '%s\n' "${SELECTED_BUNDLES[@]}" | grep -qx "${_bundle}"; then
+      echo "NOTE: ${_bundle} is a desktop bundle and is not installed on the server profile." >&2
+      _logfile "Profile server: desktop bundle ${_bundle} selected and skipped"
+    fi
+  done
+fi
+_logfile "Profile: ${_chosen_profile} (was: ${_configured_profile:-unset}; $(_display_manager_note))"
+
+# distrodeck tools ─────────────────────────────────────────────────
+# NikOS installs exactly this list through `distrodeck install-tools --tools`.
+_saved_tools="$(_saved_distrodeck_tools)"
+NIKOS_SELECTED_TOOLS="${_saved_tools}"
+_dd_version="$(_pinned_distrodeck_version)"
+if [[ "${_TOOLS_LIB_LOADED}" == "true" ]] &&
+  _dd_bin="$(_distrodeck_for_catalog "${_dd_version}")" &&
+  _dd_catalog="$(nikos_tools_catalog "${_dd_bin}")"; then
+  if _can_use_dialog; then
+    dialog_init
+    if ! nikos_tools_select_dialog "${_dd_catalog}" "${_saved_tools}"; then
+      echo "Installer canceled during distrodeck tool selection." >&2
+      exit 130
+    fi
+  else
+    nikos_tools_select_plain "${_dd_catalog}" "${_saved_tools}" || exit 130
+  fi
+else
+  if [[ -z "${_dd_version}" ]]; then
+    echo "NOTE: could not resolve the distrodeck release (offline?); skipping tool selection." >&2
+  else
+    echo "NOTE: distrodeck ${_dd_version} has no tool catalog (install-tools --list-catalog); skipping tool selection; the playbook installs its default set with --all." >&2
+  fi
+  _logfile "distrodeck tool selection skipped: no catalog from ${_dd_version:-unknown}"
+fi
+_logfile "distrodeck tools: ${NIKOS_SELECTED_TOOLS:-none}"
+
 # Build ansible tag args ───────────────────────────────────────────
 # Turns SELECTED_BUNDLES and SELECTED_AI_TOOLS into SKIP_TAGS and
 # EXPLICIT_OPTIONAL_TAGS. A function rather than top-level code so a test can
@@ -1230,7 +1417,7 @@ _build_tag_args() {
     fi
   done
 
-  for _bundle in neovim java bun redis postgres qdrant k8s-tools podman zsh act fabric bitnet mistral-rs monitoring ollama-models openclaw; do
+  for _bundle in neovim java bun redis postgres mongodb qdrant k8s-tools podman zsh act fabric bitnet mistral-rs monitoring ollama-models openclaw; do
     if printf '%s\n' "${SELECTED_BUNDLES[@]}" | grep -qx "${_bundle}"; then
       EXPLICIT_OPTIONAL_TAGS="${EXPLICIT_OPTIONAL_TAGS},${_bundle}"
     fi
@@ -1251,7 +1438,7 @@ _build_tag_args() {
 
 _build_tag_args
 
-_persist_selected_options "${SKIP_TAGS#,}" "${EXPLICIT_OPTIONAL_TAGS#,}"
+_persist_selected_options "${SKIP_TAGS#,}" "${EXPLICIT_OPTIONAL_TAGS#,}" "${NIKOS_SELECTED_TOOLS}"
 _logfile "Selected bundles: ${SELECTED_BUNDLES[*]:-none}"
 _logfile "Selected AI tools: ${SELECTED_AI_TOOLS[*]:-none}"
 _logfile "Skip tags: ${SKIP_TAGS#,}"
@@ -1273,7 +1460,7 @@ if _can_use_dialog; then
   _create_become_password_file "${_become_pass}"
   unset _become_pass
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml")
-  PLAY_OPTS+=(-e nikos_update_mode=false)
+  PLAY_OPTS+=(-e nikos_update_mode=false -e "nikos_distrodeck_tools=${NIKOS_SELECTED_TOOLS}")
   PLAY_OPTS+=(--become-password-file "${BECOME_PASSWORD_FILE}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
@@ -1285,7 +1472,7 @@ if _can_use_dialog; then
 else
   echo "Running NikOS ${NIKOS_VERSION} playbook..."
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
-  PLAY_OPTS+=(-e nikos_update_mode=false)
+  PLAY_OPTS+=(-e nikos_update_mode=false -e "nikos_distrodeck_tools=${NIKOS_SELECTED_TOOLS}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")
   _logfile "Playbook: ansible-playbook ${PLAY_OPTS[*]}"
   _logfile "--- ansible-playbook output start ---"

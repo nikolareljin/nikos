@@ -24,12 +24,12 @@ nikos_default_session: "auto"            # auto | xubuntu | xfce | any /usr/shar
 nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/..."
 
 # ── Ollama ────────────────────────────────────────────
-ollama_default_model: "qwen2.5-coder:7b"
+ollama_default_model: "qwen3.5:4b"
 ollama_optional_models:
   - "qwen3-coder:30b"
-  - "deepseek-coder-v2:16b"
+  - "qwen2.5-coder:7b"
   - "deepseek-r1:8b"
-# Other good choices: gemma3, mistral-small3.2, devstral, granite4
+# Other good choices: qwen3.5, devstral, ministral-3, granite4
 llama_cpp_version: "b9151"
 
 # ── Python ────────────────────────────────────────────
@@ -92,9 +92,10 @@ Then run `nikos update`. The new model is pulled on the next playbook run.
 
 ### The default
 
-`qwen2.5-coder:7b` (4.7 GB). It stays on the 2.5 generation deliberately:
-`qwen3-coder` publishes no tag below `30b` (19 GB), which is too large to pull
-onto every machine by default.
+`qwen3.5:4b` (3.4 GB), a general model with a thinking mode. It replaced
+`qwen2.5-coder:7b`, which is now the small end of the `ollama-coding` group:
+`qwen3-coder` publishes no tag below `30b` (19 GB), too large to pull onto
+every machine by default.
 
 ### The optional bundles
 
@@ -102,12 +103,12 @@ Models are grouped by what they are for, and each group has its own tag, so a
 laptop can take one capability without pulling all of them:
 
 ```bash
-nikos add ollama-reasoning   # ~23 GB  general purpose reasoning
-nikos add ollama-coding      # ~34 GB  code models
-nikos add ollama-text        # ~22 GB  text generation and chat
-nikos add ollama-vision      # ~13 GB  image analysis
+nikos add ollama-reasoning   # ~24 GB  general purpose reasoning
+nikos add ollama-coding      # ~24 GB  code models
+nikos add ollama-text        # ~16 GB  text generation and chat
+nikos add ollama-vision      # ~9.4 GB image analysis
 nikos add ollama-embedding   # ~1.3 GB embeddings for the RAG stack
-nikos add ollama-models      # ~93 GB  every group
+nikos add ollama-models      # ~75 GB  every group
 ```
 
 Nothing here is pulled unless you ask for the tag. Override any group in
@@ -115,27 +116,29 @@ Nothing here is pulled unless you ask for the tag. Override any group in
 
 | Group | Model | Size | Notes |
 |---|---|---|---|
-| reasoning | `deepseek-r1:1.5b` | 1.1 GB | Runs on a 4 GB machine |
-| reasoning | `qwen3:4b` | 2.5 GB | |
 | reasoning | `deepseek-r1:8b` | 5.2 GB | |
 | reasoning | `qwen3:8b` | 5.2 GB | Thinking mode |
-| reasoning | `phi4:14b` | 9.1 GB | Desktop-class |
-| coding | `deepseek-coder-v2:16b` | 6.4 GB | Mid-size |
-| coding | `qwen2.5-coder:14b` | 9.0 GB | One size up from the default |
+| reasoning | `gpt-oss:20b` | 14 GB | Desktop-class, open-weight reasoning |
+| coding | `qwen2.5-coder:7b` | 4.7 GB | Fill-in-the-middle, laptop-sized |
 | coding | `qwen3-coder:30b` | 19 GB | Current generation, workstation-class |
 | text | `granite4:micro` | 2.1 GB | Small enough to keep resident |
-| text | `llama3.1:8b` | 3.2 GB | |
-| text | `gemma3:4b` | 4.0 GB | |
-| text | `mistral:7b` | 4.4 GB | |
-| text | `gemma3:12b` | 8.1 GB | Multimodal |
-| vision | `granite3.2-vision:2b` | 2.4 GB | Smallest, laptop-friendly |
-| vision | `minicpm-v:8b` | 4.1 GB | |
-| vision | `qwen2.5vl:7b` | 6.0 GB | Vision and document understanding |
-| embedding | `embeddinggemma` | 622 MB | |
+| text | `qwen3.5:9b` | 6.6 GB | |
+| text | `gemma4:12b` | 7.7 GB | Multimodal |
+| vision | `qwen3-vl:4b` | 3.3 GB | Laptop-friendly |
+| vision | `qwen3-vl:8b` | 6.1 GB | Vision and document understanding |
+| embedding | `embeddinggemma:300m` | 622 MB | |
 | embedding | `qwen3-embedding:0.6b` | 639 MB | |
 
 Models load on demand, so none of this counts against the idle RAM target — it
 is disk and bandwidth only.
+
+### Models replaced in the next release
+
+`deepseek-r1:1.5b`, `qwen3:4b`, `phi4`, `deepseek-coder-v2`, `qwen2.5-coder:14b`,
+`llama3.1`, `gemma3`, `mistral:7b`, `granite3.2-vision`, `minicpm-v` and
+`qwen2.5vl` are no longer pulled. Their places go to `gpt-oss`, `qwen3.5`,
+`gemma4` and `qwen3-vl`, and the default moves to `qwen3.5:4b`. Models already on disk are not removed; `ollama rm <name>` frees
+the space.
 
 ### Models that were retired in 0.5.0
 
@@ -194,7 +197,7 @@ nikos_tesseract_languages: ["all"]   # pulls tesseract-ocr-all
 You can also pull models manually at any time:
 
 ```bash
-ollama pull gemma3:4b
+ollama pull qwen3.5:4b
 ollama pull granite4:micro
 ollama list
 ```
@@ -210,11 +213,12 @@ nikos add network    # nmap, wireshark, OpenVPN, traceroute, tcpdump
 nikos add music      # LMMS, Ardour (Flatpak), Audacity
 nikos add education  # LibreOffice, draw.io (Flatpak), Anki
 nikos add neovim     # Neovim plus a minimal lazy.nvim bootstrap config
-nikos add java       # OpenJDK 21
+nikos add java       # OpenJDK 21; set nikos_java_versions: [21, 17, 25] for more
 nikos add podman     # Podman container runtime
 nikos add bun        # Bun JavaScript runtime
 nikos add redis      # Redis server and Python client
 nikos add postgres   # PostgreSQL with pgvector and psycopg2
+nikos add mongodb    # MongoDB Community, mongosh, Atlas CLI and pymongo
 nikos add qdrant     # Qdrant vector database via Docker user service
 nikos add zsh        # Zsh plus Starship prompt
 nikos add act        # Run GitHub Actions locally
@@ -224,8 +228,62 @@ nikos add bitnet     # BitNet.cpp 1-bit LLM inference (bitnet-cli)
 nikos add mistral-rs # mistral.rs Rust LLM server
 nikos add monitoring # Netdata monitoring dashboard
 nikos add openclaw   # OpenClaw LLM gateway CLI
-nikos add ollama-models # Pull every optional Ollama model; about 93 GB
+nikos add ollama-models # Pull every optional Ollama model; about 75 GB
 ```
+
+### MongoDB
+
+`nikos add mongodb` adds the vendor apt repository for the series in
+`mongodb_series` (default `8.2`, signed with the 8.0 key in
+`mongodb_key_series`), installs `mongodb-org`, `mongosh` and the
+Atlas CLI, starts `mongod` bound to `127.0.0.1:27017`, and installs `pymongo`
+into the `nikos-ai` env. Nothing logs in to MongoDB Atlas.
+
+With Docker installed, the Atlas CLI can also run a local Atlas deployment,
+which adds Atlas Search and Vector Search. NikOS does not start one; run it
+yourself when you want it:
+
+```bash
+atlas deployments setup --type local
+```
+
+## Choosing distrodeck tools
+
+NikOS installs only the distrodeck tools you pick, never the whole catalog.
+The installer, `nikos setup` and `nikos add tools` read the catalog from
+distrodeck itself (`distrodeck install-tools --list-catalog --format tsv`) and
+offer it by category: a checklist in the TUI, or one prompt per category in
+plain mode (Enter keeps the preselection, `-` for none, `*` for the whole
+category). The answer is saved as `NIKOS_DISTRODECK_TOOLS_SAVED` in
+`~/.config/nikos/selected-options.env`, and the `dev-tools` role installs
+exactly that list with `distrodeck install-tools --tools <list>`.
+
+Three adjustments are made to the list:
+
+- distrodeck's `ollama` and `mongodb` are never offered or installed: NikOS
+  owns both (`nikos_distrodeck_owned_tools`). Ollama comes from the ai-stack
+  role, the one owner of the inference port; MongoDB from `nikos add mongodb`.
+  A saved list that names them is installed without them, with a warning.
+- A tool that needs something to install is given it, unless that is already
+  chosen or installed. A catalog with a 7th `needs` column names the needs
+  (`docker` is met by docker or podman). An older 6-column catalog has none,
+  so the label decides: a `(container)` tool needs `docker`, a `plugin-*`
+  needs `claude-code`. Without them distrodeck fails the whole run. Needs are
+  listed before the tool that needs them (`postgresql` before `pgvector`),
+  because distrodeck installs in the order given.
+- When `nikos update` has moved distrodeck to a newer release, saved names
+  that release no longer lists are skipped with a warning rather than sent to
+  distrodeck, which would reject the whole list.
+
+```bash
+nikos add tools      # choose again and install the new list now
+```
+
+The catalog flag needs a distrodeck release that has it. `distrodeck_version`
+defaults to `latest`, the newest release tag; a release that predates the flag
+(0.10.3 and earlier, or one pinned in `vars/local.yml`) skips the screen with a
+one-line note, and the `dev-tools` role falls back to the previous behaviour,
+`distrodeck install-tools --all`.
 
 ## Changing the wallpaper
 

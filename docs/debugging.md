@@ -106,7 +106,7 @@ to fix the problem.
 
 ```bash
 ollama list
-ollama pull qwen2.5-coder:7b
+ollama pull qwen3.5:4b
 ```
 
 Check the service:

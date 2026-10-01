@@ -18,6 +18,89 @@ All notable changes to NikOS are documented here.
   names `--list-tags` as the only complete view of the tags and then pastes its
   output; nothing had ever run the one against the other, and the pasted block
   had gone stale. `tests/test_bundles_doc.py` now compares them by name.
+- **A server profile.** `nikos_profile` (`desktop` by default, set in
+  `vars/local.yml`) decides whether the desktop layer runs. On `server`,
+  `desktop`, `theming`, `editors`, `music` and `education` are skipped even when
+  named in `--tags`. The installer asks for the profile in both selector paths,
+  says whether a display manager was found, and persists the answer; `nikos
+  update` does not ask again. On a server, `nikos add music`/`education` stop
+  with an error rather than report success for a role that will not run.
+  `editors` gains a role tag. `docs/profiles.md`
+  assigns every role to a layer. `./test --profile=server` builds an Ubuntu
+  Server 24.04 VM and checks that no desktop artefact is present.
+- **Pick distrodeck tools by category.** The installer, `nikos setup` and the
+  new `nikos add tools` offer distrodeck's own catalog (read at run time from
+  `install-tools --list-catalog --format tsv`), save the choice with the other
+  selections, and the `dev-tools` role installs exactly that list instead of
+  `install-tools --all`. A distrodeck without the flag (0.10.3 and earlier)
+  skips the screen with a note and installs its default set with `--all`
+  as before.
+- **A `mongodb` bundle.** MongoDB Community 8.2 from repo.mongodb.org (signed-by
+  keyring), `mongosh`, the Atlas CLI and `pymongo`; `mongod` stays on
+  `127.0.0.1:27017`. The Atlas local deployment is documented, not run.
+- **Several Java releases.** `nikos_java_versions` (default `[21]`) installs
+  `openjdk-N-jdk` for each entry and points `java`/`javac` at the first.
+- **One configured owner of the Ollama port.** `nikos_ollama_host` (default
+  `127.0.0.1:11434`, loopback only) is written to an `ollama.service` drop-in;
+  `nikos_ollama_mode` (`local`/`remote`) and `nikos_node_role` are read by the
+  play and the CLI. A port held by another process stops the run and names it.
+  `nikos status` prints mode, endpoint and node role; `nikos doctor` sends a
+  request to the endpoint, lists its models and fails when it does not answer.
+
+- **Windows in the GRUB menu.** `nikos_grub_os_prober` (default true) installs
+  `os-prober` and ships `/etc/default/grub.d/60-nikos-os-prober.cfg` on an
+  installed GRUB system. `docs/dual-boot.md` covers boot order, UEFI vs legacy
+  and Secure Boot/SBAT.
+
+### Changed
+- **Ollama model groups match distrodeck.** Default `qwen3.5:4b` (3.4 GB); reasoning
+  `deepseek-r1:8b`, `qwen3:8b`, `gpt-oss:20b`; coding `qwen2.5-coder:7b`,
+  `qwen3-coder:30b`; text `granite4:micro`, `qwen3.5:9b`, `gemma4:12b`; vision
+  `qwen3-vl:4b`, `qwen3-vl:8b`; embedding `embeddinggemma:300m`,
+  `qwen3-embedding:0.6b`. Every group in full is about 75 GB. Models already on
+  disk are not removed.
+- `base` no longer installs `inkscape` or `xfconf`; `theming` and `desktop`
+  install what they use.
+- `nikos doctor` exits 1 when it finds a problem, prints the profile, and skips
+  the VS Code, Nordic and Papirus checks on a server.
+- Vendored `script-helpers` moves from 0.24.0 to 0.44.1. NikOS uses only
+  `logging` and `dialog` from it, and neither changed incompatibly.
+- `community.general` moves from 9.5.2 to 10.7.9, the newest release that still
+  supports the ansible-core 2.15 minimum `install.sh` enforces.
+- distrodeck is cloned at a release tag rather than `main`.
+  `distrodeck_version: latest` (the default) resolves the newest `X.Y.Z` tag at
+  run time and `nikos update` moves the clone to it; any other value pins.
+  Offline, or with local edits to tracked files, an existing clone is kept
+  with a warning. Saved tool names the new release no longer lists are
+  skipped with a warning instead of failing the run.
+- The tool selection adds what a chosen tool needs (distrodeck's `needs`
+  column when the catalog has one, otherwise `docker` for a container tool and
+  `claude-code` for a plugin) unless it is already chosen or installed, and
+  puts it ahead of the tool that needs it; distrodeck fails the whole
+  `--tools` run without them.
+- distrodeck's `ollama` and `mongodb` are hidden from the tool selection and
+  dropped from saved lists with a warning: NikOS installs both itself
+  (`nikos_distrodeck_owned_tools`).
+- `nikos update` upgrades Ollama when GitHub has a newer release, by re-running
+  the official installer, then restarts `ollama.service`; the NikOS drop-in is
+  kept. Ollama is deliberately not pinned. The installer runs with
+  `pipefail`, so a failed download fails the task instead of reporting an
+  update and restarting the old engine.
+
+### Fixed
+- An image build no longer runs `update-grub`, installs the GRUB theme under
+  `/usr/share/grub/themes` (the squashfs excludes `boot/grub`; installed systems
+  with a separate `/boot` or an encrypted root also get a `/boot` copy that
+  `GRUB_THEME` points at), and holds the
+  kernel packages during the `base` upgrade so the squashfs kernel matches the
+  live one. The holds are released before the play moves on.
+- The Ollama tasks managed a user-scope unit that does not exist and waited on
+  `/tmp/ollama.sock`, which Ollama never creates. Both failures were swallowed
+  on every run, after a 30 second timeout. Readiness is now an HTTP request to
+  `/api/version` that fails the run when Ollama does not answer.
+- `nikos doctor` exited 127 at the first optional check that failed on any
+  installed machine: it called `print_warn`, which script-helpers does not
+  define.
 
 ## [0.6.5] — 2026-09-05
 

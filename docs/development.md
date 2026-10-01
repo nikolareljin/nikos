@@ -27,11 +27,12 @@ nikos/
 │       ├── music/                  # LMMS, Ardour, Audacity
 │       ├── education/              # LibreOffice, draw.io, Anki
 │       ├── neovim/                 # Neovim + starter lazy.nvim config
-│       ├── java/                   # OpenJDK 21
+│       ├── java/                   # OpenJDK (nikos_java_versions, default 21)
 │       ├── podman/                 # Podman container runtime
 │       ├── bun/                    # Bun JavaScript runtime
 │       ├── redis/                  # Redis server
 │       ├── postgres/               # PostgreSQL + pgvector
+│       ├── mongodb/                # MongoDB, mongosh, Atlas CLI
 │       ├── qdrant/                 # Qdrant vector database
 │       ├── zsh/                    # Zsh + Starship
 │       ├── act/                    # Local GitHub Actions runner

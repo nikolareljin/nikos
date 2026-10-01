@@ -7,12 +7,75 @@
 
 # ── distrodeck (installs Rust/cargo, bat, eza, fzf, lazygit, gh, go, docker…) ──
 
+# distrodeck_version "latest" follows distrodeck's newest release tag, so
+# `nikos update` moves an existing clone forward; any other value pins.
+# Offline, an existing clone is kept with a warning; with none there is
+# nothing to fall back to.
+- name: Resolve the distrodeck release
+  ansible.builtin.command:
+    argv:
+      - "{{ playbook_dir }}/scripts/distrodeck-version.sh"
+      - "{{ distrodeck_version }}"
+  environment:
+    DISTRODECK_REPO_URL: "{{ distrodeck_repo_url }}"
+  register: dev_tools_distrodeck_resolve
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check for an existing distrodeck clone
+  ansible.builtin.stat:
+    path: "{{ nikos_home }}/Projects/distrodeck/.git"
+  register: dev_tools_distrodeck_clone
+
+- name: Stop when no distrodeck release can be resolved and none is cloned
+  ansible.builtin.fail:
+    msg: >-
+      Could not read distrodeck's release tags (offline?) and there is no
+      clone at {{ nikos_home }}/Projects/distrodeck. Connect and re-run, or set
+      distrodeck_version to a release in vars/local.yml.
+  when:
+    - dev_tools_distrodeck_resolve.rc != 0
+    - not dev_tools_distrodeck_clone.stat.exists
+
+- name: Warn that the existing distrodeck clone is kept
+  ansible.builtin.debug:
+    msg: >-
+      Could not resolve distrodeck {{ distrodeck_version }} (offline?); keeping
+      the existing clone at {{ nikos_home }}/Projects/distrodeck as it is.
+  when: dev_tools_distrodeck_resolve.rc != 0
+
+# The git module refuses to check out over tracked edits and would fail the
+# whole update; keep an edited clone where it is and say so instead.
+- name: Check the distrodeck clone for local edits
+  ansible.builtin.command:
+    argv: [git, -C, "{{ nikos_home }}/Projects/distrodeck", status, --porcelain, --untracked-files=no]
+  register: dev_tools_distrodeck_dirty
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: dev_tools_distrodeck_clone.stat.exists
+
+- name: Warn that an edited distrodeck clone is not moved
+  ansible.builtin.debug:
+    msg: >-
+      {{ nikos_home }}/Projects/distrodeck has local edits; leaving it where it
+      is rather than moving it to {{ dev_tools_distrodeck_resolve.stdout | trim }}.
+      Commit, stash or discard them and re-run `nikos update`.
+  when:
+    - nikos_update_mode | bool
+    - dev_tools_distrodeck_resolve.rc == 0
+    - (dev_tools_distrodeck_dirty.stdout | default('') | trim) | length > 0
+
 - name: Clone distrodeck
   ansible.builtin.git:
-    repo: https://github.com/nikolareljin/distrodeck.git
+    repo: "{{ distrodeck_repo_url }}"
     dest: "{{ nikos_home }}/Projects/distrodeck"
-    version: main
-    update: "{{ nikos_update_mode | bool }}"
+    version: "{{ dev_tools_distrodeck_resolve.stdout | trim }}"
+    update: "{{ (nikos_update_mode | bool) or not dev_tools_distrodeck_clone.stat.exists }}"
+  when:
+    - dev_tools_distrodeck_resolve.rc == 0
+    - (dev_tools_distrodeck_dirty.stdout | default('') | trim) | length == 0
 
 - name: Install distrodeck PATH wrapper
   ansible.builtin.copy:
@@ -24,12 +87,101 @@
   become: true
   when: not ansible_check_mode
 
-- name: Install all developer tools via distrodeck
+# The catalog flag decides which way distrodeck is driven. A release that has
+# it installs exactly the list chosen at install time or with
+# `nikos add tools`. An older release (0.10.3 and before) has no catalog to
+# choose from, so it keeps the previous behaviour: the whole default set.
+# Both paths stay, so NikOS works on either side of the release that adds it.
+- name: Check whether this distrodeck publishes a tool catalog
+  ansible.builtin.command:
+    argv:
+      - "{{ nikos_home }}/Projects/distrodeck/distrodeck"
+      - install-tools
+      - --list-catalog
+      - --format
+      - tsv
+  register: dev_tools_catalog
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# The saved list was chosen against an older catalog when `nikos update` has
+# just moved distrodeck forward. distrodeck rejects the whole run (exit 2) on
+# one unknown name, so drop names this release does not know. The rest keep
+# the saved order: the selection already put each tool's needs before it
+# (postgresql before pgvector), and distrodeck installs in that order.
+- name: Match the saved distrodeck tools against this catalog
+  vars:
+    dev_tools_known: >-
+      {{ dev_tools_catalog.stdout_lines | default([])
+         | map('regex_replace', '^[^\t]*\t[^\t]*\t([^\t]*).*$', '\1') | list }}
+    dev_tools_wanted: "{{ nikos_distrodeck_tools.split(',') | map('trim') | select | list }}"
+  ansible.builtin.set_fact:
+    dev_tools_selected: >-
+      {{ dev_tools_wanted | select('in', dev_tools_known)
+         | reject('in', nikos_distrodeck_owned_tools) | list }}
+    dev_tools_owned: "{{ dev_tools_wanted | select('in', nikos_distrodeck_owned_tools) | list }}"
+    dev_tools_unknown: >-
+      {{ dev_tools_wanted | reject('in', dev_tools_known)
+         | reject('in', nikos_distrodeck_owned_tools) | list }}
+  when: (dev_tools_catalog.rc | default(1)) == 0
+
+- name: Warn about saved distrodeck tools this release does not have
+  ansible.builtin.debug:
+    msg: >-
+      Not in this distrodeck's catalog, skipped: {{ dev_tools_unknown | join(', ') }}.
+      Run `nikos add tools` to update the selection.
+  when:
+    - (dev_tools_catalog.rc | default(1)) == 0
+    - dev_tools_unknown | length > 0
+
+- name: Warn about saved distrodeck tools NikOS installs itself
+  ansible.builtin.debug:
+    msg: >-
+      Not installed through distrodeck: {{ dev_tools_owned | join(', ') }}.
+      NikOS owns these: Ollama comes from the ai-stack role, MongoDB from
+      `nikos add mongodb`. Run `nikos add tools` to save a list without them.
+  when:
+    - (dev_tools_catalog.rc | default(1)) == 0
+    - dev_tools_owned | length > 0
+
+- name: Install the selected distrodeck tools
+  ansible.builtin.command:
+    argv:
+      - "{{ nikos_home }}/Projects/distrodeck/distrodeck"
+      - install-tools
+      - --tools
+      - "{{ dev_tools_selected | join(',') }}"
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - (dev_tools_catalog.rc | default(1)) == 0
+    - dev_tools_selected | length > 0
+
+- name: Note that no distrodeck tools were selected
+  ansible.builtin.debug:
+    msg: >-
+      No distrodeck tools are selected for this machine. Run `nikos add tools`
+      to choose some.
+  when:
+    - (dev_tools_catalog.rc | default(1)) == 0
+    - dev_tools_selected | length == 0
+
+- name: Note that this distrodeck has no tool catalog
+  ansible.builtin.debug:
+    msg: >-
+      distrodeck {{ dev_tools_distrodeck_resolve.stdout | default('') | trim | default(distrodeck_version, true) }} has no tool catalog
+      (install-tools --list-catalog); installing its default set with --all.
+  when: (dev_tools_catalog.rc | default(1)) != 0
+
+- name: Install the default distrodeck tool set
   ansible.builtin.command: "{{ nikos_home }}/Projects/distrodeck/distrodeck install-tools --all"
   changed_when: false
   args:
     creates: "{{ nikos_home }}/.local/state/distrodeck/installed-tools.txt"
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - (dev_tools_catalog.rc | default(1)) != 0
 
 # `distrodeck install-tools` has no upgrade or force mode - it detects an
 # existing executable and records it as "Already installed (skipped)" - so the

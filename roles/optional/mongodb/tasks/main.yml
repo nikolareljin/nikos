@@ -1,0 +1,61 @@
+---
+# MongoDB Community from the vendor's apt repository. Ubuntu ships no MongoDB
+# server package. 8.2 is the series distrodeck uses; its noble repository has
+# mongodb-org, mongodb-mongosh and mongodb-atlas-cli, and its Release file is
+# signed with the 8.0 key (4B0752C1...4E7DCA05). The 9.0 noble repository has
+# no mongodb-atlas-cli.
+- name: Install the MongoDB repository signing key
+  ansible.builtin.get_url:
+    url: "https://pgp.mongodb.com/server-{{ mongodb_key_series }}.asc"
+    dest: "/usr/share/keyrings/mongodb-server-{{ mongodb_key_series }}.asc"
+    mode: "0644"
+  become: true
+
+- name: Add the MongoDB apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-{{ mongodb_key_series }}.asc]
+      https://repo.mongodb.org/apt/ubuntu {{ ansible_distribution_release }}/mongodb-org/{{ mongodb_series }} multiverse
+    filename: "mongodb-org-{{ mongodb_series }}"
+    state: present
+  become: true
+
+- name: Install MongoDB, mongosh and the Atlas CLI
+  ansible.builtin.apt:
+    name:
+      - mongodb-org
+      - mongodb-mongosh
+      - mongodb-atlas-cli
+    state: present
+    update_cache: true
+  become: true
+  # The repository is not really added in check mode, so apt cannot resolve
+  # these names there.
+  when: not ansible_check_mode
+
+# The package already binds 127.0.0.1; this states it, so a later edit to
+# mongod.conf that widens it is put back on the next run.
+- name: Keep mongod bound to loopback
+  ansible.builtin.lineinfile:
+    path: /etc/mongod.conf
+    regexp: '^\s*bindIp:'
+    line: "  bindIp: 127.0.0.1"
+    insertafter: '^net:'
+  become: true
+  register: mongodb_bind
+  when: not ansible_check_mode
+
+- name: Enable and start mongod
+  ansible.builtin.systemd:
+    name: mongod
+    enabled: true
+    daemon_reload: true
+    state: "{{ 'restarted' if mongodb_bind is changed else 'started' }}"
+  become: true
+  when: not ansible_check_mode
+
+- name: Install the MongoDB Python client in nikos-ai env
+  ansible.builtin.command: >
+    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }} pymongo
+  changed_when: false
+  when: not ansible_check_mode

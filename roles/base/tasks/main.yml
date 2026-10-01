@@ -6,35 +6,100 @@
     update_cache: true
     cache_valid_time: 3600
 
+# `upgrade: safe` may install new packages, so it can pull a newer kernel
+# through linux-generic. In an image build that leaves the squashfs on a kernel
+# the live casper kernel does not match, so the kernel packages are held for
+# the upgrade and released afterwards - a hold left in place would follow the
+# image onto every installed machine and stop its kernel updates.
 - name: Upgrade all packages
-  ansible.builtin.apt:
-    upgrade: safe
-    update_cache: false
-    cache_valid_time: 3600
+  vars:
+    base_kernel_packages: >-
+      {{ (ansible_facts.packages | default({})).keys()
+         | select('match', '^linux-(image|generic|headers-generic|modules)')
+         | list }}
+  block:
+    - name: Find the installed kernel packages to hold for an image build
+      ansible.builtin.package_facts:
+        manager: apt
+      when: nikos_image_build | default(false) | bool
 
+    - name: Hold the kernel packages during an image build
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop: "{{ base_kernel_packages }}"
+      when: nikos_image_build | default(false) | bool
+
+    - name: Upgrade packages
+      ansible.builtin.apt:
+        upgrade: safe
+        update_cache: false
+        cache_valid_time: 3600
+  always:
+    - name: Release the kernel package holds
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: install
+      loop: "{{ base_kernel_packages }}"
+      when: nikos_image_build | default(false) | bool
+
+# Every package here has to make sense on a machine with no screen; the server
+# profile runs this role. xfconf and inkscape used to be here only because the
+# desktop and theming roles need them, and now live in those roles.
 - name: Install core dependencies
   ansible.builtin.apt:
     name:
       - git
       - curl
       - wget
-      - build-essential
+      - build-essential  # native builds: llama.cpp tools, pip wheels, bitnet
       - python3-pip
       - python3-venv
-      - flatpak
-      - gnupg
+      - flatpak  # distrodeck and the music/education bundles install through it
+      - gnupg  # vendor apt keys
       - lsb-release
       - ca-certificates
-      - software-properties-common
+      - software-properties-common  # add-apt-repository
       - dialog  # TUI prompts used by install.sh and nikos scripts
-      - xfconf
-      - inkscape  # required by theming role to export wallpaper SVG to PNG
-      - openssh-server  # enables remote access and SSH-based management
+      - openssh-server  # remote access; the only way into a server install
       - tmux
       - pipx
       - sqlite3
       - unzip
     state: present
+
+# ── Dual boot ─────────────────────────────────────────────────────────────────
+- name: Check whether this system boots with GRUB
+  ansible.builtin.stat:
+    path: /etc/default/grub
+  register: base_grub_defaults
+
+- name: Let GRUB list other operating systems
+  when:
+    - nikos_grub_os_prober | bool
+    - not (nikos_image_build | default(false) | bool)
+    - base_grub_defaults.stat.exists
+  block:
+    - name: Install os-prober
+      ansible.builtin.apt:
+        name: os-prober
+        state: present
+
+    - name: Ensure the GRUB drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/default/grub.d
+        state: directory
+        mode: "0755"
+
+    - name: Enable os-prober in GRUB
+      ansible.builtin.copy:
+        dest: /etc/default/grub.d/60-nikos-os-prober.cfg
+        mode: "0644"
+        content: |
+          # Managed by NikOS (roles/base). Set nikos_grub_os_prober: false in
+          # vars/local.yml to stop managing this file.
+          GRUB_DISABLE_OS_PROBER=false
+      notify: Base_update_grub
 
 - name: Deploy default tmux config
   ansible.builtin.copy:

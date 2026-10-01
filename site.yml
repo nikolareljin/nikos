@@ -23,6 +23,38 @@
       when: local_vars_stat.stat.exists
       tags: [always]
 
+    # Settings a typo would silently turn into a different machine. Checked
+    # after vars/local.yml is loaded, so the message can name the file to fix.
+    - name: Validate the profile and inference endpoint settings
+      ansible.builtin.assert:
+        that:
+          - nikos_profile in ['desktop', 'server']
+          - nikos_ollama_mode in ['local', 'remote']
+          - nikos_node_role in ['workstation', 'inference', 'services']
+          - nikos_ollama_host is match('^(127\\.[0-9.]+|localhost|\\[::1\\]):[0-9]+$')
+          - nikos_ollama_mode != 'remote' or (nikos_ollama_remote_url | length) > 0
+        fail_msg: >-
+          Invalid NikOS settings. Fix them in {{ playbook_dir }}/vars/local.yml:
+          nikos_profile={{ nikos_profile }} (desktop or server),
+          nikos_ollama_mode={{ nikos_ollama_mode }} (local or remote),
+          nikos_node_role={{ nikos_node_role }} (workstation, inference or services),
+          nikos_ollama_host={{ nikos_ollama_host }} (must be a loopback address with a port;
+          Ollama has no authentication),
+          nikos_ollama_remote_url={{ nikos_ollama_remote_url | default('') }} (required when the mode is remote).
+        quiet: true
+      tags: [always]
+
+    # An ISO build runs this play in a chroot with /etc/skel as the home. Boot
+    # loader and kernel changes there would act on the build host's view of
+    # /boot, not on the machine the image is installed onto.
+    - name: Detect an image build
+      ansible.builtin.set_fact:
+        nikos_image_build: >-
+          {{ (nikos_image_build | default(false) | bool)
+             or (ansible_facts.is_chroot | default(false) | bool)
+             or nikos_home == '/etc/skel' }}
+      tags: [always]
+
     - name: Check whether playbook directory is a git checkout
       ansible.builtin.stat:
         path: "{{ playbook_dir }}/.git"
@@ -57,13 +89,17 @@
         item != '/etc/apt/sources.list.d/vscode.sources'
       tags: [always]
 
+  # Layers. core: every install. desktop: only when nikos_profile is desktop,
+  # whatever tags are passed. See docs/profiles.md.
   roles:
     - role: base
       tags: [base]
     - role: desktop
       tags: [desktop]
+      when: nikos_profile == 'desktop'
     - role: theming
       tags: [theming]
+      when: nikos_profile == 'desktop'
     - role: github-setup
       become: false
     - role: ai-stack
@@ -71,6 +107,8 @@
       tags: [ai-local]
     - role: editors
       become: false
+      tags: [editors]
+      when: nikos_profile == 'desktop'
     - role: cloud-ai-cli
       become: false
     - role: agent-dev
@@ -81,8 +119,10 @@
       tags: [network]
     - role: music
       tags: [music]
+      when: nikos_profile == 'desktop'
     - role: education
       tags: [education]
+      when: nikos_profile == 'desktop'
     - role: neovim
       become: false
       tags: [never, neovim]
@@ -102,6 +142,9 @@
     - role: postgres
       become: false
       tags: [never, postgres]
+    - role: mongodb
+      become: false
+      tags: [never, mongodb]
     - role: zsh
       become: false
       tags: [never, zsh]

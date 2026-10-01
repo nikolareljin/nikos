@@ -29,6 +29,12 @@ The TUI follows the controlling terminal rather than stdin, so the one-liner abo
 `curl ... | bash` leaves the script's own bytes on stdin, which is not a terminal on any machine.
 Set `NIKOS_USE_DIALOG=0` to force the plain-prompt fallback.
 
+The installer also asks for a **profile**: `desktop` (the default, the full
+workstation) or `server` (Ubuntu Server or any headless machine: no desktop,
+no theming, no VS Code; SSH, the AI stack, containers and databases stay).
+A single laptop remains the default and complete install; see
+[docs/profiles.md](docs/profiles.md) for the layers each profile gets.
+
 Pass `--ref <branch-or-tag>` to install something other than the latest release.
 
 Coming from Xubuntu, log out and back in. Coming from Ubuntu, reboot: the installer moves
@@ -72,7 +78,7 @@ At the end, you should end up with something like:
 ### AI stack
 | Tool | Purpose |
 |---|---|
-| [Ollama](https://ollama.ai) | Local LLM runtime — `qwen2.5-coder:7b` pre-pulled |
+| [Ollama](https://ollama.com) | Local LLM runtime, `qwen3.5:4b` pre-pulled |
 | [aider](https://aider.chat) | AI pair programmer in the terminal |
 | [Miniforge](https://github.com/conda-forge/miniforge) | Python distribution (conda) |
 | `nikos-ai` conda env | Python 3.11-3.13 + PyTorch CPU + Jupyter + transformers + pandas |
@@ -87,17 +93,17 @@ At the end, you should end up with something like:
 
 ### Local models
 
-One model is pulled by default: `qwen2.5-coder:7b` (4.7 GB). The rest are
+One model is pulled by default: `qwen3.5:4b` (3.4 GB). The rest are
 grouped by what they are for, each with its own tag, so a laptop can take one
 group without the others:
 
 ```bash
-nikos add ollama-reasoning   # ~23 GB  deepseek-r1, qwen3, phi4
-nikos add ollama-coding      # ~34 GB  deepseek-coder-v2, qwen2.5-coder, qwen3-coder
-nikos add ollama-text        # ~22 GB  granite4, llama3.1, gemma3, mistral
-nikos add ollama-vision      # ~13 GB  granite3.2-vision, minicpm-v, qwen2.5vl
+nikos add ollama-reasoning   # ~24 GB  deepseek-r1, qwen3, gpt-oss
+nikos add ollama-coding      # ~24 GB  qwen2.5-coder, qwen3-coder
+nikos add ollama-text        # ~16 GB  granite4, qwen3.5, gemma4
+nikos add ollama-vision      # ~9.4 GB qwen3-vl
 nikos add ollama-embedding   # ~1.3 GB embeddinggemma, qwen3-embedding
-nikos add ollama-models      # ~93 GB  every group
+nikos add ollama-models      # ~75 GB  every group
 ```
 
 Nothing is pulled unless you ask for the tag. Models load on demand, so this is
@@ -115,8 +121,10 @@ disk and bandwidth rather than idle memory.
 | Python + Jupyter | Official MS extensions |
 
 ### Developer tools
-Installed via [distrodeck](https://github.com/nikolareljin/distrodeck):
-`bat` · `eza` · `fzf` · `lazygit` · `gh` · `rust` · `go` · `docker` · and more
+Installed via [distrodeck](https://github.com/nikolareljin/distrodeck): the
+tools you pick from its catalog at install time or with `nikos add tools`
+(`bat`, `eza`, `fzf`, `lazygit`, `gh`, `rust`, `go`, `docker`, databases and
+more). A distrodeck release without a catalog installs its default set.
 
 Additional tools installed directly:
 | Tool | Command | Purpose |
@@ -141,10 +149,11 @@ nikos add network    # install optional: nmap, wireshark, OpenVPN
 nikos add music      # install optional: LMMS, Ardour, Audacity
 nikos add education  # install optional: LibreOffice, draw.io, Anki
 nikos add neovim     # install optional: Neovim + starter lazy.nvim config
-nikos add java       # install optional: OpenJDK 21
+nikos add java       # install optional: OpenJDK 21 (nikos_java_versions)
 nikos add podman     # install optional: Podman
 nikos add bun        # install optional: Bun JavaScript runtime
 nikos add postgres   # install optional: PostgreSQL + pgvector
+nikos add mongodb    # install optional: MongoDB, mongosh, Atlas CLI
 nikos add redis      # install optional: Redis
 nikos add qdrant     # install optional: Qdrant vector database
 nikos add zsh        # install optional: Zsh + Starship
@@ -188,7 +197,7 @@ editing tracked files:
 
 ```yaml
 nikos_timezone: "Europe/London"     # override this for your timezone
-ollama_default_model: "qwen2.5-coder:7b"  # model to pre-pull
+ollama_default_model: "qwen3.5:4b"  # model to pre-pull
 nikos_desktop_flavor: "xubuntu-minimal"   # or xubuntu-full / xfce
 nikos_remove_gnome: false           # true purges GNOME instead of keeping it selectable
 nikos_vscode_extensions:            # add/remove VS Code extensions
@@ -249,6 +258,8 @@ aider / Claude Code / Continue  →  use in code
 
 - [Installation guide](docs/install.md) — detailed install, requirements, troubleshooting
 - [Customization](docs/customization.md) — vars, roles, optional bundles
+- [Profiles](docs/profiles.md) - desktop and server, and which roles each runs
+- [Dual boot](docs/dual-boot.md) - os-prober, boot order, UEFI vs legacy, Secure Boot
 - [Debugging](docs/debugging.md) — `nikos doctor`, common issues, logs
 - [Development](docs/development.md) — adding roles, testing, contributing
 

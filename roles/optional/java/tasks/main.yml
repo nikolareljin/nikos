@@ -1,8 +1,34 @@
 ---
-- name: Install Java 21
+# nikos_java_versions lists the OpenJDK releases to install; the first one is
+# the default `java` and `javac`. Ubuntu 24.04 packages 8, 11, 17, 21 and 25.
+- name: Refuse an empty Java version list
+  ansible.builtin.assert:
+    that:
+      - nikos_java_versions | length > 0
+    fail_msg: "nikos_java_versions is empty. Set at least one version, e.g. [21], in vars/local.yml."
+    quiet: true
+
+- name: Install the selected OpenJDK releases
   ansible.builtin.apt:
-    name: openjdk-21-jdk
+    name: "{{ nikos_java_versions | map('string') | map('regex_replace', '^', 'openjdk-') | map('regex_replace', '$', '-jdk') | list }}"
     state: present
     update_cache: true
     cache_valid_time: 3600
   become: true
+
+- name: Point java and javac at the first listed release
+  community.general.alternatives:
+    name: "{{ item }}"
+    path: "/usr/lib/jvm/java-{{ java_default }}-openjdk-{{ java_deb_arch }}/{{ java_bin_dir[item] }}/{{ item }}"
+  loop:
+    - java
+    - javac
+  vars:
+    java_default: "{{ nikos_java_versions | first | string }}"
+    # OpenJDK 8 keeps the java launcher under jre/; 9 and later have one bin/.
+    java_bin_dir:
+      java: "{{ 'jre/bin' if java_default == '8' else 'bin' }}"
+      javac: bin
+    java_deb_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_architecture] | default(ansible_architecture) }}"
+  become: true
+  when: not ansible_check_mode

@@ -100,7 +100,7 @@
       </tr>
       <tr>
         <td><strong>Installs Ollama</strong></td>
-        <td>Runs as a user service and pulls one model by default (<code>qwen2.5-coder:7b</code>, 4.7&nbsp;GB).
+        <td>Runs as a system service on 127.0.0.1:11434 and pulls one model by default (<code>qwen3.5:4b</code>, 3.4&nbsp;GB).
         Nothing else is downloaded unless you ask for it.</td>
       </tr>
       <tr>
@@ -173,7 +173,7 @@
     <div class="card">
       <h3>Running models locally</h3>
       <p>Ollama with model groups you opt into by capability — reasoning, coding, text, vision, embeddings.
-      The smallest reasoning model runs on a 4&nbsp;GB machine.</p>
+      The default model, <code>qwen3.5:4b</code>, is 3.4&nbsp;GB and runs on an 8&nbsp;GB laptop.</p>
     </div>
     <div class="card">
       <h3>Building on top of them</h3>
@@ -194,7 +194,7 @@
 
   <h2>The constraint it is built around</h2>
 
-  <p>A 250&nbsp;MB idle RAM target. Xfce rather than GNOME, no always-running inference server, and every
+  <p>A 250&nbsp;MB idle RAM target. Xfce rather than GNOME, an idle Ollama service that holds no model in memory, and every
   heavyweight component opt-in. Models load when you call them and unload afterwards, so a 19&nbsp;GB model
   on disk costs nothing while you are not using it.</p>
 
@@ -207,7 +207,7 @@
     <li><strong>Ubuntu 24.04 LTS</strong> or Xubuntu 24.04. Other releases are not supported.</li>
     <li>A non-root user with <code>sudo</code>.</li>
     <li>About 20&nbsp;GB free disk for a base install.</li>
-    <li>4&nbsp;GB RAM minimum; 8&nbsp;GB to run the default 7B model comfortably.</li>
+    <li>4&nbsp;GB RAM minimum; 8&nbsp;GB to run the default <code>qwen3.5:4b</code> model comfortably.</li>
     <li>An internet connection during the run. Offline installs are not supported.</li>
   </ul>
 
