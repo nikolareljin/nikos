@@ -13,7 +13,7 @@ It checks:
 - llama.cpp, shell-gpt, glances, and mkcert when present
 - Nordic GTK theme files
 - Papirus icon files
-- GitHub wizard completion flag
+- Git setup wizard completion flag
 
 Any `[!!]` items indicate missing or broken components. Run `nikos update` to attempt repair.
 
@@ -115,11 +115,10 @@ systemctl --user status ollama
 systemctl --user restart ollama
 ```
 
-### GitHub wizard re-run
+### Git setup wizard re-run
 
 ```bash
-rm ~/.config/nikos/github-configured
-# Open a new terminal — the wizard will run automatically
+nikos-git-setup --reset
 ```
 
 ### VS Code extensions not installed

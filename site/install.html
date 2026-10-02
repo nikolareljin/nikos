@@ -110,9 +110,11 @@ bash install.sh --dev</code></pre>
   <h2>First boot</h2>
 
   <p>Reboot if you came from Ubuntu; log out and back in if you were already on Xubuntu. On the first
-  terminal session a one-time GitHub setup wizard runs: <code>gh auth login</code>, SSH key generation and
-  upload, git identity, and optionally cloning your dotfiles. It writes
-  <code>~/.config/nikos/github-configured</code> and does not run again.</p>
+  terminal session a one-time Git setup wizard runs. Pick GitHub, GitLab, Bitbucket or a custom Git
+  server and it creates an SSH key, adds it to that host, sets your git identity and optionally clones your
+  dotfiles; or pick Skip and manage keys yourself. It writes
+  <code>~/.config/nikos/github-configured</code> and does not run again; <code>nikos-git-setup --reset</code>
+  runs it again.</p>
 
   <h2>Day-to-day</h2>
 

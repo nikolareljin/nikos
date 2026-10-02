@@ -32,6 +32,7 @@
           - nikos_ollama_mode in ['local', 'remote']
           - nikos_node_role in ['workstation', 'inference', 'services']
           - nikos_ollama_host is match('^(127\\.[0-9.]+|localhost|\\[::1\\]):[0-9]+$')
+          - nikos_git_setup in ['ask', 'skip']
           - nikos_ollama_mode != 'remote' or (nikos_ollama_remote_url | length) > 0
         fail_msg: >-
           Invalid NikOS settings. Fix them in {{ playbook_dir }}/vars/local.yml:
@@ -40,7 +41,8 @@
           nikos_node_role={{ nikos_node_role }} (workstation, inference or services),
           nikos_ollama_host={{ nikos_ollama_host }} (must be a loopback address with a port;
           Ollama has no authentication),
-          nikos_ollama_remote_url={{ nikos_ollama_remote_url | default('') }} (required when the mode is remote).
+          nikos_ollama_remote_url={{ nikos_ollama_remote_url | default('') }} (required when the mode is remote),
+          nikos_git_setup={{ nikos_git_setup }} (ask or skip).
         quiet: true
       tags: [always]
 
