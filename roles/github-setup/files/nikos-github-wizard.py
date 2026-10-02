@@ -203,6 +203,9 @@ def step_dotfiles(provider: str, host: str, port: int, user: str) -> None:
     answer = ask("  Dotfiles repo (user/repo or a git URL), Enter to skip: ")
     if not answer:
         return
+    if answer.startswith("-"):
+        print(f"  [!] Not a repo: {answer!r}")
+        return
     dest = Path.home() / "dotfiles"
     if dest.exists():
         print(f"  [!] {dest} already exists, not cloning.")
@@ -253,7 +256,7 @@ def ensure_ssh_config(host: str, port: int, user: str) -> bool:
     path = _ssh_config_path()
     marker = f"# nikos-git-setup: {host}"
     existing = path.read_text() if path.exists() else ""
-    if marker in existing:
+    if marker in existing or re.search(rf"(?im)^\s*Host\s+{re.escape(host)}\s*$", existing):
         os.chmod(path, 0o600)
         return False
     block = f"\n{marker}\nHost {host}\n    HostName {host}\n    Port {port}\n    User {user}\n"
@@ -350,7 +353,11 @@ def setup_bitbucket(pubkey: str) -> tuple[str, int, str]:
 def setup_custom(pubkey: str) -> tuple[str, int, str]:
     host, _ = _ask_host("  Git server host: ", "")
     port_raw = ask("  SSH port [22]: ") or "22"
-    port = int(port_raw) if port_raw.isdigit() and 0 < int(port_raw) < 65536 else 22
+    if port_raw.isdigit() and 0 < int(port_raw) < 65536:
+        port = int(port_raw)
+    else:
+        print(f"  [!] Bad port {port_raw!r}, using 22.")
+        port = 22
     user = ask("  SSH user [git]: ") or "git"
     if not re.fullmatch(r"[A-Za-z0-9._-]+", user):
         print("  [!] Bad user name, using git.")
@@ -400,7 +407,7 @@ def confirm_skip() -> bool:
     print()
     print("No SSH key will be generated or uploaded. You will need to create your")
     print("own key (ssh-keygen -t ed25519) and add it to GitHub or your Git host")
-    print("yourself. Rerun any time with `nikos-git-setup`.")
+    print("yourself. Rerun any time with `nikos-git-setup --reset`.")
     return yes("Skip Git setup? [y/N]: ")
 
 
@@ -450,11 +457,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.reset:
         CONFIG_FLAG.unlink(missing_ok=True)
     elif CONFIG_FLAG.exists():
+        print("Git setup already done. Run `nikos-git-setup --reset` to run it again.")
         sys.exit(0)
     try:
         sys.exit(interactive())
     except (Abort, KeyboardInterrupt):
-        print("\nAborted. Nothing saved; the wizard runs again next terminal.")
+        print("\nAborted. Setup not marked done; the wizard runs again next terminal.")
         sys.exit(130)
 
 

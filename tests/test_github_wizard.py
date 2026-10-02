@@ -377,3 +377,34 @@ def test_role_removes_old_hook_text():
 def test_nikos_git_setup_default_is_ask():
     data = yaml.safe_load((ROOT / "vars/main.yml").read_text())
     assert data["nikos_git_setup"] == "ask"
+
+
+def test_custom_does_not_shadow_existing_host_entry(home, monkeypatch):
+    (home / ".ssh").mkdir()
+    (home / ".ssh/config").write_text("Host git.example.com\n    Port 2200\n")
+    monkeypatch.setattr(wizard.subprocess, "run", Recorder())
+    feed(monkeypatch, ["git.example.com", "2222", "gitea", ""])
+    wizard.setup_custom("k")
+    assert (home / ".ssh/config").read_text().count("Host git.example.com") == 1
+
+
+def test_dotfiles_refuses_option_like_input(home, monkeypatch):
+    rec = Recorder()
+    monkeypatch.setattr(wizard.subprocess, "run", rec)
+    feed(monkeypatch, ["--upload-pack=touch x@y"])
+    wizard.step_dotfiles("GitLab", "gitlab.com", 22, "git")
+    assert rec.calls == []
+
+
+def test_dotfiles_shorthand_uses_provider_host(home, monkeypatch):
+    rec = Recorder()
+    monkeypatch.setattr(wizard.subprocess, "run", rec)
+    feed(monkeypatch, ["nik/dots"])
+    wizard.step_dotfiles("Custom Git server", "git.example.com", 2222, "gitea")
+    assert rec.calls[0][:3] == ["git", "clone", "ssh://gitea@git.example.com:2222/nik/dots.git"]
+
+
+def test_flag_present_tells_user_how_to_rerun(home, monkeypatch, capsys):
+    wizard.write_flag()
+    assert run_main() == 0
+    assert "--reset" in capsys.readouterr().out
