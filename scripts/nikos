@@ -231,8 +231,9 @@ _collect_become_password() {
     (( attempt < 3 )) && printf 'Sorry, try again.\n' >/dev/tty
   done
   if [[ -z "${pw}" ]]; then
+    # 2, not 1: a fourth try through --ask-become-pass would only repeat this.
     NIKOS_PROGRESS_SKIP_REASON="sudo password rejected 3 times"
-    return 1
+    return 2
   fi
 
   # Each step is checked on its own. The caller reads a non-zero return as
@@ -457,11 +458,19 @@ _playbook() {
     if sudo -n -k true 2>/dev/null; then
       # Passwordless sudo: nothing to collect, and no prompt to fall back on.
       use_gauge=true
-    elif _collect_become_password; then
-      use_gauge=true
-      playbook_args+=(--become-password-file "${BECOME_PASSWORD_FILE}")
     else
-      NIKOS_PROGRESS_SKIP_REASON="${NIKOS_PROGRESS_SKIP_REASON:-could not store the sudo password}"
+      local pw_rc=0
+      _collect_become_password || pw_rc=$?
+      if (( pw_rc == 0 )); then
+        use_gauge=true
+        playbook_args+=(--become-password-file "${BECOME_PASSWORD_FILE}")
+      elif (( pw_rc == 2 )); then
+        print_error "Sudo rejected the password three times; the playbook did not run."
+        _logfile "[FAILED] sudo password rejected 3 times"
+        return 1
+      else
+        NIKOS_PROGRESS_SKIP_REASON="${NIKOS_PROGRESS_SKIP_REASON:-could not store the sudo password}"
+      fi
     fi
   fi
   if [[ "${use_gauge}" != "true" ]]; then

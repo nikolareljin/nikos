@@ -651,3 +651,25 @@ def test_install_stops_after_three_rejections(tmp_path):
 def test_the_progressbox_caption_names_the_fallback_reason():
     text = INSTALL_SH.read_text(encoding="utf-8")
     assert '--progressbox "Running Ansible playbook (plain view: ${_PLAIN_REASON})..."' in text
+
+
+def test_update_stops_after_three_rejected_passwords(tmp_path):
+    """A fourth try through --ask-become-pass would only repeat the rejection."""
+    block = extract_cli_block("  local ask_pass=false", "    _plain_view_notice\n  fi\n")
+    body = GAUGE_CHOICE_BODY.format(
+        block="choose() {\n" + block + "\n  echo REACHED_PLAY\n}\nchoose; echo \"RC=$?\"",
+        collect='NIKOS_PROGRESS_SKIP_REASON="sudo password rejected 3 times"; return 2',
+    )
+    program = tmp_path / "choice.sh"
+    program.write_text(
+        extract_cli_helper("_plain_view_notice") + "\n"
+        + textwrap.dedent(body).replace(
+            "print_info() {", "print_error() { echo \"ERR $*\"; }\nprint_info() {", 1),
+        encoding="utf-8",
+    )
+    bindir = tmp_path / "bin"
+    stub(bindir, "sudo", "exit 1\n")
+    out = run(["bash", str(program)], path=with_stub(bindir), home=tmp_path)
+    assert "RC=1" in out and "REACHED_PLAY" not in out, out
+    assert "ERR Sudo rejected the password three times" in out, out
+    assert "--ask-become-pass" not in field(out, "ARGS"), out
