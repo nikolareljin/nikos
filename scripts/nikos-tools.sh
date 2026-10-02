@@ -108,7 +108,7 @@ _nikos_tools_confirm_optin() {
 }
 
 nikos_tools_with_needs() {
-  local tsv="$1" csv="$2" have added=1 rows need tool dropped=","
+  local tsv="$1" csv="$2" have added=1 rows need tool dropped="," declined=","
   have=",${csv},${NIKOS_DISTRODECK_OWNED_TOOLS},$(printf '%s\n' "${tsv}" | awk -F'\t' 'NF >= 6 && $6 == "1" { printf "%s,", $3 }')"
   while (( added )); do
     added=0
@@ -131,8 +131,14 @@ nikos_tools_with_needs() {
       [[ "${need}" == "docker" && "${have}" == *",podman,"* ]] && continue
       [[ "${need}" == "claude-code" ]] && command -v claude >/dev/null 2>&1 && continue
       printf '%s\n' "${tsv}" | awk -F'\t' -v n="${need}" '$3 == n { f = 1 } END { exit !f }' || continue
-      if printf '%s\n' "${tsv}" | awk -F'\t' -v n="${need}" '$3 == n && $5 == "1" { f = 1 } END { exit !f }' &&
+      # Ask once per need: the loop revisits every row until nothing changes,
+      # and several tools can share one need (plugin-* all need claude-code).
+      if [[ "${declined}" != *",${need},"* ]] &&
+        printf '%s\n' "${tsv}" | awk -F'\t' -v n="${need}" '$3 == n && $5 == "1" { f = 1 } END { exit !f }' &&
         ! _nikos_tools_confirm_optin "${tool}" "${need}"; then
+        declined="${declined}${need},"
+      fi
+      if [[ "${declined}" == *",${need},"* ]]; then
         if [[ "${dropped}" != *",${tool},"* ]]; then
           echo "NOTE: ${tool} needs ${need}, an opt-in tool; pick it too to install ${tool}." >&2
           dropped="${dropped}${tool},"

@@ -595,3 +595,24 @@ def test_a_tool_resting_on_a_dropped_need_is_dropped_too(tmp_path: Path) -> None
     )
     assert result.stdout.strip() == "q", result.stderr
     assert "b needs z, an opt-in tool" in result.stderr
+
+
+@pytest.mark.parametrize("answer,expected", [("1", ""), ("0", "claude-code,plugin-a,plugin-b")],
+                         ids=["no", "yes"])
+def test_an_opt_in_need_is_asked_once(tmp_path: Path, answer: str, expected: str) -> None:
+    # The resolver loops until nothing changes and two plugins share one need;
+    # a "no" was asked four times for the same claude-code.
+    tsv = tmp_path / "cat.tsv"
+    tsv.write_text(
+        "ai\tAI\tclaude-code\tClaude Code\t1\t0\t-\n"
+        "ai\tAI\tplugin-a\tPlugin A\t0\t0\tclaude-code\n"
+        "ai\tAI\tplugin-b\tPlugin B\t0\t0\tclaude-code\n"
+    )
+    result = subprocess.run(
+        ["setsid", "-w", "bash", "-c",
+         f'source {LIB}\n_nikos_tools_confirm_optin() {{ echo ASKED >&2; return {answer}; }}\n'
+         f'nikos_tools_with_needs "$(cat {tsv})" "plugin-a,plugin-b"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+    )
+    assert result.stdout.strip() == expected, result.stderr
+    assert result.stderr.count("ASKED") == 1, result.stderr
