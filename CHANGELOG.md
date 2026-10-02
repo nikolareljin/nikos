@@ -4,6 +4,8 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-10-01
+
 ### Added
 - **An IsoForge integration manifest, `isoforge.yml`.** It declares the Xubuntu
   24.04.4 base, the ISO metadata, and the Ansible provisioning an image build
