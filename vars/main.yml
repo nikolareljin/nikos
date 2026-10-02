@@ -13,6 +13,12 @@ nikos_update_mode: true
 # install.sh asks once and writes the answer to vars/local.yml.
 nikos_profile: "desktop"
 
+# -- Git host setup ---------------------------------------------------------
+# ask  - the first terminal runs nikos-git-setup (GitHub, GitLab, Bitbucket or
+#        a custom server) until it is completed or skipped
+# skip - no .bashrc hook; set up SSH keys yourself or run nikos-git-setup
+nikos_git_setup: "ask"
+
 # ── Boot ─────────────────────────────────────────────────────────────────────
 # Let GRUB list other operating systems (Windows on a dual-boot machine).
 # Ubuntu disables os-prober by default since GRUB 2.06. Only acts on an

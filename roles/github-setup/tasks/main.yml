@@ -48,13 +48,30 @@
     create: true
     mode: "0644"
 
-- name: Register first-login wizard hook in .bashrc
-  ansible.builtin.lineinfile:
+- name: Link nikos-git-setup to the wizard
+  ansible.builtin.file:
+    src: /usr/local/bin/nikos-github-wizard
+    dest: /usr/local/bin/nikos-git-setup
+    state: link
+  become: true
+
+# Before 0.8 the hook was a multi-line lineinfile entry. Remove that text so an
+# upgrade does not leave it next to the managed block below.
+- name: Remove pre-0.8 wizard hook from .bashrc
+  ansible.builtin.replace:
     path: "{{ nikos_home }}/.bashrc"
-    line: |
-      # NikOS first-run wizard (runs once on first login)
-      if [[ ! -f "${HOME}/.config/nikos/github-configured" ]]; then
+    regexp: '# NikOS first-run wizard \(runs once on first login\)\nif .*github-configured.*\n +/usr/local/bin/nikos-github-wizard\nfi\n'
+    replace: ""
+  failed_when: false
+
+- name: Register first-terminal Git setup hook in .bashrc
+  ansible.builtin.blockinfile:
+    path: "{{ nikos_home }}/.bashrc"
+    marker: "# {mark} NikOS git setup"
+    block: |
+      if [[ $- == *i* && ! -f "${HOME}/.config/nikos/github-configured" ]]; then
         /usr/local/bin/nikos-github-wizard
       fi
+    state: "{{ 'present' if nikos_git_setup == 'ask' else 'absent' }}"
     create: true
     mode: "0644"

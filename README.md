@@ -132,10 +132,11 @@ Additional tools installed directly:
 | [image-view](https://github.com/nikolareljin/image-view) | `image-view` | Terminal image preview (Rust) |
 | [git-lantern](https://github.com/nikolareljin/git-lantern) | `lantern` | Repo dashboard — local + GitHub status |
 
-### GitHub integration
+### Git host integration
 - `gh` CLI pre-installed
-- First-login wizard: authenticates GitHub, generates SSH key, configures git identity
-- Optional dotfiles pull from your GitHub repo
+- First-login wizard (`nikos-git-setup`): adds an SSH key to GitHub, GitLab,
+  Bitbucket or a custom Git server, or skip it and manage keys yourself
+- Configures git identity; optional dotfiles clone (`user/repo` or a git URL)
 
 ---
 

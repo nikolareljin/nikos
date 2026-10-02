@@ -65,13 +65,25 @@ effect while the GNOME session that launched the installer is still running.
 The installer prints which of the two you need at the end of the run.
 
 On the first terminal session, NikOS shows a short one-time command hint, then the
-GitHub setup wizard runs:
-1. `gh auth login` — authenticate with GitHub
-2. SSH key generation and upload
-3. Git name/email configuration
-4. Optional: pull your dotfiles repo
+Git setup wizard (`nikos-git-setup`) asks which Git host you use:
 
-The wizard writes `~/.config/nikos/github-configured` on completion and will not run again.
+1. GitHub - `gh auth login`, then `gh ssh-key add`
+2. GitLab (gitlab.com or self-hosted) - adds the key with a personal access token (scope `api`)
+3. Bitbucket - adds the key with your username and an API token
+4. Custom Git server - prints the key for you to add; writes a `Host` block to
+   `~/.ssh/config` when the port is not 22 or the user is not `git`
+5. Skip - no key is generated or uploaded; create one with `ssh-keygen -t ed25519`
+   and add it to your host yourself
+
+For any host it reuses `~/.ssh/id_ed25519` or creates it, sets your git name and
+email if unset, checks the login with `ssh -T`, and can clone a dotfiles repo
+(`user/repo` or a full git URL). You can add more than one host in one run.
+Tokens are read without echo, sent only over HTTPS, and never saved.
+
+The wizard writes `~/.config/nikos/github-configured` when it finishes or is
+skipped, and does not run again. `nikos-git-setup --reset` runs it again;
+`nikos-git-setup --skip` marks it done without asking. To install without the
+terminal hook, set `nikos_git_setup: skip` in `vars/local.yml`.
 
 ## Which version gets installed
 
