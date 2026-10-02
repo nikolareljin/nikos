@@ -355,3 +355,234 @@ def test_input_ending_mid_prompt_is_not_treated_as_an_answer(tmp_path):
     # bootstrap packages, the checkout and the collections are already in place.
     assert "Nothing was installed" not in out, out
     assert "The playbook was not run" in out, out
+
+
+# ---------------------------------------------------------------------------
+# Why the gauge falls back, and the causes behind the fallback.
+#
+# On some machines `nikos update` and the installer printed raw `TASK [...]`
+# output with no explanation. Three causes: a passwordless-sudo user pressing
+# Enter at the password prompt fell to --ask-become-pass; `--list-tasks`
+# inherited a non-blocking tty as stdin, which ansible-core refuses ("requires
+# blocking IO"), and its stderr was thrown away; and nothing said which.
+# ---------------------------------------------------------------------------
+
+PROGRESS_LIB = REPO_ROOT / "scripts" / "nikos-progress.sh"
+NIKOS_CLI = REPO_ROOT / "scripts" / "nikos"
+
+
+def stub(bindir: Path, name: str, body: str) -> None:
+    bindir.mkdir(exist_ok=True)
+    path = bindir / name
+    path.write_text("#!/bin/sh\n" + body, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def progress_program(tmp_path: Path, body: str) -> Path:
+    program = tmp_path / "progress.sh"
+    program.write_text(f"source {PROGRESS_LIB}\n" + textwrap.dedent(body), encoding="utf-8")
+    return program
+
+
+WHY_BODY = """
+    {setup}
+    printf '\\nWHY=[%s]\\n' "$(nikos_progress_why_not)"
+"""
+
+
+@needs_pty
+@pytest.mark.parametrize(
+    "env,setup,expected",
+    [
+        ("NIKOS_USE_DIALOG=0 ", "", "NIKOS_USE_DIALOG=0"),
+        ("", 'NIKOS_PROGRESS_SKIP_REASON="empty sudo password"', "empty sudo password"),
+        ("", 'NIKOS_PROGRESS_PLAN_FAILED=1; NIKOS_PROGRESS_PLAN_ERR="ERROR: boom"',
+         "task listing failed: ERROR: boom"),
+    ],
+    ids=["switched-off", "empty-password", "listing-failed"],
+)
+def test_why_not_names_the_reason(tmp_path, env, setup, expected):
+    program = progress_program(tmp_path, WHY_BODY.format(setup=setup))
+    bindir = stub_dialog(tmp_path)
+    out = run(
+        ["script", "-qec", f"{env}bash {program} < /dev/null", "/dev/null"],
+        path=with_stub(bindir),
+        home=tmp_path,
+    )
+    assert field(out, "WHY") == f"[{expected}]", out
+
+
+@needs_pty
+def test_why_not_says_dialog_is_missing(tmp_path):
+    program = progress_program(tmp_path, WHY_BODY.format(setup=""))
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    out = run(
+        [SCRIPT, "-qec", f"{BASH} {program} < /dev/null", "/dev/null"],
+        path=str(empty),
+        home=tmp_path,
+    )
+    assert field(out, "WHY") == "[dialog not installed]", out
+
+
+@needs_setsid
+def test_why_not_says_there_is_no_terminal(tmp_path):
+    program = progress_program(tmp_path, WHY_BODY.format(setup=""))
+    bindir = stub_dialog(tmp_path)
+    out = run(["setsid", "bash", str(program)], path=with_stub(bindir), home=tmp_path)
+    assert field(out, "WHY") == "[no controlling terminal /dev/tty]", out
+
+
+PLAN_BODY = """
+    if nikos_progress_plan "$HOME" /dev/null site.yml; then rc=0; else rc=1; fi
+    printf '\\nRC=%s\\nTOTAL=%s\\n' "$rc" "$NIKOS_PROGRESS_TOTAL"
+    printf 'ERR=[%s]\\n' "$NIKOS_PROGRESS_PLAN_ERR"
+"""
+
+
+@needs_pty
+def test_planner_keeps_the_ansible_error(tmp_path):
+    bindir = stub_dialog(tmp_path)
+    stub(
+        bindir,
+        "ansible-playbook",
+        'echo "[DEPRECATION WARNING]: old thing" >&2\n'
+        'echo "ERROR: Ansible requires blocking IO on stdin/stdout/stderr." >&2\n'
+        "exit 1\n",
+    )
+    program = progress_program(tmp_path, PLAN_BODY)
+    out = run(
+        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        path=with_stub(bindir),
+        home=tmp_path,
+    )
+    assert field(out, "RC") == "1", out
+    assert field(out, "ERR") == "[ERROR: Ansible requires blocking IO on stdin/stdout/stderr.]", out
+
+
+@needs_pty
+def test_planner_does_not_hand_ansible_the_terminal(tmp_path):
+    """The program itself runs with the pty on stdin; the planner must not pass it on."""
+    bindir = stub_dialog(tmp_path)
+    stub(
+        bindir,
+        "ansible-playbook",
+        'if [ -t 0 ]; then echo "ERROR: stdin is a terminal" >&2; exit 1; fi\n'
+        "printf '  play #1 (localhost): x\\tTAGS: []\\n    tasks:\\n"
+        "      base : one\\tTAGS: []\\n      base : two\\tTAGS: []\\n'\n",
+    )
+    program = progress_program(tmp_path, PLAN_BODY)
+    out = run(
+        ["script", "-qec", f"bash {program}", "/dev/null"],
+        path=with_stub(bindir),
+        home=tmp_path,
+    )
+    assert field(out, "RC") == "0", out
+    assert field(out, "TOTAL") == "2", out
+
+
+def extract_cli_block(start: str, end: str) -> str:
+    text = NIKOS_CLI.read_text(encoding="utf-8")
+    i = text.index(start)
+    return text[i : text.index(end, i) + len(end)]
+
+
+def extract_cli_helper(name: str) -> str:
+    text = NIKOS_CLI.read_text(encoding="utf-8")
+    match = re.search(rf"^{re.escape(name)}\(\) \{{.*?^\}}", text, re.M | re.S)
+    assert match, f"scripts/nikos no longer defines {name}"
+    return match.group(0)
+
+
+GAUGE_CHOICE_BODY = """
+    USE_DIALOG=1
+    _PROGRESS_LIB_LOADED=true
+    BECOME_PASSWORD_FILE=""
+    use_gauge=false
+    playbook_args=(-i inv site.yml)
+    _can_use_gauge() {{ return 0; }}
+    _offer_dialog_install() {{ :; }}
+    _logfile() {{ :; }}
+    print_info() {{ echo "$*"; }}
+    nikos_progress_why_not() {{ echo "${{NIKOS_PROGRESS_SKIP_REASON}}"; }}
+    _collect_become_password() {{ echo COLLECTED; {collect}; }}
+    {block}
+    printf '\\nGAUGE=%s\\nARGS=%s\\nASK=%s\\n' "$use_gauge" "${{playbook_args[*]}}" "$ask_pass"
+"""
+
+
+@pytest.mark.parametrize("sudo_rc", [0, 1], ids=["passwordless", "needs-password"])
+def test_update_gauge_choice(tmp_path, sudo_rc):
+    """Passwordless sudo goes straight to the gauge, no prompt, no --ask-become-pass."""
+    block = extract_cli_block("  local ask_pass=false", "    _plain_view_notice\n  fi\n")
+    body = GAUGE_CHOICE_BODY.format(
+        block=block,
+        collect='NIKOS_PROGRESS_SKIP_REASON="empty sudo password"; return 1',
+    )
+    program = tmp_path / "choice.sh"
+    program.write_text(
+        extract_cli_helper("_plain_view_notice") + "\n" + textwrap.dedent(body)
+        .replace("local ask_pass", "ask_pass"),
+        encoding="utf-8",
+    )
+    bindir = tmp_path / "bin"
+    stub(bindir, "sudo", f'echo "SUDO $*" >> {tmp_path}/sudo.log\nexit {sudo_rc}\n')
+    out = run(["bash", str(program)], path=with_stub(bindir), home=tmp_path)
+    if sudo_rc == 0:
+        assert field(out, "GAUGE") == "true", out
+        assert "--ask-become-pass" not in field(out, "ARGS"), out
+        assert "--become-password-file" not in field(out, "ARGS"), out
+        assert "COLLECTED" not in out, out
+    else:
+        assert field(out, "GAUGE") == "false", out
+        assert "--ask-become-pass" in field(out, "ARGS"), out
+        assert "Plain progress view: empty sudo password" in out, out
+
+
+@needs_pty
+@pytest.mark.parametrize(
+    "answers,expected",
+    [
+        ("wrong\nright\n", "OK"),
+        ("wrong\nwrong\nwrong\n", "FAIL sudo password rejected 3 times"),
+        ("\n", "FAIL empty sudo password"),
+    ],
+    ids=["second-try", "three-strikes", "empty"],
+)
+def test_sudo_password_is_validated_on_stdin(tmp_path, answers, expected):
+    bindir = stub_dialog(tmp_path)
+    log = tmp_path / "sudo.log"
+    # Accepts "right" on stdin; records argv so a password there would show.
+    stub(bindir, "sudo", f'echo "ARGV $*" >> {log}\nread pw; [ "$pw" = right ]\n')
+    program = tmp_path / "collect.sh"
+    program.write_text(
+        "\n".join(
+            extract_cli_helper(n)
+            for n in ("_cleanup_become_password_file", "_collect_become_password")
+        )
+        + textwrap.dedent(
+            """
+            print_error() { echo "$*" >&2; }
+            BECOME_PASSWORD_FILE=""
+            NIKOS_PROGRESS_SKIP_REASON=""
+            if _collect_become_password; then
+              printf '\\nRESULT=OK\\nFILE=%s\\n' "$(cat "$BECOME_PASSWORD_FILE")"
+              _cleanup_become_password_file
+            else
+              printf '\\nRESULT=FAIL %s\\n' "$NIKOS_PROGRESS_SKIP_REASON"
+            fi
+            """
+        ),
+        encoding="utf-8",
+    )
+    out = run(
+        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        path=with_stub(bindir),
+        stdin=answers.encode(),
+        home=tmp_path,
+    )
+    assert field(out, "RESULT") == expected, out
+    if expected == "OK":
+        assert field(out, "FILE") == "right", out
+    if log.exists():
+        assert "right" not in log.read_text() and "wrong" not in log.read_text()

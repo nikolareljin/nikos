@@ -362,6 +362,30 @@ _session_next_step() {
   esac
 }
 
+# Says why the run shows plain Ansible output instead of the gauge, once per
+# install, on the terminal and in the log. A silent fallback looks like a hang
+# or a broken installer.
+_PLAIN_NOTICE_SHOWN=0
+_plain_view_notice() {
+  local reason=""
+  (( _PLAIN_NOTICE_SHOWN == 0 )) || return 0
+  _PLAIN_NOTICE_SHOWN=1
+  if [[ "${USE_DIALOG}" == "0" ]]; then
+    reason="NIKOS_USE_DIALOG=0"
+  elif [[ "${_PROGRESS_LIB_LOADED}" == "true" ]]; then
+    reason="$(nikos_progress_why_not)"
+  else
+    reason="${PROGRESS_LIB_REL} not found"
+  fi
+  reason="${reason:-unknown}"
+  if _have_tty; then
+    printf 'Plain progress view: %s\n' "${reason}" >/dev/tty 2>/dev/null || true
+  else
+    printf 'Plain progress view: %s\n' "${reason}" >&2
+  fi
+  _safe_logfile "Plain progress view: ${reason}"
+}
+
 # Run ansible-playbook behind the dialog UI.
 #
 # Prefers the mixedgauge view from scripts/nikos-progress.sh: one row per role,
@@ -398,13 +422,15 @@ _run_playbook_dialog() {
       _restore_terminal_cursor
       return "${rc}"
     fi
-    _safe_logfile "[WARNING] could not enumerate playbook tasks; using the plain progress view"
   fi
+  _plain_view_notice
 
+  # The become password is in a file here, so ansible never needs the terminal.
+  # stdin is /dev/null because ansible-core aborts on a non-blocking stdin.
   (
     cd "${NIKOS_HOME}" || exit 127
     ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
-      PYTHONUNBUFFERED=1 ansible-playbook "${opts[@]}"
+      PYTHONUNBUFFERED=1 ansible-playbook "${opts[@]}" </dev/null
   ) 2>&1 \
     | _strip_ansi_stream \
     | tee -a "${INSTALL_LOG}" \
@@ -1471,6 +1497,7 @@ if _can_use_dialog; then
   set -e
 else
   echo "Running NikOS ${NIKOS_VERSION} playbook..."
+  _plain_view_notice
   PLAY_OPTS=(-i "${NIKOS_HOME}/inventory/local" "${NIKOS_HOME}/site.yml" --ask-become-pass)
   PLAY_OPTS+=(-e nikos_update_mode=false -e "nikos_distrodeck_tools=${NIKOS_SELECTED_TOOLS}")
   [[ -n "${SKIP_TAGS}" ]] && PLAY_OPTS+=(--skip-tags "${SKIP_TAGS#,}")

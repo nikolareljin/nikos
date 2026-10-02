@@ -13,6 +13,18 @@ All notable changes to NikOS are documented here.
   never matched itself, so each run appended another copy to `~/.bashrc` (25
   on one machine); every copy is removed and replaced by one managed block.
 
+### Fixed
+- **The install and update gauge no longer drops to raw `TASK [...]` output
+  without a word.** Passwordless sudo now goes straight to the gauge instead of
+  falling to `--ask-become-pass` on an empty answer; the sudo password is
+  checked with `sudo -S -k -v` (three tries); `--list-tasks` and the playbook
+  get `/dev/null` as stdin, since ansible-core refuses a non-blocking tty. Any
+  remaining fallback prints `Plain progress view: <reason>` to the terminal and
+  the log, and `nikos update` offers to install a missing `dialog`.
+- A distrodeck tool whose need is an opt-in tool (it runs an upstream
+  installer) no longer pulls that tool in silently: the tool is dropped with a
+  note to pick both. The opt-in label now says what opt-in means.
+
 ## [0.7.0] — 2026-10-01
 
 ### Added

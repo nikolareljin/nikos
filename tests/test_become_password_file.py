@@ -72,8 +72,17 @@ def write_program(tmp_path: Path) -> Path:
 
 
 def run(program: Path, tmp_path: Path, *, prefix: str = "", tmpdir: str = "") -> str:
-    """Run the probe under a pty, so its /dev/tty read has somewhere to read from."""
-    command = f"{prefix} TMPDIR={tmpdir or tmp_path} bash {program}".strip()
+    """Run the probe under a pty, so its /dev/tty read has somewhere to read from.
+
+    The password is checked with `sudo -S -k -v`; a stub that accepts hunter2
+    on stdin keeps the test off the real sudo.
+    """
+    sudobin = tmp_path / "sudobin"
+    sudobin.mkdir(exist_ok=True)
+    (sudobin / "sudo").write_text('#!/bin/sh\nread pw; [ "$pw" = hunter2 ]\n', encoding="utf-8")
+    (sudobin / "sudo").chmod(0o755)
+    command = f"{prefix} PATH={sudobin}:$PATH TMPDIR={tmpdir or tmp_path} bash {program}"
+    command = command.strip()
     result = subprocess.run(
         [SCRIPT, "-qec", command, "/dev/null"],
         input=b"hunter2\n",

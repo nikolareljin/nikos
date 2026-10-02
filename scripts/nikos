@@ -167,21 +167,76 @@ trap '_cleanup_run' EXIT
 trap '_cleanup_run; exit 130' INT
 trap '_cleanup_run; exit 143' TERM
 
+# Says once, on the terminal and in the log, why the run shows plain Ansible
+# output instead of the gauge. A silent fallback looks like a broken installer.
+_plain_view_notice() {
+  local reason=""
+  if [[ "${USE_DIALOG}" == "0" ]]; then
+    reason="NIKOS_USE_DIALOG=0"
+  elif [[ "${_PROGRESS_LIB_LOADED}" == "true" ]]; then
+    reason="$(nikos_progress_why_not)"
+  else
+    reason="${PROGRESS_LIB} not found"
+  fi
+  reason="${reason:-unknown}"
+  print_info "Plain progress view: ${reason}"
+  _logfile "Plain progress view: ${reason}"
+}
+
+# The gauge needs dialog. Offer to install it, as install.sh's bootstrap does,
+# when a person is there to answer and apt-get exists. Default is no.
+_offer_dialog_install() {
+  local answer=""
+  [[ "${USE_DIALOG}" != "0" ]] || return 0
+  command -v dialog >/dev/null 2>&1 && return 0
+  command -v apt-get >/dev/null 2>&1 || return 0
+  [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null || return 0
+  printf 'dialog is not installed; install it for the progress view? [y/N] ' >/dev/tty
+  read -r answer </dev/tty || answer=""
+  case "${answer}" in
+    y|Y|yes|YES) sudo apt-get install -y dialog || print_warn "Could not install dialog." ;;
+  esac
+  return 0
+}
+
 # ansible's own --ask-become-pass prompt reads /dev/tty, which the gauge is
 # drawing the mixedgauge on at the same moment. Collect the password first and
 # hand it over in a file, as install.sh does. Returns non-zero when it could not
-# be collected, which drops the run back to --ask-become-pass.
+# be collected, which drops the run back to --ask-become-pass; the reason is left
+# in NIKOS_PROGRESS_SKIP_REASON for the plain-view notice.
+#
+# Each answer is checked with `sudo -S -k -v`, fed on stdin (never argv), so a
+# typo is caught here with three tries instead of failing the playbook later.
 _collect_become_password() {
-  local pw=""
+  local pw="" attempt
 
-  [[ -e /dev/tty ]] || return 1
-  printf 'Sudo password for %s: ' "${USER:-$(id -un)}" >/dev/tty 2>/dev/null || return 1
-  read -rs pw </dev/tty || { printf '\n' >/dev/tty; return 1; }
-  printf '\n' >/dev/tty
-  [[ -n "${pw}" ]] || return 1
+  [[ -e /dev/tty ]] || { NIKOS_PROGRESS_SKIP_REASON="no controlling terminal /dev/tty"; return 1; }
+  for attempt in 1 2 3; do
+    printf 'Sudo password for %s: ' "${USER:-$(id -un)}" >/dev/tty 2>/dev/null ||
+      { NIKOS_PROGRESS_SKIP_REASON="no controlling terminal /dev/tty"; return 1; }
+    if ! read -rs pw </dev/tty; then
+      printf '\n' >/dev/tty
+      NIKOS_PROGRESS_SKIP_REASON="empty sudo password"
+      return 1
+    fi
+    printf '\n' >/dev/tty
+    if [[ -z "${pw}" ]]; then
+      NIKOS_PROGRESS_SKIP_REASON="empty sudo password"
+      return 1
+    fi
+    if printf '%s\n' "${pw}" | sudo -S -k -v -p '' >/dev/null 2>&1; then
+      break
+    fi
+    pw=""
+    (( attempt < 3 )) && printf 'Sorry, try again.\n' >/dev/tty
+  done
+  if [[ -z "${pw}" ]]; then
+    NIKOS_PROGRESS_SKIP_REASON="sudo password rejected 3 times"
+    return 1
+  fi
 
   # Each step is checked on its own. The caller reads a non-zero return as
-  # "fall back to --ask-become-pass", and errexit is suspended inside the `&&`
+  # "fall back to --ask-become-pass", and errexit is suspended inside the `if`
   # condition it is called from, so an unchecked failure here would neither
   # abort nor return - it would carry on and hand ansible a --become-password-file
   # that is empty, unwritten or truncated.
@@ -390,11 +445,27 @@ _playbook() {
   playbook_args+=(-e "nikos_distrodeck_tools=$(_get_saved_tools)")
   playbook_args+=("${extra_args[@]}")
 
-  if _can_use_gauge && _collect_become_password; then
-    use_gauge=true
-    playbook_args+=(--become-password-file "${BECOME_PASSWORD_FILE}")
-  else
+  # ask_pass: ansible prompts on the terminal itself, so only that plain run
+  # keeps the tty as stdin. Every other run gets /dev/null: ansible-core aborts
+  # on a non-blocking stdin, which dialog can leave behind.
+  local ask_pass=false
+  NIKOS_PROGRESS_SKIP_REASON=""
+  _offer_dialog_install
+  if _can_use_gauge; then
+    if sudo -n true 2>/dev/null; then
+      # Passwordless sudo: nothing to collect, and no prompt to fall back on.
+      use_gauge=true
+    elif _collect_become_password; then
+      use_gauge=true
+      playbook_args+=(--become-password-file "${BECOME_PASSWORD_FILE}")
+    else
+      NIKOS_PROGRESS_SKIP_REASON="${NIKOS_PROGRESS_SKIP_REASON:-could not store the sudo password}"
+    fi
+  fi
+  if [[ "${use_gauge}" != "true" ]]; then
+    ask_pass=true
     playbook_args+=(--ask-become-pass)
+    _plain_view_notice
   fi
 
   local run_log
@@ -415,8 +486,8 @@ _playbook() {
   if [[ "${use_gauge}" == "true" ]]; then
     declare -F dialog_init >/dev/null 2>&1 && dialog_init
     if ! nikos_progress_plan "${NIKOS_HOME}" "${NIKOS_HOME}/ansible.cfg" "${playbook_args[@]}"; then
-      _logfile "[WARNING] could not enumerate playbook tasks; using the plain progress view"
       use_gauge=false
+      _plain_view_notice
     fi
   fi
 
@@ -432,11 +503,20 @@ _playbook() {
       ansible_rc=0
     fi
     _restore_terminal_cursor
-  else
+  elif [[ "${ask_pass}" == "true" ]]; then
     (
       cd "${NIKOS_HOME}"
       ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
         ansible-playbook "${playbook_args[@]}"
+    ) 2>&1 | tee -a "${run_log}"
+    pipe_status=("${PIPESTATUS[@]}")
+    ansible_rc=${pipe_status[0]}
+    tee_rc=${pipe_status[1]}
+  else
+    (
+      cd "${NIKOS_HOME}"
+      ANSIBLE_CONFIG="${NIKOS_HOME}/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
+        ansible-playbook "${playbook_args[@]}" </dev/null
     ) 2>&1 | tee -a "${run_log}"
     pipe_status=("${PIPESTATUS[@]}")
     ansible_rc=${pipe_status[0]}
