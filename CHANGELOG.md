@@ -21,9 +21,10 @@ All notable changes to NikOS are documented here.
   get `/dev/null` as stdin, since ansible-core refuses a non-blocking tty. Any
   remaining fallback prints `Plain progress view: <reason>` to the terminal and
   the log, and `nikos update` offers to install a missing `dialog`.
-- A distrodeck tool whose need is an opt-in tool (it runs an upstream
-  installer) no longer pulls that tool in silently: the tool is dropped with a
-  note to pick both. The opt-in label now says what opt-in means.
+- A distrodeck tool whose need is an opt-in tool (held out of `--all`: it runs
+  an upstream installer or is a server, IDE or database) no longer pulls that
+  tool in silently. The picker asks `Add <need>? [y/N]`; a no, or no terminal,
+  drops the tool with a note.
 
 ## [0.7.0] — 2026-10-01
 

@@ -93,8 +93,20 @@ nikos_tools_filter() {
 # so podman satisfies it). A 6-column catalog has no such column, and the label
 # is the only hint: "(container)" needs docker, plugin-* needs claude-code.
 # A need is met when chosen, installed, or owned by NikOS. Notes go to stderr.
-# An opt-in need (column 5 == 1: its installer runs an upstream script) is never
-# added on the user's behalf; the tool that needs it is dropped with a note.
+# An opt-in need (column 5 == 1: distrodeck holds it out of --all, because it
+# runs an upstream installer or is a server, IDE or database) is added only when
+# the user says yes on the terminal; otherwise the tool that needs it is dropped.
+#
+# _nikos_tools_confirm_optin <tool> <need> - 0 when the user agrees to add the
+# need. No terminal means no.
+_nikos_tools_confirm_optin() {
+  local answer=""
+  [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null || return 1
+  printf '%s needs %s, an opt-in tool. Add %s? [y/N]: ' "$1" "$2" "$2" >/dev/tty
+  IFS= read -r answer </dev/tty || return 1
+  [[ "${answer}" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
 nikos_tools_with_needs() {
   local tsv="$1" csv="$2" have added=1 rows need tool dropped=","
   have=",${csv},${NIKOS_DISTRODECK_OWNED_TOOLS},$(printf '%s\n' "${tsv}" | awk -F'\t' 'NF >= 6 && $6 == "1" { printf "%s,", $3 }')"
@@ -119,7 +131,8 @@ nikos_tools_with_needs() {
       [[ "${need}" == "docker" && "${have}" == *",podman,"* ]] && continue
       [[ "${need}" == "claude-code" ]] && command -v claude >/dev/null 2>&1 && continue
       printf '%s\n' "${tsv}" | awk -F'\t' -v n="${need}" '$3 == n { f = 1 } END { exit !f }' || continue
-      if printf '%s\n' "${tsv}" | awk -F'\t' -v n="${need}" '$3 == n && $5 == "1" { f = 1 } END { exit !f }'; then
+      if printf '%s\n' "${tsv}" | awk -F'\t' -v n="${need}" '$3 == n && $5 == "1" { f = 1 } END { exit !f }' &&
+        ! _nikos_tools_confirm_optin "${tool}" "${need}"; then
         if [[ "${dropped}" != *",${tool},"* ]]; then
           echo "NOTE: ${tool} needs ${need}, an opt-in tool; pick it too to install ${tool}." >&2
           dropped="${dropped}${tool},"
@@ -185,7 +198,7 @@ nikos_tools_select_plain() {
       $1 == c && index(want, "," $3 ",") { printf "%s%s", sep, $3; sep = " " }')"
     printf '\n%s:\n' "${label}" >/dev/tty
     printf '%s\n' "${tsv}" | awk -F'\t' -v c="${cat}" '$1 == c {
-      printf "  %-18s %s%s%s\n", $3, $4, ($5 == "1" ? " (opt-in: runs upstream installer)" : ""), ($6 == "1" ? " [installed]" : "") }' >/dev/tty
+      printf "  %-18s %s%s%s\n", $3, $4, ($5 == "1" ? " (opt-in)" : ""), ($6 == "1" ? " [installed]" : "") }' >/dev/tty
     while :; do
       printf '  Install [%s]: ' "${pre}" >/dev/tty
       if ! IFS= read -r answer </dev/tty && [[ -z "${answer}" ]]; then
@@ -227,7 +240,7 @@ nikos_tools_select_dialog() {
     [[ -n "${tool}" ]] || continue
     local state=off
     [[ ",${default}," == *",${tool},"* ]] && state=on
-    [[ "${opt_in}" == "1" ]] && label="${label} (opt-in: runs upstream installer)"
+    [[ "${opt_in}" == "1" ]] && label="${label} (opt-in)"
     items+=("${tool}" "[${cat_label}] ${label}" "${state}")
   done <<< "${tsv//$'\t'/$'\037'}"
   n=$(( ${#items[@]} / 3 ))

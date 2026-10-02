@@ -125,7 +125,7 @@ def test_dialog_keeps_columns_aligned_when_a_label_is_empty(tmp_path: Path) -> N
     assert result.returncode == 0, result.stdout
     args = log.read_text(encoding="utf-8").splitlines()
     i = args.index("ollama")
-    assert args[i + 1 : i + 3] == ["[AI tools]  (opt-in: runs upstream installer)", "off"], args
+    assert args[i + 1 : i + 3] == ["[AI tools]  (opt-in)", "off"], args
 
 
 @pytest.mark.parametrize(
@@ -184,7 +184,7 @@ def test_a_tool_brings_what_distrodeck_needs_to_install_it(
     # every later `nikos setup` and `nikos update`.
     tsv = _without(tmp_path, *missing)
     result = subprocess.run(
-        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "{chosen}"'],
+        ["setsid", "-w", "bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "{chosen}"'],
         capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
     )
     assert result.stdout.strip() == expected, result.stderr
@@ -451,7 +451,7 @@ def test_the_needs_column_is_used_when_present(
     tsv = tmp_path / "seven.tsv"
     tsv.write_text(SEVEN.format(podman=podman), encoding="utf-8")
     result = subprocess.run(
-        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "{chosen}"'],
+        ["setsid", "-w", "bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "{chosen}"'],
         capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
     )
     assert result.stdout.strip() == expected, result.stderr
@@ -521,11 +521,12 @@ def test_installer_catalog_clone_brings_the_submodules(tmp_path: Path) -> None:
 
 
 def test_real_catalog_never_adds_an_opt_in_need(tmp_path: Path) -> None:
-    # postgresql is opt-in: its installer runs an upstream script. Picking
-    # pgvector must not install it silently; pgvector is dropped with a note.
+    # postgresql is opt-in (distrodeck holds it out of --all). Picking pgvector
+    # must not install it silently: a "no" (or no terminal) drops pgvector.
     tsv = _without(tmp_path, "postgresql", "docker", "podman")
     result = subprocess.run(
-        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "pgvector,jq,qdrant"'],
+        ["bash", "-c", f'source {LIB}\n_nikos_tools_confirm_optin() {{ return 1; }}\n'
+         f'nikos_tools_with_needs "$(cat {tsv})" "pgvector,jq,qdrant"'],
         capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
     )
     assert result.stdout.strip() == "jq,docker,qdrant", result.stderr
@@ -534,6 +535,28 @@ def test_real_catalog_never_adds_an_opt_in_need(tmp_path: Path) -> None:
         in result.stderr
     ), result.stderr
     assert result.stderr.count("pgvector needs") == 1, result.stderr
+
+
+def test_an_opt_in_need_is_added_when_the_user_says_yes(tmp_path: Path) -> None:
+    tsv = _without(tmp_path, "postgresql", "docker", "podman")
+    result = subprocess.run(
+        ["bash", "-c", f'source {LIB}\n_nikos_tools_confirm_optin() {{ echo "asked $1 $2" >&2; }}\n'
+         f'nikos_tools_with_needs "$(cat {tsv})" "pgvector"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+    )
+    assert result.stdout.strip() == "postgresql,pgvector", result.stderr
+    assert "asked pgvector postgresql" in result.stderr
+
+
+def test_no_terminal_means_no_to_an_opt_in_need(tmp_path: Path) -> None:
+    tsv = _without(tmp_path, "postgresql", "docker", "podman")
+    result = subprocess.run(
+        ["setsid", "-w", "bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "pgvector"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+        stdin=subprocess.DEVNULL,
+    )
+    assert result.stdout.strip() == "", result.stderr
+    assert "an opt-in tool" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -549,7 +572,7 @@ def test_a_six_column_catalog_falls_back_to_the_label(tmp_path: Path, chosen: st
         encoding="utf-8",
     )
     result = subprocess.run(
-        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {six})" "{chosen}"'],
+        ["setsid", "-w", "bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {six})" "{chosen}"'],
         capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
     )
     assert result.stdout.strip() == expected, result.stderr
@@ -567,7 +590,7 @@ def test_a_tool_resting_on_a_dropped_need_is_dropped_too(tmp_path: Path) -> None
         encoding="utf-8",
     )
     result = subprocess.run(
-        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "a,q"'],
+        ["setsid", "-w", "bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "a,q"'],
         capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
     )
     assert result.stdout.strip() == "q", result.stderr
