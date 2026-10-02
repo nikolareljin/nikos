@@ -4,6 +4,8 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-02
+
 ### Added
 - **The first-run wizard supports GitLab, Bitbucket and custom Git servers, and
   can be skipped.** `nikos-git-setup` asks for the host first; Skip writes the
