@@ -171,10 +171,10 @@ def _without(tmp_path: Path, *names: str) -> Path:
         ("qdrant", ("docker", "podman"), "docker,qdrant"),
         ("weaviate,podman", ("docker", "podman"), "podman,weaviate"),
         ("qdrant", ("docker",), "qdrant"),
-        ("plugin-hookify", ("claude-code",), "claude-code,plugin-hookify"),
+        ("plugin-hookify", ("claude-code",), ""),
         ("mongodb,redis", ("docker", "podman"), "mongodb,redis"),
     ],
-    ids=["container-adds-docker", "podman-chosen", "podman-installed", "plugin-adds-claude",
+    ids=["container-adds-docker", "podman-chosen", "podman-installed", "plugin-drops-opt-in-claude",
          "packaged-db-needs-nothing"],
 )
 def test_a_tool_brings_what_distrodeck_needs_to_install_it(
@@ -184,7 +184,7 @@ def test_a_tool_brings_what_distrodeck_needs_to_install_it(
     # every later `nikos setup` and `nikos update`.
     tsv = _without(tmp_path, *missing)
     result = subprocess.run(
-        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "{chosen}"'],
+        ["setsid", "-w", "bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "{chosen}"'],
         capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
     )
     assert result.stdout.strip() == expected, result.stderr
@@ -437,12 +437,13 @@ SEVEN = (
 @pytest.mark.parametrize(
     "chosen,podman,expected",
     [
-        ("pgvector", "0", "postgresql,pgvector"),
+        ("pgvector", "0", ""),
+        ("pgvector,postgresql", "0", "postgresql,pgvector"),
         ("qdrant", "0", "docker,qdrant"),
         ("qdrant", "1", "qdrant"),
         ("labelonly", "0", "labelonly"),
     ],
-    ids=["needs-column", "docker-need", "podman-satisfies-docker", "column-beats-label"],
+    ids=["opt-in-need-drops", "opt-in-need-chosen", "docker-need", "podman-satisfies-docker", "column-beats-label"],
 )
 def test_the_needs_column_is_used_when_present(
     tmp_path: Path, chosen: str, podman: str, expected: str
@@ -450,7 +451,7 @@ def test_the_needs_column_is_used_when_present(
     tsv = tmp_path / "seven.tsv"
     tsv.write_text(SEVEN.format(podman=podman), encoding="utf-8")
     result = subprocess.run(
-        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "{chosen}"'],
+        ["setsid", "-w", "bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "{chosen}"'],
         capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
     )
     assert result.stdout.strip() == expected, result.stderr
@@ -519,13 +520,43 @@ def test_installer_catalog_clone_brings_the_submodules(tmp_path: Path) -> None:
     assert (stale / "scripts" / "script-helpers" / "helpers.sh").exists()
 
 
-def test_real_catalog_needs_column_pulls_in_postgresql(tmp_path: Path) -> None:
-    tsv = _without(tmp_path, "postgresql")
+def test_real_catalog_never_adds_an_opt_in_need(tmp_path: Path) -> None:
+    # postgresql is opt-in (distrodeck holds it out of --all). Picking pgvector
+    # must not install it silently: a "no" (or no terminal) drops pgvector.
+    tsv = _without(tmp_path, "postgresql", "docker", "podman")
     result = subprocess.run(
-        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "pgvector"'],
+        ["bash", "-c", f'source {LIB}\n_nikos_tools_confirm_optin() {{ return 1; }}\n'
+         f'nikos_tools_with_needs "$(cat {tsv})" "pgvector,jq,qdrant"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+    )
+    assert result.stdout.strip() == "jq,docker,qdrant", result.stderr
+    assert (
+        "NOTE: pgvector needs postgresql, an opt-in tool; pick it too to install pgvector."
+        in result.stderr
+    ), result.stderr
+    assert result.stderr.count("pgvector needs") == 1, result.stderr
+
+
+def test_an_opt_in_need_is_added_when_the_user_says_yes(tmp_path: Path) -> None:
+    tsv = _without(tmp_path, "postgresql", "docker", "podman")
+    result = subprocess.run(
+        ["bash", "-c", f'source {LIB}\n_nikos_tools_confirm_optin() {{ echo "asked $1 $2" >&2; }}\n'
+         f'nikos_tools_with_needs "$(cat {tsv})" "pgvector"'],
         capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
     )
     assert result.stdout.strip() == "postgresql,pgvector", result.stderr
+    assert "asked pgvector postgresql" in result.stderr
+
+
+def test_no_terminal_means_no_to_an_opt_in_need(tmp_path: Path) -> None:
+    tsv = _without(tmp_path, "postgresql", "docker", "podman")
+    result = subprocess.run(
+        ["setsid", "-w", "bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "pgvector"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+        stdin=subprocess.DEVNULL,
+    )
+    assert result.stdout.strip() == "", result.stderr
+    assert "an opt-in tool" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -541,7 +572,47 @@ def test_a_six_column_catalog_falls_back_to_the_label(tmp_path: Path, chosen: st
         encoding="utf-8",
     )
     result = subprocess.run(
-        ["bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {six})" "{chosen}"'],
+        ["setsid", "-w", "bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {six})" "{chosen}"'],
         capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
     )
     assert result.stdout.strip() == expected, result.stderr
+
+
+def test_a_tool_resting_on_a_dropped_need_is_dropped_too(tmp_path: Path) -> None:
+    # a needs b (added for it), b needs z, which is opt-in: b is dropped, and a
+    # must not reach distrodeck without b.
+    tsv = tmp_path / "chain.tsv"
+    tsv.write_text(
+        "c\tC\ta\tA\t0\t0\tb\n"
+        "c\tC\tb\tB\t0\t0\tz\n"
+        "c\tC\tz\tZ\t1\t0\t-\n"
+        "c\tC\tq\tQ\t0\t0\t-\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["setsid", "-w", "bash", "-c", f'source {LIB}\nnikos_tools_with_needs "$(cat {tsv})" "a,q"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+    )
+    assert result.stdout.strip() == "q", result.stderr
+    assert "b needs z, an opt-in tool" in result.stderr
+
+
+@pytest.mark.parametrize("answer,expected", [("1", ""), ("0", "claude-code,plugin-a,plugin-b")],
+                         ids=["no", "yes"])
+def test_an_opt_in_need_is_asked_once(tmp_path: Path, answer: str, expected: str) -> None:
+    # The resolver loops until nothing changes and two plugins share one need;
+    # a "no" was asked four times for the same claude-code.
+    tsv = tmp_path / "cat.tsv"
+    tsv.write_text(
+        "ai\tAI\tclaude-code\tClaude Code\t1\t0\t-\n"
+        "ai\tAI\tplugin-a\tPlugin A\t0\t0\tclaude-code\n"
+        "ai\tAI\tplugin-b\tPlugin B\t0\t0\tclaude-code\n"
+    )
+    result = subprocess.run(
+        ["setsid", "-w", "bash", "-c",
+         f'source {LIB}\n_nikos_tools_confirm_optin() {{ echo ASKED >&2; return {answer}; }}\n'
+         f'nikos_tools_with_needs "$(cat {tsv})" "plugin-a,plugin-b"'],
+        capture_output=True, text=True, timeout=30, env={"PATH": "/usr/bin:/bin"},
+    )
+    assert result.stdout.strip() == expected, result.stderr
+    assert result.stderr.count("ASKED") == 1, result.stderr

@@ -13,6 +13,8 @@
 #       true when mixedgauge rendering can run
 #   nikos_progress_plan <workdir> <ansible_cfg> <play_opts...>
 #       pre-count tasks and roles for a run
+#   nikos_progress_why_not
+#       one-line reason the gauge is not used, for the plain-view notice
 #   nikos_progress_run <title> <log> <workdir> <ansible_cfg> <play_opts...>
 #       run ansible-playbook behind the gauge
 #   nikos_progress_stream <title> <log>
@@ -52,6 +54,13 @@ readonly NIKOS_PROGRESS_EX_IOERR=74
 # a failed playbook. Reset at the start of each run.
 NIKOS_PROGRESS_LOG_RC=0
 
+# Set by nikos_progress_plan when --list-tasks fails: PLAN_FAILED=1 and the first
+# error line ansible printed, so the fallback can say why instead of guessing.
+NIKOS_PROGRESS_PLAN_FAILED=0
+NIKOS_PROGRESS_PLAN_ERR=""
+# Set by a caller that dropped the gauge for its own reason (no sudo password).
+NIKOS_PROGRESS_SKIP_REASON=""
+
 _nikos_progress_tty() {
   [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null
 }
@@ -87,15 +96,29 @@ nikos_progress_plan() {
   NIKOS_PROGRESS_ROLES=()
   NIKOS_PROGRESS_TOTAL=0
   NIKOS_PROGRESS_STATUS=()
+  NIKOS_PROGRESS_PLAN_FAILED=0
+  NIKOS_PROGRESS_PLAN_ERR=""
 
-  local listing
+  # stdin is /dev/null, not the terminal: ansible-core aborts with "Ansible
+  # requires blocking IO on stdin/stdout/stderr" when an inherited fd is
+  # non-blocking, and dialog can leave the tty that way.
+  local listing err_file
+  err_file="$(mktemp "${TMPDIR:-/tmp}/nikos-plan-err.XXXXXX")" || err_file=/dev/null
   if ! listing=$(
     cd "${workdir}" 2>/dev/null &&
       ANSIBLE_CONFIG="${ansible_cfg}" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
-      ansible-playbook --list-tasks "$@" 2>/dev/null
+      ansible-playbook --list-tasks "$@" </dev/null 2>"${err_file}"
   ); then
-    return 1
+    NIKOS_PROGRESS_PLAN_FAILED=1
+    if [[ "${err_file}" != /dev/null ]]; then
+      # Prefer ansible's own ERROR line; deprecation warnings run over several
+      # lines and would otherwise be what the user is shown.
+      NIKOS_PROGRESS_PLAN_ERR="$(grep -m1 '^ERROR' "${err_file}" ||
+        grep -v -i 'deprecat' "${err_file}" | grep -m1 -v '^[[:space:]]*$' || true)"
+    fi
   fi
+  [[ "${err_file}" == /dev/null ]] || rm -f -- "${err_file}"
+  (( NIKOS_PROGRESS_PLAN_FAILED == 0 )) || return 1
 
   local line entry role
   while IFS= read -r line; do
@@ -118,7 +141,28 @@ nikos_progress_plan() {
     NIKOS_PROGRESS_TOTAL=$((NIKOS_PROGRESS_TOTAL + 1))
   done <<<"${listing}"
 
-  [[ "${NIKOS_PROGRESS_TOTAL}" -gt 0 ]]
+  if (( NIKOS_PROGRESS_TOTAL == 0 )); then
+    NIKOS_PROGRESS_PLAN_FAILED=1
+    NIKOS_PROGRESS_PLAN_ERR="no tasks listed"
+    return 1
+  fi
+}
+
+# nikos_progress_why_not
+# Prints why the gauge is not drawn, as one line for "Plain progress view: ...".
+# Checks in the order the callers do; empty when nothing explains it.
+nikos_progress_why_not() {
+  if [[ "${USE_DIALOG:-${NIKOS_USE_DIALOG:-1}}" == "0" ]]; then
+    echo "NIKOS_USE_DIALOG=0"
+  elif ! command -v dialog >/dev/null 2>&1; then
+    echo "dialog not installed"
+  elif ! _nikos_progress_tty; then
+    echo "no controlling terminal /dev/tty"
+  elif [[ -n "${NIKOS_PROGRESS_SKIP_REASON:-}" ]]; then
+    echo "${NIKOS_PROGRESS_SKIP_REASON}"
+  elif [[ "${NIKOS_PROGRESS_PLAN_FAILED:-0}" == "1" ]]; then
+    echo "task listing failed: ${NIKOS_PROGRESS_PLAN_ERR:-unknown error}"
+  fi
 }
 
 # Choose the window of roles to display so the gauge fits the terminal.
@@ -299,7 +343,7 @@ nikos_progress_run() {
       exit 127
     fi
     ANSIBLE_CONFIG="${ansible_cfg}" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
-      PYTHONUNBUFFERED=1 ansible-playbook "$@" 2>&1
+      PYTHONUNBUFFERED=1 ansible-playbook "$@" </dev/null 2>&1
     printf '%s\n' "$?" >"${rc_file}"
   } | nikos_progress_strip_ansi | nikos_progress_filter "${title}" "${log}"
   pipe_status=("${PIPESTATUS[@]}")
