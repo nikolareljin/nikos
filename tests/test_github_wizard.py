@@ -420,3 +420,30 @@ def test_verify_ssh_does_not_read_the_terminal(monkeypatch):
     monkeypatch.setattr(wizard.subprocess, "run", fake)
     assert wizard.verify_ssh("git", "github.com", 22) is True
     assert seen["stdin"] is wizard.subprocess.DEVNULL
+
+
+def test_role_removes_every_duplicated_old_hook():
+    # The old lineinfile never matched its own multi-line text, so each run
+    # appended a copy; a real .bashrc had 25 of them.
+    old = (
+        '# NikOS first-run wizard (runs once on first login)\n'
+        'if [[ ! -f "${HOME}/.config/nikos/github-configured" ]]; then\n'
+        '  /usr/local/bin/nikos-github-wizard\n'
+        'fi\n'
+        '\n'
+    )
+    import re
+    rep = [t for t in _tasks() if "ansible.builtin.replace" in t]
+    pattern = rep[0]["ansible.builtin.replace"]["regexp"]
+    assert re.sub(pattern, "", "a\n" + old * 25 + "b\n") == "a\nb\n"
+
+
+def test_self_hosted_gitlab_uses_its_ssh_port(monkeypatch):
+    answers = iter(["git.example.com", "2222"])
+    monkeypatch.setattr(wizard, "ask", lambda _m: next(answers))
+    monkeypatch.setattr(wizard, "ask_secret", lambda _m: TOKEN)
+    monkeypatch.setattr(wizard, "gitlab_add_key", lambda *a: "added")
+    seen = []
+    monkeypatch.setattr(wizard, "verify_ssh", lambda u, h, p: seen.append((u, h, p)) or True)
+    assert wizard.setup_gitlab("ssh-ed25519 K") == ("git.example.com", 2222, "git")
+    assert seen == [("git", "git.example.com", 2222)]

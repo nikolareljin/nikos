@@ -55,12 +55,12 @@
     state: link
   become: true
 
-# Earlier releases added the hook as a multi-line lineinfile entry. Remove that text so an
-# upgrade does not leave it next to the managed block below.
+# Earlier releases added the hook as a multi-line lineinfile entry, which never matched
+# itself, so every run appended another copy (25 on one machine). Remove all of them.
 - name: Remove the old lineinfile wizard hook from .bashrc
   ansible.builtin.replace:
     path: "{{ nikos_home }}/.bashrc"
-    regexp: '# NikOS first-run wizard \(runs once on first login\)\nif .*github-configured.*\n +/usr/local/bin/nikos-github-wizard\nfi\n'
+    regexp: '# NikOS first-run wizard \(runs once on first login\)\nif .*github-configured.*\n +/usr/local/bin/nikos-github-wizard\nfi\n\n?'
     replace: ""
   failed_when: false
 

@@ -334,9 +334,16 @@ def setup_gitlab(pubkey: str) -> tuple[str, int, str]:
     url = f"{_api_base(host, api_port)}/-/user_settings/ssh_keys"
     ok = _report(gitlab_add_key(host, api_port, token, pubkey) if token else "error", pubkey, url)
     del token
+    ssh_port = 22
+    if host != "gitlab.com":
+        raw = ask("  SSH port of this GitLab [22]: ") or "22"
+        if raw.isdigit() and 0 < int(raw) < 65536:
+            ssh_port = int(raw)
+        else:
+            print(f"  [!] Not a port: {raw!r}; using 22.")
     if ok:
-        verify_ssh("git", host, 22)
-    return host, 22, "git"
+        verify_ssh("git", host, ssh_port)
+    return host, ssh_port, "git"
 
 
 def setup_bitbucket(pubkey: str) -> tuple[str, int, str]:
