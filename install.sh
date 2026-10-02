@@ -489,6 +489,15 @@ _install_summary() {
   local rc="${1:-0}"
 
   _strip_ansi_from_log
+  # Failed tasks, warnings and the environment at the end of the log, where a
+  # reader starts; see nikos_log_digest in scripts/nikos-progress.sh.
+  if declare -F nikos_log_digest >/dev/null; then
+    # Read fully first: appending while the digest still reads the same file
+    # could feed it its own output.
+    local _digest
+    _digest="$(nikos_log_digest "${INSTALL_LOG}" "${NIKOS_HOME}" 2>/dev/null)" || true
+    [[ -z "${_digest}" ]] || printf '%s\n' "${_digest}" >>"${INSTALL_LOG}"
+  fi
 
   local ok changed failed unreachable
   ok=$(_recap_total ok "${INSTALL_LOG}")
@@ -1197,13 +1206,14 @@ _select_ai_tools_dialog() {
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — AI Tools" \
       --checklist "Space to toggle, Enter to confirm:" \
-      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 6 \
+      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 7 \
       "ai-local"        "Ollama, Miniforge, nikos-ai env, aider, agent SDKs" on \
       "ai-gemini"       "Gemini CLI"                                           on \
       "ai-claude"       "Claude Code CLI"                                      on \
       "ai-copilot-cli"  "GitHub Copilot CLI extension"                         on \
       "ai-runner"       "ai-runner local model UI"                             on \
-      "ai-vscode"       "AI VS Code extensions (Continue, Copilot)"            on 0</dev/tty
+      "ai-vscode"       "AI VS Code extensions (Continue, Copilot)"            on \
+      "jev"             "Jev client (official TypeSafe SDK, your own API key)" off 0</dev/tty
   ); then
     echo "${result}"
     return 0
@@ -1335,7 +1345,7 @@ _select_bundles_plain() {
 # gets the same fix -- it must not be assumed correct by inspection.
 _select_ai_tools_plain() {
   local opt_ai_local="" opt_ai_gemini="" opt_ai_claude="" \
-    opt_ai_copilot_cli="" opt_ai_runner="" opt_ai_vscode=""
+    opt_ai_copilot_cli="" opt_ai_runner="" opt_ai_vscode="" opt_jev=""
 
   SELECTED_AI_TOOLS=()
   _say_tty "AI tools (press Enter to accept the default Yes):"
@@ -1345,12 +1355,14 @@ _select_ai_tools_plain() {
   _ask_tty opt_ai_copilot_cli "  Install GitHub Copilot CLI extension? [Y/n] "
   _ask_tty opt_ai_runner "  Install ai-runner local model UI? [Y/n] "
   _ask_tty opt_ai_vscode "  Install AI VS Code extensions (Continue, Copilot)? [Y/n] "
+  _ask_tty opt_jev "  Install the Jev client (official TypeSafe SDK; needs your own API key)? [y/N] "
   [[ -z "${opt_ai_local}" || "${opt_ai_local,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-local")
   [[ -z "${opt_ai_gemini}" || "${opt_ai_gemini,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-gemini")
   [[ -z "${opt_ai_claude}" || "${opt_ai_claude,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-claude")
   [[ -z "${opt_ai_copilot_cli}" || "${opt_ai_copilot_cli,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-copilot-cli")
   [[ -z "${opt_ai_runner}" || "${opt_ai_runner,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-runner")
   [[ -z "${opt_ai_vscode}" || "${opt_ai_vscode,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-vscode")
+  [[ "${opt_jev,,}" == "y" ]] && SELECTED_AI_TOOLS+=("jev")
   return 0
 }
 
@@ -1478,6 +1490,12 @@ _build_tag_args() {
       SKIP_TAGS="${SKIP_TAGS},${_tool}"
     fi
   done
+
+  # Jev is listed with the AI tools but is opt-in like a bundle: tagged
+  # `never`, so a machine that never picked it never gets it on update.
+  if printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -qx jev; then
+    EXPLICIT_OPTIONAL_TAGS="${EXPLICIT_OPTIONAL_TAGS},jev"
+  fi
 
   if ! printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -Eqx 'ai-gemini|ai-claude'; then
     SKIP_TAGS="${SKIP_TAGS},ai-node"

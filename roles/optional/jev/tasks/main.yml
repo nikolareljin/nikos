@@ -1,0 +1,62 @@
+---
+# Jev (TypeSafe System One) client: the official SDK, typesafe-sdk, in its own
+# venv, plus a small `jev` command. Only the official package is installed:
+# files/requirements.lock pins it and every dependency to a version and a
+# sha256, and pip refuses anything else (--require-hashes). The typesafe-sdk
+# hashes are the files PyPI attests were published by
+# github.com/typesafe-ai/typesafe-sdk-python. Regenerate the lock with:
+#   uv pip compile requirements.in --generate-hashes --python-version 3.12 \
+#     --python-platform x86_64-unknown-linux-gnu --no-header -o requirements.lock
+# The API key is the user's (free with a TypeSafe account): `jev login` asks for
+# it at run time. NikOS never ships or stores one.
+- name: Create the Jev venv
+  ansible.builtin.command:
+    argv: [python3, -m, venv, "{{ jev_venv }}"]
+    creates: "{{ jev_venv }}/bin/python"
+
+- name: Copy the hash-pinned Jev lock file
+  ansible.builtin.copy:
+    src: requirements.lock
+    dest: "{{ jev_venv }}/requirements.lock"
+    mode: "0644"
+
+- name: Install the official TypeSafe SDK from the lock
+  ansible.builtin.command:
+    argv:
+      - "{{ jev_venv }}/bin/pip"
+      - install
+      - --disable-pip-version-check
+      - --require-hashes
+      - "--only-binary=:all:"
+      - --no-deps
+      - -r
+      - "{{ jev_venv }}/requirements.lock"
+  # Runs every time, not only when the lock changed: a failed first install
+  # would otherwise never be retried. With every hash pinned it is a no-op.
+  register: jev_pip
+  changed_when: "'Successfully installed' in jev_pip.stdout"
+  when: not ansible_check_mode
+
+- name: Copy the jev command
+  ansible.builtin.copy:
+    src: jev.py
+    dest: "{{ jev_venv }}/jev.py"
+    mode: "0644"
+
+- name: Create the user bin directory
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.local/bin"
+    state: directory
+    mode: "0755"
+
+- name: Install the jev launcher
+  ansible.builtin.copy:
+    dest: "{{ nikos_home }}/.local/bin/jev"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      exec "{{ jev_venv }}/bin/python" "{{ jev_venv }}/jev.py" "$@"
+
+- name: Say how to add the API key
+  ansible.builtin.debug:
+    msg: "Jev installed. Run `jev login` once with your TypeSafe API key, then e.g. `jev choose \"text\" yes no`."

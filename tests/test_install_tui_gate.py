@@ -186,7 +186,8 @@ def test_gate_fails_when_dialog_is_absent(tmp_path):
 # the AI-tool prompts. Only BitNet is wanted, and only Claude Code is declined.
 BUNDLE_ANSWERS = ["n"] * 20
 BUNDLE_ANSWERS[9] = "y"  # "Install BitNet.cpp?"
-AI_ANSWERS = ["", "", "n", "", "", ""]  # Claude Code declined, rest defaulted
+# Claude Code declined, Jev (default No) picked, rest defaulted.
+AI_ANSWERS = ["", "", "n", "", "", "", "y"]
 
 SELECTION_BODY = """
     _safe_logfile() { :; }
@@ -226,7 +227,9 @@ def test_plain_selection_round_trips_the_answers(tmp_path):
     )
 
     assert field(out, "BUNDLES") == "bitnet"
-    assert field(out, "EXPLICIT") == "bitnet"
+    # Jev is offered with the AI tools but is opt-in like a bundle: a `never`
+    # tag that runs only when picked, never a skip tag an old machine lacks.
+    assert field(out, "EXPLICIT") == "bitnet,jev"
 
     ai = field(out, "AI").split()
     assert "ai-claude" not in ai
@@ -237,6 +240,13 @@ def test_plain_selection_round_trips_the_answers(tmp_path):
     # The bundles nobody asked for are skipped; the one that was asked for is not.
     assert {"network", "music", "education"} <= set(skip), skip
     assert "bitnet" not in skip, skip
+    assert "jev" not in skip, skip
+
+
+def test_jev_defaults_to_no_in_the_plain_picker():
+    text = INSTALL_SH.read_text(encoding="utf-8")
+    assert '[[ "${opt_jev,,}" == "y" ]] && SELECTED_AI_TOOLS+=("jev")' in text
+    assert '"jev"             "Jev client (official TypeSafe SDK, your own API key)" off' in text
 
 
 TIMEZONE_HELPERS = ("_say_tty", "_ask_tty", "_select_timezone_plain")

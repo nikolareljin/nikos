@@ -283,7 +283,7 @@ Usage:
   nikos update           Move to the newest release, then re-run playbook (idempotent)
   nikos update --ref <r> Update to a specific branch or tag instead
   nikos add tools        Choose distrodeck tools by category and install them
-  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw
+  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw
   nikos status           Show NikOS version, Ollama models, installed roles
   nikos doctor           Check for broken configs and missing dependencies
   nikos log [N]          Show last N lines of the latest playbook log (default 50)
@@ -337,7 +337,7 @@ _save_skip_tags() {
 _migrate_saved_optional_tags() {
   local skip_tags optional_tags="" tag
   local -a optional_role_tags=(
-    neovim java bun redis postgres mongodb qdrant k8s-tools podman zsh act fabric
+    neovim java bun redis postgres mongodb qdrant k8s-tools podman zsh act fabric jev
     bitnet mistral-rs monitoring openclaw ollama-models ollama-reasoning
     ollama-coding ollama-text ollama-vision ollama-embedding
   )
@@ -545,6 +545,15 @@ _playbook() {
   fi
 
   _logfile "--- ansible-playbook output end ---"
+  # Failed tasks, warnings and the environment at the end of the run log; see
+  # nikos_log_digest in scripts/nikos-progress.sh.
+  if declare -F nikos_log_digest >/dev/null; then
+    # Read fully first: appending while the digest still reads the same file
+    # could feed it its own output.
+    local digest
+    digest="$(nikos_log_digest "${run_log}" "${NIKOS_HOME}" 2>/dev/null)" || true
+    [[ -z "${digest}" ]] || printf '%s\n' "${digest}" >>"${run_log}"
+  fi
   _playbook_summary "${run_log}" "${_rc}"
 
   return "${_rc}"
@@ -688,7 +697,7 @@ cmd_add() {
       bin="$(_distrodeck_bin)" || { print_error "distrodeck not found. Run 'nikos setup' first."; exit 1; }
       "${bin}" install-tools --tools "${tools}"
       ;;
-    network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
+    network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
       # site.yml skips the desktop layer on a server, so this would report
       # success and install nothing.
       if [[ "${role}" == "music" || "${role}" == "education" ]] &&
@@ -699,7 +708,7 @@ cmd_add() {
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
       case "${role}" in
-        neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
+        neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
           _add_optional_tag "${role}"
           ;;
       esac
@@ -707,7 +716,7 @@ cmd_add() {
       ;;
     *)
       print_error "Unknown optional role: ${role}"
-      echo "Available: network, music, education, neovim, java, bun, redis, postgres, mongodb, qdrant, k8s-tools, podman, zsh, act, fabric, bitnet, mistral-rs, monitoring, ollama-models, ollama-reasoning, ollama-coding, ollama-text, ollama-vision, ollama-embedding, openclaw"
+      echo "Available: network, music, education, neovim, java, bun, redis, postgres, mongodb, qdrant, k8s-tools, podman, zsh, act, fabric, jev, bitnet, mistral-rs, monitoring, ollama-models, ollama-reasoning, ollama-coding, ollama-text, ollama-vision, ollama-embedding, openclaw"
       exit 1
       ;;
   esac

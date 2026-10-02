@@ -13,7 +13,36 @@ All notable changes to NikOS are documented here.
   never matched itself, so each run appended another copy to `~/.bashrc` (25
   on one machine); every copy is removed and replaced by one managed block.
 
+- **Jev client (`nikos add jev`, or Jev in the installer's AI Tools list, off by
+  default).** Installs the official TypeSafe SDK, `typesafe-sdk` 0.7.2, in its own
+  venv from a lock that pins it and every dependency by sha256
+  (`pip --require-hashes`); its PyPI files are attested as published from
+  `github.com/typesafe-ai/typesafe-sdk-python`. Adds a `jev` command
+  (`jev login`, `jev choose`, `jev score`); the API key is yours, read with
+  getpass and kept in `~/.config/typesafe/api_key` at mode 600.
+- **Dark browsers in the desktop colour.** Firefox gets the built-in Dark theme
+  and a `userChrome.css` that paints the whole window #2E3440; Chromium and
+  Google Chrome get a dark theme seeded with the same colour. Off with
+  `nikos_firefox_dark: false` / `nikos_chromium_dark: false`.
+- **A digest at the end of every install and update log**: NikOS ref, OS,
+  kernel, Ansible and Python versions, free disk, each failed task with its
+  message, and each distinct warning and error with a count. A failed task
+  also prints its file and line (`show_task_path_on_failure`).
+
 ### Fixed
+- **Firefox no longer loses its uniform dark background after an update.** A
+  third-party static theme colours only the surfaces that existed when it was
+  made; the built-in Dark theme plus NikOS CSS covers the current ones.
+- **GRUB gets a theme.** NikOS looked for one in the Nordic GTK repository,
+  which has none, so every install printed "Nordic GRUB theme was not found"
+  and kept the default menu. NikOS now ships its own (`roles/theming/files/grub`)
+  and no longer clones that repository on every run.
+- The Nordic GTK download is checked against a pinned sha256.
+- No more "`~/.config/xfce4/panel` is not a directory" warning when the panel
+  has never saved settings.
+- The Plymouth note says the `default.plymouth` alternative is Ubuntu's normal
+  way to set the theme (Ubuntu ships no `plymouth-set-default-theme`), instead
+  of reading like a fallback.
 - **The install and update gauge no longer drops to raw `TASK [...]` output
   without a word.** Passwordless sudo now goes straight to the gauge instead of
   falling to `--ask-become-pass` on an empty answer; the sudo password is
