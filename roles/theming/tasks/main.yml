@@ -585,17 +585,31 @@
 # user's own user.js / userChrome.css lines are kept. Applies to profiles that
 # exist; a profile created later gets it on the next `nikos update`.
 # Set nikos_firefox_dark: false in vars/local.yml to leave Firefox alone.
-- name: Find Firefox profiles (snap and deb)
+# find warns about every path that does not exist, and a machine has one of
+# these at most two, so only the ones present are searched.
+- name: Check where Firefox keeps profiles (snap, deb and XDG)
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ nikos_home }}/snap/firefox/common/.mozilla/firefox"
+    - "{{ nikos_home }}/.mozilla/firefox"
+    # Newer Firefox keeps profiles under the XDG config directory.
+    - "{{ nikos_home }}/.config/mozilla/firefox"
+  register: theming_firefox_roots
+  become: false
+
+- name: Find Firefox profiles
   ansible.builtin.find:
-    paths:
-      - "{{ nikos_home }}/snap/firefox/common/.mozilla/firefox"
-      - "{{ nikos_home }}/.mozilla/firefox"
+    paths: >-
+      {{ theming_firefox_roots.results | selectattr('stat.isdir', 'defined')
+         | selectattr('stat.isdir') | map(attribute='item') | list }}
     patterns: prefs.js
     recurse: true
     depth: 2
     file_type: file
   register: theming_firefox_prefs
   become: false
+  when: theming_firefox_roots.results | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir') | list | length > 0
 
 - name: Select the built-in Dark theme and enable userChrome.css
   ansible.builtin.blockinfile:
