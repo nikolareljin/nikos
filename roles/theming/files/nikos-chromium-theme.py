@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -76,8 +77,13 @@ def apply(prefs_path: Path) -> str:
         return "ok"
     theme.update(THEME)
     ext_theme["system_theme"] = 0  # Classic, not GTK
+    # Keep Chromium's mode (0600): a temp file made with the default umask
+    # would leave the profile's Preferences readable by other users.
     tmp = prefs_path.with_suffix(".nikos-tmp")
-    tmp.write_text(json.dumps(data, separators=(",", ":")))
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, stat.S_IMODE(prefs_path.stat().st_mode))
+    with os.fdopen(fd, "w") as fh:
+        fh.write(json.dumps(data, separators=(",", ":")))
     os.replace(tmp, prefs_path)
     return "changed"
 

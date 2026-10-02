@@ -41,10 +41,12 @@ def write_key(key: str) -> None:
     KEY_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     # Create at 600 before writing: a umask-default file would hold the key
     # readable by others for a moment.
+    # O_CREAT's mode applies only to a new file: tighten an existing one on
+    # the open descriptor before anything is written to it.
     fd = os.open(KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)
     with os.fdopen(fd, "w") as fh:
         fh.write(key + "\n")
-    os.chmod(KEY_FILE, 0o600)
 
 
 def cmd_login(_args: argparse.Namespace) -> int:
@@ -103,6 +105,8 @@ def cmd_choose(args: argparse.Namespace) -> int:
 
     if len(args.labels) < 2:
         raise SystemExit("jev: choose needs at least two labels.")
+    if len(set(args.labels)) != len(args.labels):
+        raise SystemExit("jev: each label must be different.")
     answer = _ask(
         {"answer": Choice(instructions=args.question, criteria={label: None for label in args.labels})}, args
     ).choices["answer"]

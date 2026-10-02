@@ -5,8 +5,10 @@
 # sha256, and pip refuses anything else (--require-hashes). The typesafe-sdk
 # hashes are the files PyPI attests were published by
 # github.com/typesafe-ai/typesafe-sdk-python. Regenerate the lock with:
-#   uv pip compile requirements.in --generate-hashes --python-version 3.12 \
-#     --python-platform x86_64-unknown-linux-gnu --no-header -o requirements.lock
+#   uv pip compile requirements.in --generate-hashes --universal \
+#     --python-version 3.10 --no-header -o requirements.lock
+# --universal records environment markers (exceptiongroup only below 3.11), so
+# the one lock is right for every Python and platform pip may meet.
 # The API key is the user's (free with a TypeSafe account): `jev login` asks for
 # it at run time. NikOS never ships or stores one.
 - name: Create the Jev venv

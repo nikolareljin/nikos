@@ -120,3 +120,12 @@ def test_chromium_unreadable_prefs_are_left_alone(tmp_path, capsys):
     chromium.main(tmp_path)
     assert "skipped: unreadable" in capsys.readouterr().out
     assert prefs.read_text() == "{not json"
+
+
+def test_chromium_preferences_keep_their_mode(tmp_path):
+    # Chromium writes Preferences 0600; a temp file made with the umask left it
+    # 0664, readable by other users.
+    prefs = _profile(tmp_path, ".config/chromium")
+    prefs.chmod(0o600)
+    chromium.main(tmp_path)
+    assert prefs.stat().st_mode & 0o777 == 0o600

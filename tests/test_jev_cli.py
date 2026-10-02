@@ -152,3 +152,28 @@ def test_role_installs_with_require_hashes():
     assert len(pip) == 1
     argv = pip[0]["ansible.builtin.command"]["argv"]
     assert "--require-hashes" in argv and "--only-binary=:all:" in argv
+
+
+def test_an_existing_world_readable_key_file_is_tightened_before_writing(key_file, monkeypatch):
+    key_file.parent.mkdir(parents=True)
+    key_file.write_text("old\n")
+    key_file.chmod(0o644)
+    modes = []
+    real_fdopen = jev.os.fdopen
+
+    def spy(fd, *a, **kw):
+        modes.append(stat.S_IMODE(jev.os.fstat(fd).st_mode))
+        return real_fdopen(fd, *a, **kw)
+    monkeypatch.setattr(jev.os, "fdopen", spy)
+    jev.write_key(KEY)
+    assert modes == [0o600]
+    assert key_file.read_text() == KEY + "\n"
+
+
+def test_choose_refuses_duplicate_labels(monkeypatch):
+    jev.write_key(KEY)
+    _fake_sdk(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        jev.main(["choose", "t", "yes", "yes"])
+    assert "different" in str(exc.value)
+
