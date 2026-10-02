@@ -588,3 +588,10 @@ def test_custom_host_port_becomes_the_default(home, monkeypatch):
     answers = iter(["git.example.com:2222", "", "", ""])
     monkeypatch.setattr(wizard, "ask", lambda _m: next(answers))
     assert wizard.setup_custom("ssh-ed25519 K") == ("git.example.com", 2222, "git")
+
+
+def test_wizard_link_survives_check_mode():
+    # CI runs the playbook with --check, where the copy that creates the
+    # target has not run; without force the link task fails on a fresh host.
+    link = [t for t in _tasks() if t.get("ansible.builtin.file", {}).get("state") == "link"]
+    assert link and all(t["ansible.builtin.file"].get("force") is True for t in link)
