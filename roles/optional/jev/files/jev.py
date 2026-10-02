@@ -55,6 +55,7 @@ def cmd_login(_args: argparse.Namespace) -> int:
         key = getpass.getpass("TypeSafe API key (input hidden): ").strip()
     except (EOFError, KeyboardInterrupt):
         print()
+        print("jev: cancelled, nothing saved.", file=sys.stderr)
         return 130
     if not key:
         print("jev: no key entered, nothing saved.", file=sys.stderr)

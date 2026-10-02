@@ -177,3 +177,12 @@ def test_choose_refuses_duplicate_labels(monkeypatch):
         jev.main(["choose", "t", "yes", "yes"])
     assert "different" in str(exc.value)
 
+
+
+def test_login_cancelled_says_so_and_saves_nothing(key_file, monkeypatch, capsys):
+    def eof(_p):
+        raise EOFError
+    monkeypatch.setattr(jev.getpass, "getpass", eof)
+    assert jev.main(["login"]) == 130
+    assert "cancelled, nothing saved" in capsys.readouterr().err
+    assert not key_file.exists()

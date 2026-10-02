@@ -685,7 +685,7 @@
 
 - name: Report Chromium profiles that were skipped
   ansible.builtin.debug:
-    msg: "{{ theming_chromium_theme.stdout_lines | select('search', 'skipped') | list }}"
+    msg: "{{ theming_chromium_theme.stdout_lines | select('regex', 'skipped') | list }}"
   when:
     - nikos_chromium_dark | bool
     - not ansible_check_mode
