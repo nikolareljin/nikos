@@ -408,3 +408,15 @@ def test_flag_present_tells_user_how_to_rerun(home, monkeypatch, capsys):
     wizard.write_flag()
     assert run_main() == 0
     assert "--reset" in capsys.readouterr().out
+
+
+def test_verify_ssh_does_not_read_the_terminal(monkeypatch):
+    seen = {}
+
+    def fake(cmd, **kw):
+        seen.update(kw)
+        return MagicMock(returncode=1, stdout="", stderr="Hi nik! You've successfully authenticated")
+
+    monkeypatch.setattr(wizard.subprocess, "run", fake)
+    assert wizard.verify_ssh("git", "github.com", 22) is True
+    assert seen["stdin"] is wizard.subprocess.DEVNULL

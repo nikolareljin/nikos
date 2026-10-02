@@ -236,7 +236,10 @@ def verify_ssh(user: str, host: str, port: int) -> bool:
         "-p", str(port), f"{user}@{host}",
     ]
     try:
-        result = subprocess.run(cmd, check=False, text=True, capture_output=True, timeout=30)
+        result = subprocess.run(
+            cmd, check=False, text=True, capture_output=True, timeout=30,
+            stdin=subprocess.DEVNULL,
+        )
     except subprocess.TimeoutExpired:
         print(f"  [!] ssh to {host} timed out.")
         return False
