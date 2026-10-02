@@ -223,7 +223,7 @@ def _urlopen_returning(status=None, error=None, seen=None):
 
 def test_gitlab_201_added(monkeypatch):
     seen = []
-    monkeypatch.setattr(wizard.urllib.request, "urlopen", _urlopen_returning(201, seen=seen))
+    monkeypatch.setattr(wizard._OPENER, "open", _urlopen_returning(201, seen=seen))
     assert wizard.gitlab_add_key("gitlab.com", None, TOKEN, "ssh-ed25519 K") == "added"
     req = seen[0]
     assert req.full_url == "https://gitlab.com/api/v4/user/keys"
@@ -233,25 +233,25 @@ def test_gitlab_201_added(monkeypatch):
 
 def test_gitlab_400_duplicate_is_present(monkeypatch):
     err = http_error(400, '{"message":{"fingerprint":["has already been taken"]}}')
-    monkeypatch.setattr(wizard.urllib.request, "urlopen", _urlopen_returning(error=err))
+    monkeypatch.setattr(wizard._OPENER, "open", _urlopen_returning(error=err))
     assert wizard.gitlab_add_key("gitlab.com", None, TOKEN, "k") == "present"
 
 
 def test_gitlab_400_other_is_error(monkeypatch):
     err = http_error(400, '{"message":"key is invalid"}')
-    monkeypatch.setattr(wizard.urllib.request, "urlopen", _urlopen_returning(error=err))
+    monkeypatch.setattr(wizard._OPENER, "open", _urlopen_returning(error=err))
     assert wizard.gitlab_add_key("gitlab.com", None, TOKEN, "k") == "error"
 
 
 def test_gitlab_401_bad_token(monkeypatch):
     err = http_error(401, '{"message":"401 Unauthorized"}')
-    monkeypatch.setattr(wizard.urllib.request, "urlopen", _urlopen_returning(error=err))
+    monkeypatch.setattr(wizard._OPENER, "open", _urlopen_returning(error=err))
     assert wizard.gitlab_add_key("gitlab.com", None, TOKEN, "k") == "badtoken"
 
 
 def test_bitbucket_201_added(monkeypatch):
     seen = []
-    monkeypatch.setattr(wizard.urllib.request, "urlopen", _urlopen_returning(201, seen=seen))
+    monkeypatch.setattr(wizard._OPENER, "open", _urlopen_returning(201, seen=seen))
     assert wizard.bitbucket_add_key("nik", TOKEN, "k") == "added"
     assert seen[0].full_url == "https://api.bitbucket.org/2.0/users/nik/ssh-keys"
     assert seen[0].get_header("Authorization").startswith("Basic ")
@@ -266,7 +266,7 @@ def test_bitbucket_401_bad_token(monkeypatch):
 
 def test_network_error_is_error(monkeypatch):
     err = urllib.error.URLError("no route")
-    monkeypatch.setattr(wizard.urllib.request, "urlopen", _urlopen_returning(error=err))
+    monkeypatch.setattr(wizard._OPENER, "open", _urlopen_returning(error=err))
     assert wizard.gitlab_add_key("gitlab.com", None, TOKEN, "k") == "error"
 
 
@@ -293,7 +293,7 @@ def test_gitlab_flow_verifies_over_ssh(home, monkeypatch, capsys):
     rec = Recorder()
     monkeypatch.setattr(wizard.subprocess, "run", rec)
     monkeypatch.setattr(wizard, "is_git_identity_set", lambda: True)
-    monkeypatch.setattr(wizard.urllib.request, "urlopen", _urlopen_returning(201))
+    monkeypatch.setattr(wizard._OPENER, "open", _urlopen_returning(201))
     feed(monkeypatch, ["2", "", "n", ""])
     assert run_main() == 0
     ssh = [c for c in rec.calls if c[0] == "ssh"]
@@ -333,7 +333,7 @@ def test_add_another_host_loops(home, monkeypatch):
     rec = Recorder()
     monkeypatch.setattr(wizard.subprocess, "run", rec)
     monkeypatch.setattr(wizard, "is_git_identity_set", lambda: True)
-    monkeypatch.setattr(wizard.urllib.request, "urlopen", _urlopen_returning(201))
+    monkeypatch.setattr(wizard._OPENER, "open", _urlopen_returning(201))
     feed(monkeypatch, ["2", "", "y", "4", "git.example.com", "", "", "", "n", ""])
     assert run_main() == 0
     hosts = [c[-1] for c in rec.calls if c[0] == "ssh"]
@@ -447,3 +447,36 @@ def test_self_hosted_gitlab_uses_its_ssh_port(monkeypatch):
     monkeypatch.setattr(wizard, "verify_ssh", lambda u, h, p: seen.append((u, h, p)) or True)
     assert wizard.setup_gitlab("ssh-ed25519 K") == ("git.example.com", 2222, "git")
     assert seen == [("git", "git.example.com", 2222)]
+
+
+def test_token_request_does_not_follow_redirects():
+    # A followed redirect would resend PRIVATE-TOKEN / Authorization to the
+    # new location, which may be http:// or another host.
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    hits = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            hits.append((self.path, self.headers.get("PRIVATE-TOKEN")))
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{srv.server_port}/leak")
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        req = wizard.urllib.request.Request(
+            f"http://127.0.0.1:{srv.server_port}/api", data=b"{}", method="POST")
+        req.add_header("PRIVATE-TOKEN", TOKEN)
+        try:
+            wizard._OPENER.open(req, timeout=5)
+        except wizard.urllib.error.HTTPError as exc:
+            assert exc.code == 302
+    finally:
+        srv.shutdown()
+    assert [p for p, _ in hits] == ["/api"]

@@ -100,6 +100,16 @@ def _api_base(host: str, port: int | None) -> str:
 
 # -- HTTP ------------------------------------------------------------------
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """urllib copies our headers onto a redirect, token included, even to
+    http:// or another host. Treat any redirect as the response instead."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
 def http_post_json(url: str, payload: dict, headers: dict) -> tuple[int | None, str]:
     """POST JSON over HTTPS. Returns (status, body); status None on network error."""
     if not url.startswith("https://"):
@@ -110,7 +120,7 @@ def http_post_json(url: str, payload: dict, headers: dict) -> tuple[int | None, 
     for k, v in headers.items():
         req.add_header(k, v)
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+        with _OPENER.open(req, timeout=HTTP_TIMEOUT) as resp:
             return resp.status, resp.read().decode(errors="replace")
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode(errors="replace")
