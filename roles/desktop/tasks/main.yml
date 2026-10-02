@@ -290,6 +290,14 @@
 # Whisker Menu only writes a per-plugin rc once its settings are changed, so
 # most installs have none and the defaults above are enough. Where one exists it
 # outranks every default, and still carries the mouse icon.
+# ~/.config/xfce4/panel exists only once a panel plugin has saved settings.
+# find warned "is not a directory" on every install that had none.
+- name: Check for the user panel config directory
+  ansible.builtin.stat:
+    path: "{{ nikos_home }}/.config/xfce4/panel"
+  register: desktop_user_panel_dir
+  become: false
+
 - name: Find existing user whiskermenu configs
   ansible.builtin.find:
     paths: "{{ nikos_home }}/.config/xfce4/panel"
@@ -297,13 +305,14 @@
     file_type: file
   register: desktop_user_whiskermenu_configs
   become: false
+  when: desktop_user_panel_dir.stat.isdir | default(false)
 
 - name: Point existing user whiskermenu configs at the NikOS menu icon
   ansible.builtin.lineinfile:
     path: "{{ item.path }}"
     regexp: "^button-icon="
     line: "button-icon=nikos-menu"
-  loop: "{{ desktop_user_whiskermenu_configs.files }}"
+  loop: "{{ desktop_user_whiskermenu_configs.files | default([]) }}"
   loop_control:
     label: "{{ item.path }}"
   become: false

@@ -161,6 +161,7 @@ nikos add zsh        # install optional: Zsh + Starship
 nikos add k8s-tools  # install optional: kubectl + Helm
 nikos add act        # install optional: local GitHub Actions runner
 nikos add fabric     # install optional: Fabric AI pattern CLI
+nikos add jev        # install optional: Jev client (official TypeSafe SDK; `jev login` with your API key)
 nikos add openclaw   # install optional: OpenClaw LLM gateway CLI
 nikos add monitoring # install optional: Netdata
 nikos add bitnet     # install optional: BitNet.cpp 1-bit inference (bitnet-cli)

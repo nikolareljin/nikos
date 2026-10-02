@@ -44,7 +44,7 @@ default inventory, so the command fails without it.
 $ ansible-playbook site.yml -i inventory/local --list-tags
       TASK TAGS: [act, ai-claude, ai-copilot-cli, ai-gemini, ai-local,
       ai-node, ai-runner, ai-vision, ai-vscode, always, base, bitnet,
-      bun, desktop, editors, education, fabric, java, k8s-tools,
+      bun, desktop, editors, education, fabric, java, jev, k8s-tools,
       mistral-rs, mongodb, monitoring, music, neovim, network, never,
       ollama-coding, ollama-embedding, ollama-models, ollama-reasoning,
       ollama-text, ollama-vision, openclaw, podman, postgres, qdrant,
@@ -96,7 +96,7 @@ installs all of them. Declining one at the prompt is what puts it in
 
 **Named to run.** Declared `tags: [never, <name>]`, so they never run unless asked
 for by name: `neovim`, `java`, `podman`, `openclaw`, `bun`, `redis`,
-`postgres`, `mongodb`, `zsh`, `act`, `fabric`, `k8s-tools`, `qdrant`, `bitnet`,
+`postgres`, `mongodb`, `zsh`, `act`, `fabric`, `jev`, `k8s-tools`, `qdrant`, `bitnet`,
 `mistral-rs` and `monitoring` on roles in `site.yml`, and `ollama-models` plus
 the five per-family tags `ollama-reasoning`, `ollama-coding`, `ollama-text`,
 `ollama-vision` and `ollama-embedding` on tasks inside `roles/ai-stack`. Each

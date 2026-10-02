@@ -65,8 +65,19 @@ def test_image_build_is_detected_from_chroot_skel_or_isoforge() -> None:
 
 def test_grub_theme_is_pointed_at_the_chosen_root() -> None:
     theming = (REPO / "roles" / "theming" / "tasks" / "main.yml").read_text(encoding="utf-8")
-    assert 'GRUB_THEME="{{ theming_grub_theme_root }}/Nordic/theme.txt"' in theming
-    assert "dest: /usr/share/grub/themes/Nordic/" in theming
+    assert 'GRUB_THEME="{{ theming_grub_theme_root }}/NikOS/theme.txt"' in theming
+    assert "dest: /usr/share/grub/themes/NikOS/" in theming
+    assert "dest: /boot/grub/themes/NikOS/" in theming
+
+
+def test_grub_theme_ships_with_nikos() -> None:
+    # The Nordic GTK repo has no GRUB theme; looking for one there skipped the
+    # theme on every install. NikOS ships its own, with no download.
+    theme = (REPO / "roles" / "theming" / "files" / "grub" / "theme.txt").read_text(encoding="utf-8")
+    assert 'desktop-color: "#2E3440"' in theme and "+ boot_menu" in theme
+    theming = (REPO / "roles" / "theming" / "tasks" / "main.yml").read_text(encoding="utf-8")
+    assert "EliverLara/Nordic.git" not in theming
+    assert "not found in the cloned repo" not in theming
 
 
 @pytest.mark.parametrize(
@@ -84,7 +95,7 @@ def test_grub_theme_path_selection(tmp_path, mounts, root_types, image, expected
     assert shutil.which("ansible-playbook"), "ansible-playbook is required"
     theming = (REPO / "roles" / "theming" / "tasks" / "main.yml").read_text(encoding="utf-8")
     start = theming.index("- name: Choose where GRUB reads the theme from")
-    end = theming.index("- name: Copy the Nordic GRUB theme to /boot")
+    end = theming.index("- name: Copy the NikOS GRUB theme to /boot")
     (tmp_path / "tasks.yml").write_text("---\n" + theming[start:end], encoding="utf-8")
     (tmp_path / "play.yml").write_text(
         "---\n- hosts: localhost\n  connection: local\n  gather_facts: false\n  tasks:\n"

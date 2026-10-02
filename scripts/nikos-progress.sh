@@ -359,3 +359,49 @@ nikos_progress_run() {
   fi
   return "${rc}"
 }
+
+# nikos_log_digest <log> [nikos_home]
+# Prints a short diagnosis of a playbook log: where it ran, every failed task
+# with its message, and each distinct warning and error with a count. Callers
+# append it to the log, so the problems are at the end of the file instead of
+# scattered through thousands of lines of task output.
+nikos_log_digest() {
+  local log="$1" home="${2:-}" os ref free_root free_home
+  [[ -r "${log}" ]] || return 0
+  # Read, not sourced: a sourced file could run code and override our locals.
+  os="$(sed -n 's/^PRETTY_NAME="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/os-release 2>/dev/null)"
+  ref="$(git -C "${home:-.}" describe --tags --always --dirty 2>/dev/null || echo unknown)"
+  free_root="$(df -h --output=avail / 2>/dev/null | tail -n 1 | tr -d ' ')"
+  free_home="$(df -h --output=avail "${HOME:-/}" 2>/dev/null | tail -n 1 | tr -d ' ')"
+
+  echo "=== NikOS log digest ==="
+  echo "NikOS ref: ${ref}   OS: ${os:-unknown}   Kernel: $(uname -r)"
+  echo "Ansible: $(ansible-playbook --version 2>/dev/null </dev/null | head -n 1 || echo unknown)   Python: $(python3 --version 2>/dev/null | cut -d' ' -f2)"
+  echo "Free disk: / ${free_root:-?}, home ${free_home:-?}"
+
+  # A failed task is its TASK header plus the fatal/failed line under it; the
+  # message is the "msg" field when ansible printed one.
+  LC_ALL=C awk '
+    /^TASK \[/ { task = $0; sub(/^TASK \[/, "", task); sub(/\] \*.*$/, "", task) }
+    /^(fatal|failed): \[/ {
+      msg = $0
+      if (match(msg, /"msg": "([^"\\]|\\.)*"/)) msg = substr(msg, RSTART + 8, RLENGTH - 9)
+      else sub(/^[^>]*=> */, "", msg)
+      if (length(msg) > 300) msg = substr(msg, 1, 300) "..."
+      n++; out = out "  - [" task "] " msg "\n"
+    }
+    END { printf "Failed tasks (%d):\n%s", n, (n ? out : "  none\n") }
+  ' "${log}"
+
+  local kind
+  for kind in WARNING ERROR; do
+    LC_ALL=C grep -E "^\[${kind}\]|^${kind}:" "${log}" 2>/dev/null |
+      grep -v '^\[WARNING\]: Deprecation warnings can be disabled' |
+      sort | uniq -c | sort -rn |
+      awk -v k="${kind}" '
+        { c = $1; $1 = ""; sub(/^ /, ""); if (length($0) > 200) $0 = substr($0, 1, 200) "..."
+          lines = lines sprintf("  - (%dx) %s\n", c, $0); n++ }
+        END { printf "%ss (%d distinct):\n%s", (k == "WARNING" ? "Warning" : "Error"), n, (n ? lines : "  none\n") }'
+  done
+  echo "=== end of digest ==="
+}

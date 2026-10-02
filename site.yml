@@ -156,6 +156,9 @@
     - role: fabric
       become: false
       tags: [never, fabric]
+    - role: jev
+      become: false
+      tags: [never, jev]
     - role: k8s-tools
       become: false
       tags: [never, k8s-tools]

@@ -1,0 +1,11 @@
+/* The new tab and home pages in the NikOS colour, so the page under the
+   toolbar matches it. Other sites keep their own colours. */
+@-moz-document url("about:blank"), url("about:newtab"), url("about:home"), url("about:privatebrowsing") {
+  :root, body {
+    --background-color-canvas: #2E3440 !important;
+    --newtab-background-color: #2E3440 !important;
+    --newtab-background-color-secondary: #3B4252 !important;
+    --in-content-page-background: #2E3440 !important;
+    background-color: #2E3440 !important;
+  }
+}

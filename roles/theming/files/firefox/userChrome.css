@@ -1,0 +1,63 @@
+/* One background for the whole window chrome: Nord polar night 0 (#2E3440),
+   the NikOS desktop colour. The built-in Dark theme paints the tab strip,
+   toolbars, URL bar and sidebar in different greys; these variables make them
+   one colour, with fields and the selected tab one step lighter (#3B4252). */
+:root {
+  --nikos-bg: #2E3440;
+  --nikos-raised: #3B4252;
+  --nikos-text: #ECEFF4;
+
+  --lwt-accent-color: var(--nikos-bg) !important;
+  --lwt-accent-color-inactive: var(--nikos-bg) !important;
+  --lwt-text-color: var(--nikos-text) !important;
+  --toolbar-bgcolor: var(--nikos-bg) !important;
+  --toolbar-color: var(--nikos-text) !important;
+  --toolbox-bgcolor: var(--nikos-bg) !important;
+  --toolbox-bgcolor-inactive: var(--nikos-bg) !important;
+  --tabs-navbar-separator-color: transparent !important;
+  --toolbarseparator-color: transparent !important;
+  --chrome-content-separator-color: var(--nikos-bg) !important;
+  --tab-selected-bgcolor: var(--nikos-raised) !important;
+  --toolbar-field-background-color: var(--nikos-raised) !important;
+  --toolbar-field-focus-background-color: var(--nikos-raised) !important;
+  --urlbar-box-bgcolor: var(--nikos-raised) !important;
+  --urlbar-box-focus-bgcolor: var(--nikos-raised) !important;
+  --toolbar-field-color: var(--nikos-text) !important;
+  --sidebar-background-color: var(--nikos-bg) !important;
+  --sidebar-text-color: var(--nikos-text) !important;
+  --arrowpanel-background: var(--nikos-bg) !important;
+  --arrowpanel-color: var(--nikos-text) !important;
+  --urlbarView-background: var(--nikos-bg) !important;
+  --background-color-canvas: var(--nikos-bg) !important;
+}
+
+#navigator-toolbox,
+#titlebar,
+#TabsToolbar,
+#nav-bar,
+#PersonalToolbar,
+#sidebar-box,
+#sidebar-main,
+#browser,
+#tabbrowser-tabbox {
+  background-color: var(--nikos-bg) !important;
+  background-image: none !important;
+  border-color: transparent !important;
+}
+
+/* Firefox 157 paints these from newer tokens the variables above miss. */
+#urlbar-background,
+.urlbar-background,
+#urlbar:is([focused], [open]) :is(#urlbar-background, .urlbar-background),
+#searchbar {
+  background-color: var(--nikos-raised) !important;
+}
+.tab-background:is([selected], [multiselected]) {
+  background-color: var(--nikos-raised) !important;
+  background-image: none !important;
+}
+#tabbrowser-tabpanels,
+#tabbrowser-tabbox,
+browser {
+  background-color: var(--nikos-bg) !important;
+}

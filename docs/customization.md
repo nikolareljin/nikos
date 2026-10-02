@@ -22,6 +22,9 @@ nikos_default_session: "auto"            # auto | xubuntu | xfce | any /usr/shar
 
 # ── Theme ─────────────────────────────────────────────
 nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/..."
+nordic_gtk_sha256: "..."                 # change together with the URL
+nikos_firefox_dark: true                 # false leaves Firefox alone
+nikos_chromium_dark: true                # false leaves Chromium / Chrome alone
 
 # ── Ollama ────────────────────────────────────────────
 ollama_default_model: "qwen3.5:4b"
@@ -60,9 +63,27 @@ nikos_vscode_extensions:
 | `xubuntu-full` | `xubuntu-desktop` and the above | The complete Xubuntu metapackage, including its default apps |
 | `xfce` | `xfce4` | Bare Xfce with no Xubuntu branding; the pre-0.5.0 behaviour |
 
-NikOS theming (Nordic, Papirus-Dark, the NikOS wallpaper and Plymouth theme)
-runs after the desktop role in every case, so it layers on top of whichever set
-you pick.
+NikOS theming (Nordic, Papirus-Dark, the NikOS wallpaper, GRUB and Plymouth
+themes) runs after the desktop role in every case, so it layers on top of
+whichever set you pick.
+
+Browsers are dark in the desktop colour (#2E3440):
+
+- Firefox: the built-in Dark theme plus a `userChrome.css` / `userContent.css`
+  that paint the tab strip, toolbar, URL bar and new tab page one colour.
+  Written as `NikOS dark Firefox` blocks, so your own lines in those files stay.
+  `user.js` is read at every Firefox start, so the theme stays while this is
+  on; `nikos_firefox_dark: false` and `nikos update` remove the blocks.
+- Chromium (snap or deb) and Google Chrome: Classic mode, dark, seeded with the
+  desktop colour, set in each profile's Preferences. The Chromium snap cannot
+  read the host GTK theme, so GTK mode would fall back to light Adwaita. A
+  browser that is running is skipped; close it and run `nikos-chromium-theme`.
+  Each profile is set once (recorded in `~/.local/state/nikos/chromium-themed`),
+  so a theme you pick later in "Customize Chromium" survives `nikos update`;
+  `nikos-chromium-theme --force` sets it again.
+
+Both apply to profiles that exist. Start a browser once, then run
+`nikos update`, to theme a new profile.
 
 ## Keeping or removing GNOME
 
@@ -223,6 +244,7 @@ nikos add qdrant     # Qdrant vector database via Docker user service
 nikos add zsh        # Zsh plus Starship prompt
 nikos add act        # Run GitHub Actions locally
 nikos add fabric     # Fabric AI pattern CLI
+nikos add jev        # Jev client: official TypeSafe SDK + `jev` command (run `jev login` with your key)
 nikos add k8s-tools  # kubectl and Helm
 nikos add bitnet     # BitNet.cpp 1-bit LLM inference (bitnet-cli)
 nikos add mistral-rs # mistral.rs Rust LLM server

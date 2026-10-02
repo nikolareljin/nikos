@@ -113,8 +113,14 @@ nikos_disable_gdm: true
 nikos_default_session: "auto"
 
 # Theme
+# Dark Firefox in the desktop colour: built-in Dark theme + userChrome.css,
+# applied to every existing profile (roles/theming). false leaves Firefox alone.
+nikos_firefox_dark: true
+# Same for Chromium (snap/deb) and Google Chrome: dark, seeded with #2E3440.
+nikos_chromium_dark: true
 nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/Nordic.tar.xz"
-nordic_grub_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/Nordic.tar.xz"
+# The release asset is unsigned; the hash pins the bytes. Update both together.
+nordic_gtk_sha256: "d162d694e13bec518636b193fbe84ccea44da9a81a89015c6713f6b258ee36d5"
 
 # ── Ollama models ────────────────────────────────────────────────────────────
 # Sizes are the download size of the default quantisation, checked against the

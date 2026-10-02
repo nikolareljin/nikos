@@ -32,7 +32,7 @@ Every role in `site.yml`, assigned to a layer:
 |---|---|---|
 | core | `base`, `github-setup`, `ai-stack`, `cloud-ai-cli`, `agent-dev`, `dev-tools`, `network` | both profiles |
 | desktop | `desktop`, `theming`, `editors`, `music`, `education` | `desktop` only |
-| optional (named to run) | `neovim`, `java`, `podman`, `openclaw`, `bun`, `redis`, `postgres`, `mongodb`, `zsh`, `act`, `fabric`, `k8s-tools`, `qdrant`, `bitnet`, `mistral-rs`, `monitoring` | both profiles, when asked for |
+| optional (named to run) | `neovim`, `java`, `podman`, `openclaw`, `bun`, `redis`, `postgres`, `mongodb`, `zsh`, `act`, `fabric`, `jev`, `k8s-tools`, `qdrant`, `bitnet`, `mistral-rs`, `monitoring` | both profiles, when asked for |
 
 The desktop-layer roles carry `when: nikos_profile == 'desktop'` in `site.yml`,
 so a server run skips them even when they are named in `--tags`. On a desktop
