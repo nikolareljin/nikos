@@ -767,7 +767,7 @@ cmd_doctor() {
   fi
   check "SSH server installed" test -x /usr/sbin/sshd
   check "SSH accepting connections" ssh_listening
-  optional_check "GitHub configured" test -f "${HOME}/.config/nikos/github-configured"
+  optional_check "Git setup done or skipped (nikos-git-setup)" test -f "${HOME}/.config/nikos/github-configured"
   check "NikOS repo present" test -d "${NIKOS_HOME}/.git"
   check "script-helpers present" test -f "${HELPERS}"
   echo ""

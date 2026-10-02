@@ -12,6 +12,7 @@ import getpass
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -39,6 +40,10 @@ _HOST_RE = re.compile(
 
 class Abort(Exception):
     """User pressed Ctrl-C or closed stdin."""
+
+
+def have(cmd: str) -> bool:
+    return shutil.which(cmd) is not None
 
 
 def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
@@ -269,6 +274,9 @@ def step_dotfiles(provider: str, host: str, port: int, user: str) -> None:
 # -- verification and custom hosts -----------------------------------------
 
 def verify_ssh(user: str, host: str, port: int) -> bool:
+    if not have("ssh"):
+        print("  [!] ssh is not installed; skipping the login check.")
+        return False
     cmd = [
         "ssh", "-T", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes",
         "-p", str(port), f"{user}@{host}",
@@ -317,6 +325,10 @@ def show_manual(pubkey: str, url: str | None) -> None:
 # -- providers --------------------------------------------------------------
 
 def setup_github(pubkey: str) -> tuple[str, int, str]:
+    if not have("gh"):
+        print("  [!] gh is not installed (it comes with nikos update).")
+        show_manual(pubkey, SETTINGS_URLS["GitHub"])
+        return "github.com", 22, "git"
     if is_gh_authenticated():
         print("  [ok] Already authenticated with GitHub")
     else:
@@ -399,8 +411,9 @@ def setup_bitbucket(pubkey: str) -> tuple[str, int, str]:
 
 
 def setup_custom(pubkey: str) -> tuple[str, int, str]:
-    host, _ = _ask_host("  Git server host: ", "")
-    port_raw = ask("  SSH port [22]: ") or "22"
+    host, given_port = _ask_host("  Git server host: ", "")
+    default_port = str(given_port or 22)
+    port_raw = ask(f"  SSH port [{default_port}]: ") or default_port
     if port_raw.isdigit() and 0 < int(port_raw) < 65536:
         port = int(port_raw)
     else:

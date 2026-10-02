@@ -9,8 +9,9 @@ All notable changes to NikOS are documented here.
   can be skipped.** `nikos-git-setup` asks for the host first; Skip writes the
   flag so it never asks again. GitLab and Bitbucket keys are added over HTTPS
   with a token read by getpass and never stored. `nikos_git_setup: skip` in
-  `vars/local.yml` installs no terminal hook. The old multi-line hook is
-  replaced by a managed block, so upgrades do not run the wizard twice.
+  `vars/local.yml` installs no terminal hook. The old multi-line hook
+  never matched itself, so each run appended another copy to `~/.bashrc` (25
+  on one machine); every copy is removed and replaced by one managed block.
 
 ## [0.7.0] — 2026-10-01
 

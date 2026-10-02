@@ -97,6 +97,12 @@ def _no_network(monkeypatch):
         return real(sock, addr)
     monkeypatch.setattr(socket.socket, "connect", guard)
 
+
+@pytest.fixture(autouse=True)
+def _tools_present(monkeypatch):
+    """gh and ssh count as installed unless a test says otherwise."""
+    monkeypatch.setattr(wizard, "have", lambda cmd: True)
+
 ROOT = Path(__file__).parent.parent
 TOKEN = "glpat-SECRET-TOKEN-123"
 
@@ -558,3 +564,27 @@ def test_token_request_does_not_follow_redirects():
     finally:
         srv.shutdown()
     assert [p for p, _ in hits] == ["/api"]
+
+
+def test_missing_gh_shows_the_key_instead_of_crashing(monkeypatch, capsys):
+    monkeypatch.setattr(wizard, "have", lambda cmd: cmd != "gh")
+    monkeypatch.setattr(wizard.subprocess, "run", Recorder())
+    assert wizard.setup_github("ssh-ed25519 K nikos") == ("github.com", 22, "git")
+    out = capsys.readouterr().out
+    assert "gh is not installed" in out and "ssh-ed25519 K nikos" in out
+
+
+def test_missing_ssh_skips_the_login_check(monkeypatch, capsys):
+    monkeypatch.setattr(wizard, "have", lambda cmd: cmd != "ssh")
+    rec = Recorder()
+    monkeypatch.setattr(wizard.subprocess, "run", rec)
+    assert wizard.verify_ssh("git", "example.com", 22) is False
+    assert rec.calls == []
+
+
+def test_custom_host_port_becomes_the_default(home, monkeypatch):
+    monkeypatch.setattr(wizard, "SSH_DIR", home / ".ssh")
+    monkeypatch.setattr(wizard.subprocess, "run", Recorder())
+    answers = iter(["git.example.com:2222", "", "", ""])
+    monkeypatch.setattr(wizard, "ask", lambda _m: next(answers))
+    assert wizard.setup_custom("ssh-ed25519 K") == ("git.example.com", 2222, "git")
