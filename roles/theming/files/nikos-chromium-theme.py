@@ -7,10 +7,12 @@ Sets, in every existing profile's Preferences:
   - dark colour scheme;
   - #2E3440 (the desktop colour) as the theme seed colour.
 These are the values the "Customize Chromium" panel writes, so the user can
-change them there afterwards. A browser that is running is skipped: it rewrites
-Preferences on exit and would undo the edit.
+change them there afterwards. Each profile is set once, recorded in
+~/.local/state/nikos/chromium-themed, so `nikos update` does not undo a theme
+the user picked later; --force sets it again. A browser that is running is
+skipped: it rewrites Preferences on exit and would undo the edit.
 
-Exit 0; prints one line per profile: "changed", "ok" or "skipped: <why>".
+Exit 0; prints one line per profile: "changed", "ok", "kept" or "skipped: <why>".
 """
 
 from __future__ import annotations
@@ -80,19 +82,30 @@ def apply(prefs_path: Path) -> str:
     return "changed"
 
 
-def main(home: Path) -> int:
+def main(home: Path, force: bool = False) -> int:
+    state = home / ".local" / "state" / "nikos" / "chromium-themed"
+    done = set(state.read_text().splitlines()) if state.exists() else set()
     for rel in USER_DATA_DIRS:
         udd = home / rel
         if not udd.is_dir():
             continue
         for prefs in sorted(udd.glob("*/Preferences")):
-            if running(udd):
+            profile = str(prefs.parent)
+            if profile in done and not force:
+                status = "kept (set once already; --force sets it again)"
+            elif running(udd):
                 status = "skipped: browser running; close it and run nikos-chromium-theme"
             else:
                 status = apply(prefs)
-            print(f"{prefs.parent}: {status}")
+                if status in ("changed", "ok"):
+                    done.add(profile)
+            print(f"{profile}: {status}")
+    if done:
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text("".join(f"{p}\n" for p in sorted(done)))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(Path(sys.argv[1]) if len(sys.argv) > 1 else Path.home()))
+    args = [a for a in sys.argv[1:] if a != "--force"]
+    sys.exit(main(Path(args[0]) if args else Path.home(), force="--force" in sys.argv[1:]))

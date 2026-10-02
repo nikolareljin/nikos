@@ -596,20 +596,21 @@
     file_type: file
   register: theming_firefox_prefs
   become: false
-  when: nikos_firefox_dark | bool
 
 - name: Select the built-in Dark theme and enable userChrome.css
   ansible.builtin.blockinfile:
     path: "{{ item.path | dirname }}/user.js"
     marker: "// {mark} NikOS dark Firefox"
     block: "{{ lookup('ansible.builtin.file', 'firefox/user.js') }}"
-    create: true
+    # user.js is re-applied at every Firefox start, so switching NikOS off
+    # has to remove the block, not just stop writing it.
+    state: "{{ 'present' if nikos_firefox_dark | bool else 'absent' }}"
+    create: "{{ nikos_firefox_dark | bool }}"
     mode: "0644"
   loop: "{{ theming_firefox_prefs.files | default([]) }}"
   loop_control:
     label: "{{ item.path | dirname }}"
   become: false
-  when: nikos_firefox_dark | bool
 
 - name: Create the Firefox chrome directories
   ansible.builtin.file:
@@ -627,13 +628,13 @@
     path: "{{ item.0.path | dirname }}/chrome/{{ item.1 }}"
     marker: "/* {mark} NikOS dark Firefox */"
     block: "{{ lookup('ansible.builtin.file', 'firefox/' ~ item.1) }}"
-    create: true
+    state: "{{ 'present' if nikos_firefox_dark | bool else 'absent' }}"
+    create: "{{ nikos_firefox_dark | bool }}"
     mode: "0644"
   loop: "{{ (theming_firefox_prefs.files | default([])) | product(['userChrome.css', 'userContent.css']) | list }}"
   loop_control:
     label: "{{ item.0.path | dirname }}/chrome/{{ item.1 }}"
   become: false
-  when: nikos_firefox_dark | bool
 
 - name: Note that Firefox picks the theme up on its next start
   ansible.builtin.debug:

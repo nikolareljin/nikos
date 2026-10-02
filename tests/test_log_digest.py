@@ -85,8 +85,20 @@ def test_chromium_profile_gets_dark_classic_seeded_theme(tmp_path, capsys):
     assert data["extensions"]["theme"]["system_theme"] == 0
     assert data["other"] == {"kept": True}
     assert ": changed" in capsys.readouterr().out
+
+
+def test_chromium_is_set_once_so_a_later_user_choice_survives(tmp_path, capsys):
+    prefs = _profile(tmp_path)
     chromium.main(tmp_path)
-    assert ": ok" in capsys.readouterr().out
+    data = json.loads(prefs.read_text())
+    data["browser"]["theme"]["color_scheme"] = 1  # user picks light afterwards
+    prefs.write_text(json.dumps(data))
+    capsys.readouterr()
+    chromium.main(tmp_path)  # the next nikos update
+    assert "kept" in capsys.readouterr().out
+    assert json.loads(prefs.read_text())["browser"]["theme"]["color_scheme"] == 1
+    chromium.main(tmp_path, force=True)
+    assert json.loads(prefs.read_text())["browser"]["theme"]["color_scheme"] == 2
 
 
 def test_chromium_running_is_skipped_but_a_stale_lock_is_not(tmp_path, capsys):
