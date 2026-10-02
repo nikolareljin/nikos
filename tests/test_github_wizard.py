@@ -76,11 +76,26 @@ def test_main_exits_early_if_already_configured(tmp_path, monkeypatch):
 # -- provider wizard ---------------------------------------------------------
 
 import io
+import base64
 import json
 import urllib.error
 
 import pytest
 import yaml
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch):
+    """Unit tests never reach a real Git host. A stale patch target once sent the
+    test token to gitlab.com; any outbound connect now fails the test."""
+    import socket
+    real = socket.socket.connect
+
+    def guard(sock, addr):
+        if isinstance(addr, tuple) and addr[0] not in ("127.0.0.1", "::1"):
+            raise AssertionError(f"network call to {addr}")
+        return real(sock, addr)
+    monkeypatch.setattr(socket.socket, "connect", guard)
 
 ROOT = Path(__file__).parent.parent
 TOKEN = "glpat-SECRET-TOKEN-123"
@@ -249,19 +264,84 @@ def test_gitlab_401_bad_token(monkeypatch):
     assert wizard.gitlab_add_key("gitlab.com", None, TOKEN, "k") == "badtoken"
 
 
+def _sequence(*responses, seen=None):
+    """Fake opener answering each request with the next (status, body)."""
+    queue = list(responses)
+
+    def fake(req, timeout=None):
+        assert timeout
+        if seen is not None:
+            seen.append(req)
+        status, body = queue.pop(0)
+        if status >= 400:
+            raise http_error(status, body)
+        resp = MagicMock(status=status)
+        resp.read.return_value = body.encode()
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = lambda s, *a: False
+        return resp
+    return fake
+
+
 def test_bitbucket_201_added(monkeypatch):
     seen = []
-    monkeypatch.setattr(wizard._OPENER, "open", _urlopen_returning(201, seen=seen))
-    assert wizard.bitbucket_add_key("nik", TOKEN, "k") == "added"
-    assert seen[0].full_url == "https://api.bitbucket.org/2.0/users/nik/ssh-keys"
-    assert seen[0].get_header("Authorization").startswith("Basic ")
+    monkeypatch.setattr(wizard._OPENER, "open", _sequence(
+        (200, '{"uuid": "{abc-123}"}'), (201, "{}"), seen=seen))
+    assert wizard.bitbucket_add_key("me@example.com", TOKEN, "k") == "added"
+    assert seen[0].full_url == "https://api.bitbucket.org/2.0/user"
+    assert seen[0].get_method() == "GET"
+    assert seen[1].full_url == "https://api.bitbucket.org/2.0/users/%7Babc-123%7D/ssh-keys"
+    expected = "Basic " + base64.b64encode(f"me@example.com:{TOKEN}".encode()).decode()
+    assert all(r.get_header("Authorization") == expected for r in seen)
 
 
 def test_bitbucket_401_bad_token(monkeypatch):
-    monkeypatch.setattr(
-        wizard.urllib.request, "urlopen", _urlopen_returning(error=http_error(401, ""))
-    )
-    assert wizard.bitbucket_add_key("nik", TOKEN, "k") == "badtoken"
+    seen = []
+    monkeypatch.setattr(wizard._OPENER, "open", _sequence((401, ""), seen=seen))
+    assert wizard.bitbucket_add_key("me@example.com", TOKEN, "k") == "badtoken"
+    assert len(seen) == 1
+
+
+def test_bitbucket_duplicate_is_present(monkeypatch):
+    monkeypatch.setattr(wizard._OPENER, "open", _sequence(
+        (200, '{"uuid": "{abc}"}'), (400, '{"error":{"message":"Key already exists"}}')))
+    assert wizard.bitbucket_add_key("me@example.com", TOKEN, "k") == "present"
+
+
+def test_bitbucket_user_without_uuid_is_error(monkeypatch):
+    monkeypatch.setattr(wizard._OPENER, "open", _sequence((200, "{}")))
+    assert wizard.bitbucket_add_key("me@example.com", TOKEN, "k") == "error"
+
+
+def test_github_key_match_is_by_key_not_title():
+    out = "nikos\tssh-ed25519 OTHERMACHINE\t2026-01-01\n"
+    with patch("nikos_github_wizard.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=out)
+        assert wizard.is_ssh_key_on_github("ssh-ed25519 THISMACHINE nikos") is False
+        assert wizard.is_ssh_key_on_github("ssh-ed25519 OTHERMACHINE nikos") is True
+
+
+def test_missing_pub_is_derived_from_private_key(home, monkeypatch):
+    (home / ".ssh").mkdir()
+    monkeypatch.setattr(wizard, "SSH_DIR", home / ".ssh")
+    monkeypatch.setattr(wizard, "SSH_KEY", home / ".ssh/id_ed25519")
+    (home / ".ssh/id_ed25519").write_text("PRIVATE")
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        return MagicMock(returncode=0, stdout="ssh-ed25519 DERIVED\n")
+    monkeypatch.setattr(wizard.subprocess, "run", fake_run)
+    assert wizard.step_ssh_key() == "ssh-ed25519 DERIVED nikos"
+    assert calls == [["ssh-keygen", "-y", "-f", str(home / ".ssh/id_ed25519")]]
+
+
+def test_custom_sees_host_in_a_multi_host_line(home, monkeypatch):
+    monkeypatch.setattr(wizard, "SSH_DIR", home / ".ssh")
+    (home / ".ssh").mkdir()
+    (home / ".ssh/config").write_text("Host other git.example.com\n    Port 2200\n")
+    assert wizard.ensure_ssh_config("git.example.com", 2222, "git") is False
+    assert wizard.ensure_ssh_config("example.com", 2222, "git") is True
 
 
 def test_network_error_is_error(monkeypatch):
@@ -275,9 +355,7 @@ def test_gitlab_flow_token_never_in_argv_or_output(home, monkeypatch, capsys):
     rec = Recorder()
     monkeypatch.setattr(wizard.subprocess, "run", rec)
     monkeypatch.setattr(wizard, "is_git_identity_set", lambda: True)
-    monkeypatch.setattr(
-        wizard.urllib.request, "urlopen", _urlopen_returning(error=http_error(401, ""))
-    )
+    monkeypatch.setattr(wizard._OPENER, "open", _urlopen_returning(error=http_error(401, "")))
     feed(monkeypatch, ["2", "gitlab.com", "n", ""])
     assert run_main() == 0
     assert wizard.CONFIG_FLAG.exists()

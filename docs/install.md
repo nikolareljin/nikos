@@ -69,7 +69,7 @@ Git setup wizard (`nikos-git-setup`) asks which Git host you use:
 
 1. GitHub - `gh auth login`, then `gh ssh-key add`
 2. GitLab (gitlab.com or self-hosted) - adds the key with a personal access token (scope `api`)
-3. Bitbucket - adds the key with your username and an API token
+3. Bitbucket - adds the key with your Atlassian account email and an API token
 4. Custom Git server - prints the key for you to add; writes a `Host` block to
    `~/.ssh/config` when the port is not 22 or the user is not `git`
 5. Skip - no key is generated or uploaded; create one with `ssh-keygen -t ed25519`

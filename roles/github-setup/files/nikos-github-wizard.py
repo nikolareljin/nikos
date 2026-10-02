@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -110,13 +111,16 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 _OPENER = urllib.request.build_opener(_NoRedirect)
 
-def http_post_json(url: str, payload: dict, headers: dict) -> tuple[int | None, str]:
-    """POST JSON over HTTPS. Returns (status, body); status None on network error."""
+def http_json(url: str, payload: dict | None, headers: dict) -> tuple[int | None, str]:
+    """POST JSON (GET when payload is None) over HTTPS. Returns (status, body);
+    status None on network error."""
     if not url.startswith("https://"):
         raise ValueError("HTTPS only")
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(url, data=data, method="POST")
-    req.add_header("Content-Type", "application/json")
+    if payload is None:
+        req = urllib.request.Request(url, method="GET")
+    else:
+        req = urllib.request.Request(url, data=json.dumps(payload).encode(), method="POST")
+        req.add_header("Content-Type", "application/json")
     for k, v in headers.items():
         req.add_header(k, v)
     try:
@@ -138,6 +142,10 @@ def _classify(status: int | None, body: str, dup_words: tuple[str, ...]) -> str:
     return "error"
 
 
+def http_post_json(url: str, payload: dict, headers: dict) -> tuple[int | None, str]:
+    return http_json(url, payload, headers)
+
+
 def gitlab_add_key(host: str, port: int | None, token: str, pubkey: str) -> str:
     status, body = http_post_json(
         f"{_api_base(host, port)}/api/v4/user/keys",
@@ -147,12 +155,21 @@ def gitlab_add_key(host: str, port: int | None, token: str, pubkey: str) -> str:
     return _classify(status, body, ("has already been taken",))
 
 
-def bitbucket_add_key(username: str, token: str, pubkey: str) -> str:
-    auth = base64.b64encode(f"{username}:{token}".encode()).decode()
+def bitbucket_add_key(email: str, token: str, pubkey: str) -> str:
+    """Bitbucket API tokens authenticate as the Atlassian account email, and the
+    ssh-keys endpoint takes the account UUID, not the username."""
+    auth = {"Authorization": "Basic " + base64.b64encode(f"{email}:{token}".encode()).decode()}
+    status, body = http_json("https://api.bitbucket.org/2.0/user", None, auth)
+    if status != 200:
+        return _classify(status, body, ())
+    try:
+        uuid = json.loads(body)["uuid"]
+    except (ValueError, KeyError, TypeError):
+        return "error"
     status, body = http_post_json(
-        f"https://api.bitbucket.org/2.0/users/{username}/ssh-keys",
+        f"https://api.bitbucket.org/2.0/users/{urllib.parse.quote(uuid, safe='')}/ssh-keys",
         {"key": pubkey, "label": KEY_TITLE},
-        {"Authorization": f"Basic {auth}"},
+        auth,
     )
     return _classify(status, body, ("already exists", "already in use", "already been added"))
 
@@ -163,7 +180,7 @@ def is_gh_authenticated() -> bool:
     return run(["gh", "auth", "status"], check=False).returncode == 0
 
 
-def is_ssh_key_on_github() -> bool:
+def is_ssh_key_on_github(pubkey: str = "") -> bool:
     result = run(["gh", "ssh-key", "list"], check=False)
     if result.returncode != 0:
         # Missing admin:public_key scope: cannot verify. Assume present and warn.
@@ -172,6 +189,10 @@ def is_ssh_key_on_github() -> bool:
             print("      To grant it later: gh auth refresh -h github.com -s admin:public_key")
             return True
         return False
+    # Match the key itself: a key titled "nikos" from another machine is not this one.
+    parts = pubkey.split()
+    if len(parts) >= 2:
+        return parts[1] in result.stdout
     return "nikos" in result.stdout
 
 
@@ -192,7 +213,14 @@ def step_ssh_key() -> str:
             ["ssh-keygen", "-t", "ed25519", "-C", KEY_TITLE, "-f", str(SSH_KEY), "-N", ""],
             check=True,
         )
-    return SSH_KEY.with_suffix(".pub").read_text().strip()
+    pub = SSH_KEY.with_suffix(".pub")
+    if not pub.exists():
+        # Private key without its .pub (copied over by hand): derive it.
+        derived = subprocess.run(
+            ["ssh-keygen", "-y", "-f", str(SSH_KEY)], check=True, text=True, stdout=subprocess.PIPE,
+        )
+        pub.write_text(derived.stdout.strip() + f" {KEY_TITLE}\n")
+    return pub.read_text().strip()
 
 
 def step_git_identity() -> None:
@@ -269,7 +297,7 @@ def ensure_ssh_config(host: str, port: int, user: str) -> bool:
     path = _ssh_config_path()
     marker = f"# nikos-git-setup: {host}"
     existing = path.read_text() if path.exists() else ""
-    if marker in existing or re.search(rf"(?im)^\s*Host\s+{re.escape(host)}\s*$", existing):
+    if marker in existing or re.search(rf"(?im)^\s*Host\s+(?:\S+\s+)*{re.escape(host)}(?:\s+\S+)*\s*$", existing):
         os.chmod(path, 0o600)
         return False
     block = f"\n{marker}\nHost {host}\n    HostName {host}\n    Port {port}\n    User {user}\n"
@@ -297,7 +325,7 @@ def setup_github(pubkey: str) -> tuple[str, int, str]:
             print("  [!] gh auth login failed.")
             show_manual(pubkey, SETTINGS_URLS["GitHub"])
             return "github.com", 22, "git"
-    if is_ssh_key_on_github():
+    if is_ssh_key_on_github(pubkey):
         print("  [ok] SSH key already on GitHub")
     else:
         print("  Uploading SSH key to GitHub...")
@@ -357,13 +385,13 @@ def setup_gitlab(pubkey: str) -> tuple[str, int, str]:
 
 
 def setup_bitbucket(pubkey: str) -> tuple[str, int, str]:
-    username = ask("  Bitbucket username: ")
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+", username):
-        print("  [!] Not a Bitbucket username.")
+    email = ask("  Atlassian account email: ")
+    if not re.fullmatch(r"[^@\s:]+@[^@\s:]+", email):
+        print("  [!] Not an email address.")
         show_manual(pubkey, SETTINGS_URLS["Bitbucket"])
         return "bitbucket.org", 22, "git"
-    token = ask_secret("  Bitbucket API token (input hidden): ")
-    result = bitbucket_add_key(username, token, pubkey) if username and token else "error"
+    token = ask_secret("  Bitbucket API token with SSH key read/write and account read (input hidden): ")
+    result = bitbucket_add_key(email, token, pubkey) if token else "error"
     del token
     if _report(result, pubkey, SETTINGS_URLS["Bitbucket"]):
         verify_ssh("git", "bitbucket.org", 22)
