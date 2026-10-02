@@ -368,7 +368,8 @@ nikos_progress_run() {
 nikos_log_digest() {
   local log="$1" home="${2:-}" os ref free_root free_home
   [[ -r "${log}" ]] || return 0
-  os="$(. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME:-unknown}")"
+  # Read, not sourced: a sourced file could run code and override our locals.
+  os="$(sed -n 's/^PRETTY_NAME="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/os-release 2>/dev/null)"
   ref="$(git -C "${home:-.}" describe --tags --always --dirty 2>/dev/null || echo unknown)"
   free_root="$(df -h --output=avail / 2>/dev/null | tail -n 1 | tr -d ' ')"
   free_home="$(df -h --output=avail "${HOME:-/}" 2>/dev/null | tail -n 1 | tr -d ' ')"
