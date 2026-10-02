@@ -21,6 +21,9 @@ All notable changes to NikOS are documented here.
   get `/dev/null` as stdin, since ansible-core refuses a non-blocking tty. Any
   remaining fallback prints `Plain progress view: <reason>` to the terminal and
   the log, and `nikos update` offers to install a missing `dialog`.
+- **The installer checks the sudo password before the playbook starts.** A
+  wrong one used to fail the first become task minutes into the run; now it
+  is asked again (three tries), and passwordless sudo is not asked at all.
 - A distrodeck tool whose need is an opt-in tool (held out of `--all`: it runs
   an upstream installer or is a server, IDE or database) no longer pulls that
   tool in silently. The picker asks `Add <need>? [y/N]`; a no, or no terminal,

@@ -589,3 +589,65 @@ def test_sudo_password_is_validated_on_stdin(tmp_path, answers, expected):
         assert field(out, "FILE") == "right", out
     if log.exists():
         assert "right" not in log.read_text() and "wrong" not in log.read_text()
+
+
+# install.sh checks the sudo password before the playbook starts. A wrong one
+# used to surface only when the first become task failed, minutes in.
+CHECKED_PW_BODY = """
+    NIKOS_VERSION=test
+    # Runs in $(...), so the answer index lives in a file, not a variable.
+    _collect_become_password_dialog() {
+      echo x >>"$HOME/asked"
+      printf '%s\\n' "$(printf '%s' "$PW_ANSWERS" | cut -d, -f"$(wc -l <"$HOME/asked")")"
+    }
+    rc=0
+    _collect_checked_become_password || rc=$?
+    echo "RC=${rc} PW=${_become_pass}"
+    echo "ASKED=$(wc -l <"$HOME/asked" 2>/dev/null || echo 0)"
+"""
+
+# Stub sudo: "-n" succeeds only when NOPASSWD=1; "-S" accepts the password "good".
+SUDO_STUB = """
+echo "$*" >>"$HOME/sudo-args"
+case " $* " in
+  *" -n "*) [ "${NOPASSWD:-0}" = 1 ] ;;
+  *" -S "*) read -r pw; [ "$pw" = good ] ;;
+  *) exit 1 ;;
+esac
+"""
+
+
+def _checked_pw(tmp_path, answers, nopasswd="0"):
+    bindir = stub_dialog(tmp_path)
+    stub(bindir, "sudo", SUDO_STUB)
+    program = write_program(tmp_path, ("_collect_checked_become_password",), CHECKED_PW_BODY)
+    result = subprocess.run(
+        [BASH, str(program)], capture_output=True, timeout=60,
+        env={"PATH": with_stub(bindir), "HOME": str(tmp_path), "PW_ANSWERS": answers,
+             "NOPASSWD": nopasswd},
+    )
+    out = result.stdout.decode()
+    args = (tmp_path / "sudo-args").read_text() if (tmp_path / "sudo-args").exists() else ""
+    return out, args
+
+
+def test_install_skips_the_prompt_for_passwordless_sudo(tmp_path):
+    out, args = _checked_pw(tmp_path, "unused,", nopasswd="1")
+    assert "RC=0 PW=" in out and "ASKED=0" in out, out
+    assert "-n -k true" in args
+
+
+def test_install_retries_a_rejected_password(tmp_path):
+    out, args = _checked_pw(tmp_path, "bad,good,")
+    assert "RC=0 PW=good" in out and "ASKED=2" in out, out
+    assert "good" not in args and "bad" not in args
+
+
+def test_install_stops_after_three_rejections(tmp_path):
+    out, _ = _checked_pw(tmp_path, "a,b,c,good,")
+    assert "RC=1 PW=" in out and "ASKED=3" in out, out
+
+
+def test_the_progressbox_caption_names_the_fallback_reason():
+    text = INSTALL_SH.read_text(encoding="utf-8")
+    assert '--progressbox "Running Ansible playbook (plain view: ${_PLAIN_REASON})..."' in text

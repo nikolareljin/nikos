@@ -366,6 +366,7 @@ _session_next_step() {
 # install, on the terminal and in the log. A silent fallback looks like a hang
 # or a broken installer.
 _PLAIN_NOTICE_SHOWN=0
+_PLAIN_REASON=""
 _plain_view_notice() {
   local reason=""
   (( _PLAIN_NOTICE_SHOWN == 0 )) || return 0
@@ -378,12 +379,35 @@ _plain_view_notice() {
     reason="${PROGRESS_LIB_REL} not found"
   fi
   reason="${reason:-unknown}"
+  _PLAIN_REASON="${reason}"
   if _have_tty; then
     printf 'Plain progress view: %s\n' "${reason}" >/dev/tty 2>/dev/null || true
   else
     printf 'Plain progress view: %s\n' "${reason}" >&2
   fi
   _safe_logfile "Plain progress view: ${reason}"
+}
+
+# Sets _become_pass to a sudo password that sudo accepts, or to "" when sudo
+# needs none. Three tries; a wrong password used to surface only when the first
+# become task failed, minutes into the run. Returns 130 on cancel, 1 after three
+# rejections. The password reaches sudo on stdin, never in argv.
+_collect_checked_become_password() {
+  local attempt
+  _become_pass=""
+  # -k ignores a cached timestamp, so this passes only for NOPASSWD sudo.
+  sudo -n -k true 2>/dev/null && return 0
+  for attempt in 1 2 3; do
+    _become_pass=$(_collect_become_password_dialog) || { _become_pass=""; return 130; }
+    if printf '%s\n' "${_become_pass}" | sudo -S -k -v -p '' >/dev/null 2>&1; then
+      return 0
+    fi
+    _become_pass=""
+    if (( attempt < 3 )); then
+      dialog --title "NikOS ${NIKOS_VERSION}" --msgbox "Sudo rejected that password. Try again." 6 50 </dev/tty || true
+    fi
+  done
+  return 1
 }
 
 # Run ansible-playbook behind the dialog UI.
@@ -435,7 +459,7 @@ _run_playbook_dialog() {
     | _strip_ansi_stream \
     | tee -a "${INSTALL_LOG}" \
     | dialog --title "${title}" \
-        --progressbox "Running Ansible playbook..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
+        --progressbox "Running Ansible playbook (plain view: ${_PLAIN_REASON})..." "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}"
   pipe_status=("${PIPESTATUS[@]}")
   _restore_terminal_cursor
   _tee_rc=${pipe_status[2]:-0}
@@ -1479,9 +1503,14 @@ _pipe_status=()
 if _can_use_dialog; then
   print_info "Running NikOS ${NIKOS_VERSION} playbook..."
   dialog_init
-  if ! _become_pass=$(_collect_become_password_dialog); then
+  _pw_rc=0
+  _collect_checked_become_password || _pw_rc=$?
+  if (( _pw_rc == 130 )); then
     echo "Installer canceled at sudo password prompt." >&2
     exit 130
+  elif (( _pw_rc != 0 )); then
+    echo "Sudo rejected the password three times; the playbook did not run." >&2
+    exit 1
   fi
   _create_become_password_file "${_become_pass}"
   unset _become_pass
