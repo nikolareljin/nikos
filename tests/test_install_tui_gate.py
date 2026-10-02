@@ -533,6 +533,9 @@ def test_update_gauge_choice(tmp_path, sudo_rc):
         assert "--ask-become-pass" not in field(out, "ARGS"), out
         assert "--become-password-file" not in field(out, "ARGS"), out
         assert "COLLECTED" not in out, out
+        # Without -k a cached timestamp from an earlier sudo passes the probe
+        # for a user who does need a password.
+        assert (tmp_path / "sudo.log").read_text().split("\n")[0] == "SUDO -n -k true"
     else:
         assert field(out, "GAUGE") == "false", out
         assert "--ask-become-pass" in field(out, "ARGS"), out

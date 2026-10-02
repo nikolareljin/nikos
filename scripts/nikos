@@ -452,7 +452,9 @@ _playbook() {
   NIKOS_PROGRESS_SKIP_REASON=""
   _offer_dialog_install
   if _can_use_gauge; then
-    if sudo -n true 2>/dev/null; then
+    # -k ignores a cached sudo timestamp: that cache is per terminal, so the
+    # sudo ansible runs would not see it and the play would fail midway.
+    if sudo -n -k true 2>/dev/null; then
       # Passwordless sudo: nothing to collect, and no prompt to fall back on.
       use_gauge=true
     elif _collect_become_password; then
