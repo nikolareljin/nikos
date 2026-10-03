@@ -83,7 +83,7 @@ nikos_ubuntu_releases:
     pgvector_package: postgresql-18-pgvector
     netdata_package: ""                  # dropped from the archive
     anki_package: ""                     # dropped from the archive
-nikos_release: "{{ nikos_ubuntu_releases[ansible_distribution_version] }}"
+nikos_release: "{{ nikos_ubuntu_releases[ansible_facts['distribution_version']] }}"
 
 # Codenames repo.mongodb.org publishes the mongodb_series repository for
 # (dists/<codename>). On any other release the mongodb bundle is skipped,

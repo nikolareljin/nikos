@@ -2,8 +2,8 @@
 - name: Report Anki as unavailable on this release
   ansible.builtin.debug:
     msg: >-
-      anki is not available on Ubuntu {{ ansible_distribution_version }}:
-      the Ubuntu archive has no anki package for {{ ansible_distribution_release }}.
+      anki is not available on Ubuntu {{ ansible_facts['distribution_version'] }}:
+      the Ubuntu archive has no anki package for {{ ansible_facts['distribution_release'] }}.
   when: not nikos_release.anki_package
 
 - name: Install education tools

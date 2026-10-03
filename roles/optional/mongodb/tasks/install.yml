@@ -49,7 +49,7 @@
   ansible.builtin.apt_repository:
     repo: >-
       deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-{{ mongodb_key_series }}.asc]
-      https://repo.mongodb.org/apt/ubuntu {{ ansible_distribution_release }}/mongodb-org/{{ mongodb_series }} multiverse
+      https://repo.mongodb.org/apt/ubuntu {{ ansible_facts['distribution_release'] }}/mongodb-org/{{ mongodb_series }} multiverse
     filename: "mongodb-org-{{ mongodb_series }}"
     state: present
   become: true

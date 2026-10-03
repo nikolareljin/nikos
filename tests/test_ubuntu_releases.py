@@ -1,4 +1,5 @@
 """Per-release package names and the skip-with-message path for missing repos."""
+import json
 import re
 import shutil
 import subprocess
@@ -77,8 +78,8 @@ def _run_mongodb_role(tmp_path, version):
     )
     return subprocess.run(
         ["ansible-playbook", "-i", "localhost,", "-c", "local", "--check", str(playbook),
-         "-e", f"ansible_distribution_version={version}",
-         "-e", f"ansible_distribution_release={CODENAMES[version]}"],
+         "-e", json.dumps({"ansible_facts": {"distribution_version": version,
+                                             "distribution_release": CODENAMES[version]}})],
         capture_output=True, text=True, cwd=REPO,
     )
 

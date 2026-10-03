@@ -5,10 +5,10 @@
 - name: Report MongoDB as unavailable on this release
   ansible.builtin.debug:
     msg: >-
-      mongodb is not available on Ubuntu {{ ansible_distribution_version }}:
-      MongoDB publishes no repository for {{ ansible_distribution_release }}.
-  when: ansible_distribution_release not in mongodb_repo_codenames
+      mongodb is not available on Ubuntu {{ ansible_facts['distribution_version'] }}:
+      MongoDB publishes no repository for {{ ansible_facts['distribution_release'] }}.
+  when: ansible_facts['distribution_release'] not in mongodb_repo_codenames
 
 - name: Install MongoDB
   ansible.builtin.include_tasks: install.yml
-  when: ansible_distribution_release in mongodb_repo_codenames
+  when: ansible_facts['distribution_release'] in mongodb_repo_codenames

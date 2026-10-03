@@ -4,8 +4,8 @@
 - name: Report pgvector as unavailable on this release
   ansible.builtin.debug:
     msg: >-
-      pgvector is not available on Ubuntu {{ ansible_distribution_version }}:
-      the Ubuntu archive has no pgvector package for {{ ansible_distribution_release }}.
+      pgvector is not available on Ubuntu {{ ansible_facts['distribution_version'] }}:
+      the Ubuntu archive has no pgvector package for {{ ansible_facts['distribution_release'] }}.
       PostgreSQL is installed without it.
   when: not nikos_release.pgvector_package
 
