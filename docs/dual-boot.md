@@ -1,6 +1,6 @@
 # Dual boot
 
-NikOS installs onto an Ubuntu or Xubuntu 24.04 that already boots. It does not
+NikOS installs onto an Ubuntu or Xubuntu 22.04, 24.04 or 26.04 that already boots. It does not
 partition disks or install a boot loader; it only adjusts GRUB's settings.
 
 ## Windows in the GRUB menu

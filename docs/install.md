@@ -2,7 +2,8 @@
 
 ## Requirements
 
-- **OS:** Xubuntu 24.04 LTS (recommended) or Ubuntu 24.04 LTS
+- **OS:** Xubuntu or Ubuntu 22.04, 24.04 or 26.04 LTS (24.04 recommended;
+  the NikOS ISO is built from Xubuntu 24.04)
 - **Ansible:** `ansible-playbook` 2.15 or newer; the installer can offer to
   upgrade older Ubuntu packages from the Ansible PPA
 - **User:** a non-root user with `sudo` access
@@ -19,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/nikolareljin/nikos/main/install.sh 
 
 The script will:
 1. Check you are not running as root
-2. Check you are on Xubuntu 24.04 LTS or Ubuntu 24.04 LTS
+2. Check you are on Ubuntu or Xubuntu 22.04, 24.04 or 26.04 LTS
 3. Install bootstrap packages: `git`, `ansible`, and `dialog` unless `NIKOS_USE_DIALOG=0`
 4. Offer to upgrade unsupported Ansible versions from the Ansible Ubuntu PPA
 5. Clone the repo (with submodules) to `~/.local/share/nikos`; when launched
@@ -205,7 +206,21 @@ Not supported in 0.5.0. The playbook downloads theme files, Ollama, Miniforge, a
 
 **Recommended: Xubuntu 24.04 LTS** (~3 GB ISO, Xfce pre-installed, minimal footprint)
 
-Also supported: **Ubuntu 24.04 LTS**. Use the standard Ubuntu desktop ISO.
+Also supported: **Ubuntu 24.04 LTS**, and Ubuntu or Xubuntu **22.04** and
+**26.04 LTS**. The NikOS ISO (`isoforge.yml`) stays on Xubuntu 24.04.
+
+What differs per release (`nikos_ubuntu_releases` in `vars/main.yml`):
+
+| | 22.04 jammy | 24.04 noble | 26.04 resolute |
+|---|---|---|---|
+| Ansible | archive 2.10 is too old; the installer upgrades from the Ansible PPA (2.17) | archive 2.16 | archive 2.20 |
+| Xubuntu minimal desktop | `xubuntu-core` | `xubuntu-desktop-minimal` | `xubuntu-desktop-minimal` |
+| `postgres` bundle | no pgvector (not in the archive) | `postgresql-16-pgvector` | `postgresql-18-pgvector` |
+| `mongodb` bundle | yes | yes | skipped: MongoDB publishes no `resolute` repository |
+| `monitoring` bundle | yes | yes | Netdata from Netdata's own apt repository (signing key fingerprint-checked), bound to 127.0.0.1 |
+| `education` bundle | yes | yes | Anki from the official ankitects/anki release tarball (sha256-checked) |
+
+A skipped bundle prints why and the rest of the install carries on.
 
 ### Ubuntu to Xubuntu migration
 

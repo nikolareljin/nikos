@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NikOS — an AI workstation built on Ubuntu 24.04</title>
-<meta name="description" content="An Ansible playbook that turns an Ubuntu 24.04 machine into a local-first AI development workstation: Xfce desktop, Ollama, a conda AI environment, and the tooling around them.">
+<title>NikOS — an AI workstation built on Ubuntu LTS</title>
+<meta name="description" content="An Ansible playbook that turns an Ubuntu 22.04, 24.04 or 26.04 machine into a local-first AI development workstation: Xfce desktop, Ollama, a conda AI environment, and the tooling around them.">
 <link rel="icon" href="assets/menu-icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,7 +36,7 @@
     <div class="hero-text">
       <p class="tagline">Light system · Heavy thinking</p>
       <h1>An AI workstation, assembled on the machine you already have.</h1>
-      <p class="lede">NikOS is an Ansible playbook that takes an Ubuntu 24.04 install and turns it into a
+      <p class="lede">NikOS is an Ansible playbook that takes an Ubuntu LTS install and turns it into a
       local-first AI development workstation — Xfce on top, Ollama and a conda AI environment underneath,
       and the developer tooling that usually takes an afternoon to assemble.</p>
       <div class="actions">
@@ -49,7 +49,7 @@
 
   <div class="note">
     <strong>It is a playbook, not an ISO.</strong> There is nothing to burn and nothing to reinstall.
-    You run it against a working Ubuntu 24.04 system and it converges that system to a defined state.
+    You run it against a working Ubuntu 22.04, 24.04 or 26.04 system and it converges that system to a defined state.
     Run it twice and the second run changes almost nothing.
   </div>
 
@@ -204,7 +204,7 @@
   <h2>Requirements</h2>
 
   <ul class="tight">
-    <li><strong>Ubuntu 24.04 LTS</strong> or Xubuntu 24.04. Other releases are not supported.</li>
+    <li><strong>Ubuntu or Xubuntu 22.04, 24.04 or 26.04 LTS</strong>. Other releases are not supported.</li>
     <li>A non-root user with <code>sudo</code>.</li>
     <li>About 20&nbsp;GB free disk for a base install.</li>
     <li>4&nbsp;GB RAM minimum; 8&nbsp;GB to run the default <code>qwen3.5:4b</code> model comfortably.</li>

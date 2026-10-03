@@ -124,6 +124,11 @@ act_sha256: "0191d6f1f3b716b5c55820032605d05fc3c1cdbf581ebeff655019e5dd1524c0"
 # github.com/starship/starship releases; sha256 from the asset's .sha256 file.
 starship_version: "v1.26.0"
 starship_sha256: "321f0dd7af8340a5f2e6a8fec6538a04f617486f9ec70d878f91c09cd8deef22"
+# github.com/ankitects/anki releases, Linux x86_64 tarball (self-contained,
+# Python packages bundled). Used only where Ubuntu has no anki package (26.04).
+# No sums file; sha256 hashed by hand and equal to GitHub's asset digest.
+anki_version: "26.09.3"
+anki_sha256: "d70e01971a7aa190b189927573ee643f2525ff840eafaecc7a8f8cde505650b3"
 # github.com/FiloSottile/mkcert releases; no sums file, hashed by hand.
 mkcert_version: "v1.4.4"
 mkcert_sha256: "6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52"
@@ -164,6 +169,10 @@ bitnet_commit: "0b341e582afbf9e1011f24744b554c96a3477eb5"
 # packages.microsoft.com; fingerprint from learn.microsoft.com/linux/packages.
 vscode_key_fingerprints:
   - "BC528686B50D79E339D3721CEB3E94ADBE1229CF"
+# repo.netdata.cloud (Netdatabot); fingerprint from learn.netdata.cloud native
+# packages docs and the key itself. Used only on 26.04 (no archive netdata).
+netdata_key_fingerprints:
+  - "6E155DC153906B73765A74A99DD4A74CECFA8F4F"
 # cli.github.com; fingerprints from cli/cli docs/install_linux.md.
 github_cli_key_fingerprints:
   - "2C6106201985B60E6C7AC87323F3D4EA75716059"
@@ -292,6 +301,12 @@ nikos_pin_sources:
       - url: "https://get.helm.sh/helm-{tag}-linux-amd64.tar.gz"
         sha256_var: helm_sha256
         checksums: "{url}.sha256sum"
+  anki:
+    type: github-release
+    repo: ankitects/anki
+    version_var: anki_version
+    artifacts:
+      - {asset: "anki-{tag}-linux-x86_64.tar.zst", sha256_var: anki_sha256, checksums: github-digest}
   act:
     type: github-release
     repo: nektos/act
@@ -357,6 +372,10 @@ nikos_pin_sources:
     repo: microsoft/BitNet
     branch: main
     commit_var: bitnet_commit
+  netdata_key:
+    type: apt-key
+    url: https://repo.netdata.cloud/netdatabot.gpg.key
+    fingerprints_var: netdata_key_fingerprints
   vscode_key:
     type: apt-key
     url: https://packages.microsoft.com/keys/microsoft.asc

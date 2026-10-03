@@ -47,7 +47,7 @@ nikos/
 │   └── test_github_wizard.py       # pytest tests for the first-login wizard
 └── .github/workflows/
     ├── lint.yml                    # ansible-lint + shellcheck + pytest on every PR
-    ├── test.yml                    # --check dry-run on Ubuntu 24.04 Docker
+    ├── test.yml                    # --check dry-run on Ubuntu 22.04, 24.04, 26.04
     └── release.yml                 # GitHub Release on tag push (X.Y.Z)
 ```
 
@@ -159,6 +159,6 @@ Strict semver `X.Y.Z` with no `v` prefix. Keep `VERSION`, README, and CHANGELOG 
 | Workflow | Trigger | Checks |
 |---|---|---|
 | `lint.yml` | Every PR + push to main/dev | ansible-lint, shellcheck, pytest |
-| `test.yml` | Every PR + push to main | ansible-playbook --check on Ubuntu 24.04 |
+| `test.yml` | Every PR + push to main | ansible-playbook --check on Ubuntu 22.04, 24.04 and 26.04 runners |
 | `release-tag-gate.yml` | Every PR | Blocks duplicate release tags for release PRs to main |
 | `release.yml` | Tag push (`X.Y.Z`) | Creates GitHub Release with changelog |
