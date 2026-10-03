@@ -179,6 +179,11 @@ ollama_optional_models: >-
 # time; `nikos update` moves an existing clone to it. Set a release such as
 # "0.10.3" in vars/local.yml to pin. Never main: only tagged releases install.
 distrodeck_version: "latest"
+# Where NikOS keeps the tool repositories it clones and builds (distrodeck,
+# image-view, git-lantern, ai-runner, bitnet.cpp). Per user, no root: the tools
+# build as the user. Not ~/Projects, which is the user's own workspace, and not
+# under ~/.local/share/nikos, which is the NikOS git checkout itself.
+nikos_tools_dir: "{{ nikos_home }}/.local/share/nikos-tools"
 # Where the dev-tools role clones and resolves distrodeck from (tests point it
 # at a local repository). install.sh reads its catalog preview from GitHub.
 distrodeck_repo_url: "https://github.com/nikolareljin/distrodeck.git"

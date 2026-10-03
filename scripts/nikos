@@ -561,7 +561,11 @@ _playbook() {
 
 # The distrodeck NikOS installed, or the one on PATH.
 _distrodeck_bin() {
-  if [[ -x "${HOME}/Projects/distrodeck/distrodeck" ]]; then
+  # NikOS now clones into nikos-tools; ~/Projects covers a machine
+  # whose playbook has not run since.
+  if [[ -x "${HOME}/.local/share/nikos-tools/distrodeck/distrodeck" ]]; then
+    printf '%s\n' "${HOME}/.local/share/nikos-tools/distrodeck/distrodeck"
+  elif [[ -x "${HOME}/Projects/distrodeck/distrodeck" ]]; then
     printf '%s\n' "${HOME}/Projects/distrodeck/distrodeck"
   else
     command -v distrodeck

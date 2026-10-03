@@ -83,12 +83,12 @@ def _run_distrodeck_clone_tasks(tmp_path: Path, *, clone_exists: bool) -> subpro
         encoding="utf-8",
     )
     if clone_exists:
-        (tmp_path / "Projects" / "distrodeck" / ".git").mkdir(parents=True)
+        (tmp_path / "tools" / "distrodeck" / ".git").mkdir(parents=True)
     bin_dir = _fake_git(tmp_path, "exit 128\n")
     return subprocess.run(
         [
             "ansible-playbook", "play.yml", "-i", "localhost,",
-            "-e", f"nikos_home={tmp_path}", "-e", "distrodeck_version=latest",
+            "-e", f"nikos_home={tmp_path}", "-e", f"nikos_tools_dir={tmp_path}/tools", "-e", "distrodeck_version=latest",
             "-e", "nikos_update_mode=true", "-e", "distrodeck_repo_url=https://example.invalid/dd.git",
         ],
         cwd=tmp_path, capture_output=True, text=True, timeout=120,
@@ -101,7 +101,7 @@ def test_offline_update_keeps_an_existing_clone_and_warns(tmp_path: Path) -> Non
     result = _run_distrodeck_clone_tasks(tmp_path, clone_exists=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "keeping" in result.stdout and "the existing clone" in result.stdout
-    assert (tmp_path / "Projects" / "distrodeck" / ".git").is_dir()
+    assert (tmp_path / "tools" / "distrodeck" / ".git").is_dir()
     assert re.search(r"TASK \[Clone distrodeck\][^\n]*\n[^\n]*skipping", result.stdout), result.stdout
 
 
@@ -150,7 +150,7 @@ def _run_real_clone_tasks(tmp_path: Path, origin: Path, update_mode: bool) -> su
     return subprocess.run(
         [
             "ansible-playbook", "play.yml", "-i", "localhost,",
-            "-e", f"nikos_home={tmp_path}", "-e", "distrodeck_version=latest",
+            "-e", f"nikos_home={tmp_path}", "-e", f"nikos_tools_dir={tmp_path}/tools", "-e", "distrodeck_version=latest",
             "-e", f"distrodeck_repo_url={origin}", "-e", f"nikos_update_mode={update_mode}",
         ],
         cwd=tmp_path, capture_output=True, text=True, timeout=120,
@@ -165,7 +165,7 @@ def test_an_existing_clone_moves_to_the_newest_release(
 ) -> None:
     assert shutil.which("ansible-playbook"), "ansible-playbook is required"
     origin = _origin_with_releases(tmp_path)
-    clone = tmp_path / "Projects" / "distrodeck"
+    clone = tmp_path / "tools" / "distrodeck"
     clone.parent.mkdir()
     _git("clone", "-q", "--branch", "0.1.0", str(origin), str(clone), cwd=tmp_path)
     if dirty:
@@ -182,7 +182,7 @@ def test_a_first_clone_takes_the_newest_release_not_main(tmp_path: Path) -> None
     origin = _origin_with_releases(tmp_path)
     result = _run_real_clone_tasks(tmp_path, origin, False)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert _git("describe", "--tags", "--exact-match", cwd=tmp_path / "Projects" / "distrodeck") == "0.2.0"
+    assert _git("describe", "--tags", "--exact-match", cwd=tmp_path / "tools" / "distrodeck") == "0.2.0"
 
 
 # -- Ollama ------------------------------------------------------------------

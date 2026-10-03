@@ -141,7 +141,7 @@ than a version NikOS pins:
   requests an hour) or the installed version cannot be read, Ollama is left as
   it is and the run says so.
 - **distrodeck.** `distrodeck_version: latest` (the default) moves
-  `~/Projects/distrodeck` to the newest `X.Y.Z` release tag. Set a release,
+  `~/.local/share/nikos-tools/distrodeck` to the newest `X.Y.Z` release tag. Set a release,
   e.g. `distrodeck_version: "0.10.3"`, in `vars/local.yml` to pin it. Offline,
   or when the clone has uncommitted edits to tracked files, the existing clone
   is kept and the run prints a warning.

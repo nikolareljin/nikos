@@ -12,7 +12,7 @@
 - name: Clone BitNet.cpp
   ansible.builtin.git:
     repo: https://github.com/microsoft/BitNet.git
-    dest: "{{ nikos_home }}/Projects/bitnet.cpp"
+    dest: "{{ nikos_tools_dir }}/bitnet.cpp"
     version: main
     update: false
   when: not ansible_check_mode
@@ -26,7 +26,7 @@
 - name: Check whether the BitNet.cpp build is configured to build the CLI
   ansible.builtin.command: >
     grep -q '^LLAMA_BUILD_TOOLS:BOOL=ON'
-    {{ nikos_home }}/Projects/bitnet.cpp/build/CMakeCache.txt
+    {{ nikos_tools_dir }}/bitnet.cpp/build/CMakeCache.txt
   register: bitnet_tools_configured
   changed_when: false
   failed_when: false
@@ -41,7 +41,7 @@
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
     -DLLAMA_BUILD_COMMON=ON -DLLAMA_BUILD_TOOLS=ON
   args:
-    chdir: "{{ nikos_home }}/Projects/bitnet.cpp"
+    chdir: "{{ nikos_tools_dir }}/bitnet.cpp"
   changed_when: true
   when:
     - not ansible_check_mode
@@ -50,13 +50,13 @@
 - name: Build BitNet.cpp
   ansible.builtin.command: cmake --build build --config Release -j
   args:
-    chdir: "{{ nikos_home }}/Projects/bitnet.cpp"
-    creates: "{{ nikos_home }}/Projects/bitnet.cpp/build/bin/llama-cli"
+    chdir: "{{ nikos_tools_dir }}/bitnet.cpp"
+    creates: "{{ nikos_tools_dir }}/bitnet.cpp/build/bin/llama-cli"
   when: not ansible_check_mode
 
 # The CLI is installed away from the build tree, not linked back into it.
 # llama-cli is built with a RUNPATH holding the build directory's absolute
-# path, so a bare copy resolved its libraries out of ~/Projects/bitnet.cpp and
+# path, so a bare copy resolved its libraries out of the bitnet.cpp checkout and
 # broke whenever that tree moved, was cleaned, or belonged to a different home.
 # Binary and libraries are copied into a prefix of their own instead, and the
 # build tree is then only needed to rebuild.

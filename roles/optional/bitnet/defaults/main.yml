@@ -3,4 +3,4 @@
 # apart from the build tree so the command does not depend on it.
 bitnet_prefix: /usr/local/lib/nikos/bitnet
 
-bitnet_build_bin: "{{ nikos_home }}/Projects/bitnet.cpp/build/bin"
+bitnet_build_bin: "{{ nikos_tools_dir }}/bitnet.cpp/build/bin"

@@ -1,7 +1,11 @@
 ---
-- name: Ensure Projects directory exists
+# NikOS-managed checkouts (distrodeck, image-view, git-lantern, ai-runner) live
+# in nikos_tools_dir, not ~/Projects: that is the user's workspace, and a
+# developer's own clone of one of these repos there made the playbook fail on
+# "Local modifications exist in the destination".
+- name: Ensure the NikOS tools directory exists
   ansible.builtin.file:
-    path: "{{ nikos_home }}/Projects"
+    path: "{{ nikos_tools_dir }}"
     state: directory
     mode: "0755"
 
@@ -25,14 +29,14 @@
 
 - name: Check for an existing distrodeck clone
   ansible.builtin.stat:
-    path: "{{ nikos_home }}/Projects/distrodeck/.git"
+    path: "{{ nikos_tools_dir }}/distrodeck/.git"
   register: dev_tools_distrodeck_clone
 
 - name: Stop when no distrodeck release can be resolved and none is cloned
   ansible.builtin.fail:
     msg: >-
       Could not read distrodeck's release tags (offline?) and there is no
-      clone at {{ nikos_home }}/Projects/distrodeck. Connect and re-run, or set
+      clone at {{ nikos_tools_dir }}/distrodeck. Connect and re-run, or set
       distrodeck_version to a release in vars/local.yml.
   when:
     - dev_tools_distrodeck_resolve.rc != 0
@@ -42,14 +46,14 @@
   ansible.builtin.debug:
     msg: >-
       Could not resolve distrodeck {{ distrodeck_version }} (offline?); keeping
-      the existing clone at {{ nikos_home }}/Projects/distrodeck as it is.
+      the existing clone at {{ nikos_tools_dir }}/distrodeck as it is.
   when: dev_tools_distrodeck_resolve.rc != 0
 
 # The git module refuses to check out over tracked edits and would fail the
 # whole update; keep an edited clone where it is and say so instead.
 - name: Check the distrodeck clone for local edits
   ansible.builtin.command:
-    argv: [git, -C, "{{ nikos_home }}/Projects/distrodeck", status, --porcelain, --untracked-files=no]
+    argv: [git, -C, "{{ nikos_tools_dir }}/distrodeck", status, --porcelain, --untracked-files=no]
   register: dev_tools_distrodeck_dirty
   changed_when: false
   failed_when: false
@@ -59,7 +63,7 @@
 - name: Warn that an edited distrodeck clone is not moved
   ansible.builtin.debug:
     msg: >-
-      {{ nikos_home }}/Projects/distrodeck has local edits; leaving it where it
+      {{ nikos_tools_dir }}/distrodeck has local edits; leaving it where it
       is rather than moving it to {{ dev_tools_distrodeck_resolve.stdout | trim }}.
       Commit, stash or discard them and re-run `nikos update`.
   when:
@@ -70,7 +74,7 @@
 - name: Clone distrodeck
   ansible.builtin.git:
     repo: "{{ distrodeck_repo_url }}"
-    dest: "{{ nikos_home }}/Projects/distrodeck"
+    dest: "{{ nikos_tools_dir }}/distrodeck"
     version: "{{ dev_tools_distrodeck_resolve.stdout | trim }}"
     update: "{{ (nikos_update_mode | bool) or not dev_tools_distrodeck_clone.stat.exists }}"
   when:
@@ -83,7 +87,7 @@
     mode: "0755"
     content: |
       #!/usr/bin/env bash
-      exec "{{ nikos_home }}/Projects/distrodeck/distrodeck" "$@"
+      exec "{{ nikos_tools_dir }}/distrodeck/distrodeck" "$@"
   become: true
   when: not ansible_check_mode
 
@@ -95,7 +99,7 @@
 - name: Check whether this distrodeck publishes a tool catalog
   ansible.builtin.command:
     argv:
-      - "{{ nikos_home }}/Projects/distrodeck/distrodeck"
+      - "{{ nikos_tools_dir }}/distrodeck/distrodeck"
       - install-tools
       - --list-catalog
       - --format
@@ -148,7 +152,7 @@
 - name: Install the selected distrodeck tools
   ansible.builtin.command:
     argv:
-      - "{{ nikos_home }}/Projects/distrodeck/distrodeck"
+      - "{{ nikos_tools_dir }}/distrodeck/distrodeck"
       - install-tools
       - --tools
       - "{{ dev_tools_selected | join(',') }}"
@@ -175,7 +179,7 @@
   when: (dev_tools_catalog.rc | default(1)) != 0
 
 - name: Install the default distrodeck tool set
-  ansible.builtin.command: "{{ nikos_home }}/Projects/distrodeck/distrodeck install-tools --all"
+  ansible.builtin.command: "{{ nikos_tools_dir }}/distrodeck/distrodeck install-tools --all"
   changed_when: false
   args:
     creates: "{{ nikos_home }}/.local/state/distrodeck/installed-tools.txt"
@@ -234,7 +238,7 @@
 # discard the user's own edits, which is what this must preserve.
 - name: Check whether the image-view build left Cargo.lock modified # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: git -C {{ nikos_home }}/Projects/image-view status --porcelain -- Cargo.lock
+    cmd: git -C {{ nikos_tools_dir }}/image-view status --porcelain -- Cargo.lock
   register: dev_tools_image_view_lock
   changed_when: false
   failed_when: false
@@ -245,7 +249,7 @@
 # discard the user's own edits, which is what this must preserve.
 - name: Restore the generated image-view Cargo.lock # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: git -C {{ nikos_home }}/Projects/image-view checkout -- Cargo.lock
+    cmd: git -C {{ nikos_tools_dir }}/image-view checkout -- Cargo.lock
   changed_when: true
   when:
     - not ansible_check_mode
@@ -255,7 +259,7 @@
 - name: Clone image-view
   ansible.builtin.git:
     repo: https://github.com/nikolareljin/image-view.git
-    dest: "{{ nikos_home }}/Projects/image-view"
+    dest: "{{ nikos_tools_dir }}/image-view"
     version: main
     update: "{{ nikos_update_mode | bool }}"
 
@@ -322,7 +326,7 @@
   register: dev_tools_image_view_bin
 
 - name: Build and install image-view
-  ansible.builtin.command: "{{ nikos_home }}/Projects/image-view/setup"
+  ansible.builtin.command: "{{ nikos_tools_dir }}/image-view/setup"
   changed_when: false
   environment:
     HOME: "{{ nikos_home }}"
@@ -342,7 +346,7 @@
     msg: >-
       image-view build failed (rc={{ dev_tools_image_view_result.rc | default('n/a') }}).
       It is optional — the rest of NikOS is fully installed.
-      To retry: cd {{ nikos_home }}/Projects/image-view && cargo build --release
+      To retry: cd {{ nikos_tools_dir }}/image-view && cargo build --release
       Error: {{ dev_tools_image_view_result.stderr | default('') | truncate(200) }}
   when:
     - not ansible_check_mode
@@ -373,7 +377,7 @@
 - name: Clone git-lantern
   ansible.builtin.git:
     repo: https://github.com/nikolareljin/git-lantern.git
-    dest: "{{ nikos_home }}/Projects/git-lantern"
+    dest: "{{ nikos_tools_dir }}/git-lantern"
     version: main
     update: "{{ nikos_update_mode | bool }}"
     recursive: false
@@ -391,7 +395,7 @@
 
 - name: Build and install git-lantern for the NikOS user
   ansible.builtin.command: >
-    {{ nikos_home }}/Projects/git-lantern/install
+    {{ nikos_tools_dir }}/git-lantern/install
     --prefix {{ nikos_home }}/.local/opt/git-lantern
     --bin-link {{ nikos_home }}/.local/bin/lantern
   changed_when: false
@@ -411,7 +415,7 @@
 - name: Clone ai-runner
   ansible.builtin.git:
     repo: https://github.com/nikolareljin/ai-runner.git
-    dest: "{{ nikos_home }}/Projects/ai-runner"
+    dest: "{{ nikos_tools_dir }}/ai-runner"
     version: main
     update: "{{ nikos_update_mode | bool }}"
   tags: [ai-runner]
