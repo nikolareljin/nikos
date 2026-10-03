@@ -36,7 +36,9 @@ miniforge_url: "https://github.com/conda-forge/miniforge/releases/download/{{ mi
 # -- Python packages in the nikos-ai conda env (ai-stack, agent-dev, optional DB roles)
 # PyPI (torch, torchvision, torchaudio from download.pytorch.org/whl/cpu).
 # Exact versions, resolved per install group for Python 3.13 with
-# `uv pip compile`; bump them together, not one at a time.
+# `uv pip compile`; bump them together, not one at a time. vars/local.yml
+# replaces this whole mapping: list every package in an override, or one left
+# out is installed at PyPI's newest when it is missing.
 nikos_pip_pins:
   torch: "2.14.1"
   torchvision: "0.29.1"
