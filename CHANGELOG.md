@@ -27,6 +27,12 @@ All notable changes to NikOS are documented here.
 - **All pins live in `vars/versions.yml`**, one entry per dependency with its
   version, sha256 / commit / fingerprint and source. `site.yml` loads it after
   `vars/main.yml`; `vars/local.yml` still overrides.
+- **Nothing is downloaded to a fixed `/tmp` path.** Root steps use
+  `/var/lib/nikos/downloads` and user steps `~/.cache/nikos/downloads`, both
+  0700, and apt keys are fetched, checked and dearmored as root in
+  `/var/lib/nikos/keys`. At a predictable `/tmp` path another local user could
+  plant a file with the right checksum, which `get_url` then skips
+  downloading, and swap it before it is run or unpacked by root.
 - **`nikos update` never downgrades.** A pin is the exact version for a new
   install and a minimum for an existing one: a newer tool, Python package or
   checkout is left alone and the run says so (`roles/pin-gate`).
