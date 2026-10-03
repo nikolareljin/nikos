@@ -233,3 +233,47 @@ def test_every_real_source_entry_is_understood() -> None:
         for art in src.get("artifacts", []):
             url = bump.Pins(versions, FakeHttp({}), 3).artifact_url(src, art, bump.current_of(versions, src))
             assert url.startswith("https://") and "{" not in url, (name, url)
+
+
+def _gpg_key(tmp_path: Path, name: str):
+    import os
+    import subprocess
+    home = tmp_path / f"gnupg-{name}"
+    home.mkdir(mode=0o700)
+    env = {**os.environ, "GNUPGHOME": str(home)}
+    subprocess.run(["gpg", "--batch", "--passphrase", "", "--quick-gen-key", f"{name} <{name}@example.invalid>",
+                    "ed25519", "sign", "never"], env=env, check=True, capture_output=True)
+    listing = subprocess.run(["gpg", "--batch", "--with-colons", "--list-keys"], env=env, check=True,
+                             capture_output=True, text=True).stdout
+    fpr = next(line.split(":")[9] for line in listing.splitlines() if line.startswith("fpr"))
+    key = subprocess.run(["gpg", "--batch", "--armor", "--export", fpr], env=env, check=True,
+                         capture_output=True).stdout
+
+    def sign(data: bytes) -> bytes:
+        return subprocess.run(["gpg", "--batch", "--detach-sign", "-u", fpr, "-o", "-"], input=data, env=env,
+                              check=True, capture_output=True).stdout
+
+    return key, fpr, sign
+
+
+@pytest.mark.skipif(not __import__("shutil").which("gpg"), reason="gpg is required")
+@pytest.mark.parametrize("case", ["good", "wrong-key", "tampered"])
+def test_a_claude_manifest_is_trusted_only_when_signed_by_the_pinned_key(tmp_path: Path, case: str) -> None:
+    key, fpr, sign = _gpg_key(tmp_path, "release")
+    other_key, other_fpr, other_sign = _gpg_key(tmp_path, "other")
+    binary = b"claude binary"
+    manifest = json.dumps({"platforms": {"linux-x64": {"checksum": sha(binary)}}}).encode()
+    sig = (other_sign if case == "wrong-key" else sign)(manifest)
+    served = manifest.replace(b"}}}", b"}}, \"x\": 1}") if case == "tampered" else manifest
+    base = "https://downloads.claude.ai/claude-code-releases/9.9.9"
+    http = FakeHttp({f"{base}/manifest.json": served, f"{base}/manifest.json.sig": sig,
+                     "https://downloads.claude.ai/keys/claude-code.asc": key, f"{base}/linux-x64/claude": binary})
+    versions = {"claude_code_key_fingerprints": [fpr]}
+    src = {"type": "npm", "package": "x", "artifacts": [
+        {"url": base.replace("9.9.9", "{version}") + "/linux-x64/claude", "sha256_var": "s", "checksums": "claude-manifest"}]}
+    p = bump.Pins(versions, http, 3)
+    if case == "good":
+        assert p.hash_artifacts(src, "9.9.9", require_vendor=True).values == {"s": sha(binary)}
+    else:
+        with pytest.raises(bump.ChecksumMismatch):
+            p.hash_artifacts(src, "9.9.9", require_vendor=True)

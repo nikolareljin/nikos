@@ -44,8 +44,9 @@ All notable changes to NikOS are documented here.
 ### Added
 - **`scripts/bump-versions.py`**: `--check` lists each pin against the newest
   release at least 3 days old, `--bump NAME` moves a pin and records the new
-  sha256 after cross-checking the vendor's sums file, and `--verify`
-  re-downloads every pin and compares. See docs/development.md.
+  sha256 after cross-checking the vendor's sums file (for Claude Code, its
+  manifest signed by the pinned release key), and `--verify` re-downloads
+  every pin and compares. See docs/development.md.
 
 ## [0.8.1] - 2026-10-02
 

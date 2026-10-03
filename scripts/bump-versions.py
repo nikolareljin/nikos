@@ -61,6 +61,10 @@ class NotFound(NetError):
     """HTTP 404: the pinned thing does not exist upstream (a verify failure)."""
 
 
+class ChecksumMismatch(Exception):
+    """The download does not match the vendor's checksum or signature: exit 1."""
+
+
 class Http:
     """The only thing that touches the network; tests replace it."""
 
@@ -158,6 +162,25 @@ def gpg_fingerprints(key: bytes) -> list[str]:
             fprs.append(fields[9].upper())
             primary = False
     return sorted(set(fprs))
+
+
+def gpg_signed_by(data: bytes, sig: bytes, key: bytes, fingerprints: list[str]) -> bool:
+    """True when `sig` is a good signature over `data` by a key in `key`
+    whose primary fingerprint is one of `fingerprints`."""
+    if gpg_fingerprints(key) != sorted(f.upper() for f in fingerprints):
+        return False
+    with tempfile.TemporaryDirectory() as home:
+        env = {**os.environ, "GNUPGHOME": home}
+        paths = {}
+        for name, blob in (("key", key), ("data", data), ("sig", sig)):
+            paths[name] = os.path.join(home, name)
+            with open(paths[name], "wb") as handle:
+                handle.write(blob)
+        subprocess.run(["gpg", "--batch", "--import", paths["key"]], env=env, capture_output=True)
+        out = subprocess.run(["gpg", "--batch", "--status-fd", "1", "--verify", paths["sig"], paths["data"]],
+                             env=env, capture_output=True, text=True)
+    valid = [line.split()[-1].upper() for line in out.stdout.splitlines() if line.startswith("[GNUPG:] VALIDSIG")]
+    return out.returncode == 0 and any(f in [x.upper() for x in fingerprints] for f in valid)
 
 
 # -- reading and rewriting vars/versions.yml -----------------------------------
@@ -318,8 +341,14 @@ class Pins:
             digest = next((a.get("digest") or "" for a in rel.get("assets", []) if a["name"] == asset), "")
             return digest.split(":", 1)[1] if digest.startswith("sha256:") else None
         if spec == "claude-manifest":
-            manifest = self.http.json(f"https://downloads.claude.ai/claude-code-releases/{version}/manifest.json")
-            return manifest["platforms"]["linux-x64"]["checksum"].lower()
+            # The manifest's own signature is checked first, against the
+            # release key pinned as claude_code_key_fingerprints.
+            base = f"https://downloads.claude.ai/claude-code-releases/{version}"
+            body, sig = self.http.get(f"{base}/manifest.json"), self.http.get(f"{base}/manifest.json.sig")
+            key = self.http.get("https://downloads.claude.ai/keys/claude-code.asc")
+            if not gpg_signed_by(body, sig, key, self.v["claude_code_key_fingerprints"]):
+                raise ChecksumMismatch(f"{base}/manifest.json is not signed by the pinned Claude Code key")
+            return json.loads(body)["platforms"]["linux-x64"]["checksum"].lower()
         target = fill(spec, version=version, tag=tag, asset=asset, url=url)
         if "://" not in target:
             target = f"https://github.com/{src['repo']}/releases/download/{tag}/{target}"
@@ -581,7 +610,7 @@ def cmd_verify(pins: Pins, sources: dict) -> int:
     for name, src in sources.items():
         try:
             problems = pins.verify(name, src)
-        except NotFound as exc:
+        except (NotFound, ChecksumMismatch) as exc:
             problems = [str(exc)]
         shown = src["type"] if src["type"] == "pypi-map" else current_of(pins.v, src)
         print(f"{name}: {'ok' if not problems else 'FAIL'} ({shown})")
@@ -628,10 +657,6 @@ def plan_bump(pins: Pins, name: str, src: dict) -> tuple[dict, str]:
             return {}, f"{newest.version} available; {hashed.manual}"
         values.update(hashed.values)
     return values, f"{current} -> {newest.version}"
-
-
-class ChecksumMismatch(Exception):
-    """The download does not match the vendor's checksum: exit 1."""
 
 
 def cmd_bump(pins: Pins, sources: dict, run_tests: bool, path: Path = VERSIONS) -> int:

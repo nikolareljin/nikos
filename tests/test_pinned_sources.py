@@ -204,7 +204,8 @@ def test_every_pin_has_a_source_entry_and_is_used() -> None:
     assert set(versions) - covered - derived == set()
     # Each pin is read somewhere: a task, install.sh, or another pin's value
     # (miniforge_url uses miniforge_version).
-    used = "\n".join(p.read_text(encoding="utf-8") for p in TASK_FILES + [REPO / "install.sh"])
+    used = "\n".join(p.read_text(encoding="utf-8")
+                     for p in TASK_FILES + [REPO / "install.sh", REPO / "scripts" / "bump-versions.py"])
     head = VERSIONS.read_text(encoding="utf-8").split("nikos_pin_sources:")[0]
     used += "\n".join(line.split(":", 1)[1] for line in head.splitlines()
                       if re.match(r"^\w+:", line) and ":" in line)

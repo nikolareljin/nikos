@@ -97,9 +97,13 @@ openclaw_version: "2026.8.33"
 
 # -- Claude Code (roles/agent-dev) --------------------------------------------
 # downloads.claude.ai native build; sha256 from that release's manifest.json,
-# whose manifest.json.sig is signed by 31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE.
+# whose manifest.json.sig is signed by the key below.
 claude_code_version: "2.1.285"
 claude_code_sha256: "33dad1ec615a2e08cc78b494f05c110e49916de2c79d78ec8799ebf46b233d29"
+# The release key that signs manifest.json; fingerprint from code.claude.com/docs
+# (setup), checked by scripts/bump-versions.py before it trusts a manifest.
+claude_code_key_fingerprints:
+  - "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE"
 
 # -- Fabric (roles/optional/fabric) -------------------------------------------
 # Go module tag; go install checks it against sum.golang.org.
@@ -199,8 +203,9 @@ ansible_ppa_key_fingerprints:
 #   commit_var    github-tag / github-commit: variable holding the commit
 #   digest_var    docker-image: variable holding the image digest
 #   url, fingerprints_var
-#                 apt-key: key URL (may use {var} from this file) and the list
-#                 variable of expected fingerprints; never changed by the tool
+#                 apt-key (any pinned signing key): key URL (may use {var} from
+#                 this file) and the list variable of expected fingerprints;
+#                 never changed by the tool
 nikos_pin_sources:
   ollama:
     type: github-release
@@ -370,3 +375,7 @@ nikos_pin_sources:
     type: apt-key
     url: "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x6125E2A8C77F2818FB7BD15B93C4A3FD7BB9C367"
     fingerprints_var: ansible_ppa_key_fingerprints
+  claude_code_key:
+    type: apt-key
+    url: https://downloads.claude.ai/keys/claude-code.asc
+    fingerprints_var: claude_code_key_fingerprints
