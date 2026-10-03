@@ -191,17 +191,28 @@ _create_become_password_file() {
 }
 
 _os_release_value() {
-  local key="$1"
-  local line value
+  local key="$1" file="${NIKOS_OS_RELEASE_FILE:-/etc/os-release}"
+  local line name value
 
-  [[ -r /etc/os-release ]] || return 1
-  while IFS='=' read -r line value; do
-    [[ "${line}" == "${key}" ]] || continue
-    value="${value%\"}"
-    value="${value#\"}"
+  [[ -r "${file}" ]] || return 1
+  # `|| [[ -n "${line}" ]]` keeps a last line that has no newline: read
+  # returns false on it, and VERSION_ID is often that line. CR, surrounding
+  # spaces and either quote style are stripped, so 'x', "x" and x all match.
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    [[ "${line}" == *=* ]] || continue
+    name="${line%%=*}"
+    name="${name//[[:space:]]/}"
+    [[ "${name}" == "${key}" ]] || continue
+    value="${line#*=}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    if [[ "${value}" == \"*\" || "${value}" == \'*\' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
     printf '%s\n' "${value}"
     return 0
-  done < /etc/os-release
+  done < "${file}"
 
   return 1
 }
@@ -634,11 +645,13 @@ if _can_use_dialog; then
     --infobox "Checking system requirements..." 5 52 || true
 fi
 if ! _is_supported_ubuntu_system || ! command -v apt-get &>/dev/null; then
+  _found_os="ID=$(_os_release_value ID || echo '?') VERSION_ID=$(_os_release_value VERSION_ID || echo '?')"
+  command -v apt-get &>/dev/null || _found_os="${_found_os}, no apt-get"
   if _can_use_dialog; then
     dialog --title "Error" \
-      --msgbox "NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." 7 56 0</dev/tty
+      --msgbox "NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS.\n\nFound: ${_found_os}" 9 64 0</dev/tty
   fi
-  echo "ERROR: NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS." >&2
+  echo "ERROR: NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS (found: ${_found_os})." >&2
   exit 1
 fi
 
