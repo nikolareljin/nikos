@@ -6,32 +6,53 @@
     mode: "0755"
   become: true
 
+- name: Create the root-only key staging directory
+  ansible.builtin.file:
+    path: "{{ nikos_key_staging_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  # The downloads below run in check mode too, so the directory must exist.
+  check_mode: false
+
 - name: Download Kubernetes apt key
   ansible.builtin.get_url:
     url: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_apt_version }}/deb/Release.key"
-    dest: /tmp/kubernetes-apt-release.key
+    dest: "{{ nikos_key_staging_dir }}/kubernetes-apt-release.key"
     mode: "0644"
     force: true
   check_mode: false
+  become: true
 
 # Checked against kubernetes_key_fingerprints in vars/versions.yml before apt
-# trusts it. Dearmored to /tmp and copied rather than written behind a
+# trusts it. Dearmored in the staging directory and copied rather than written behind a
 # `creates:` guard, which kept whatever keyring an earlier run left there.
 - name: Verify the Kubernetes apt key fingerprint
   ansible.builtin.command:
-    argv: "{{ [playbook_dir ~ '/scripts/verify-key-fingerprint.sh', '/tmp/kubernetes-apt-release.key'] + kubernetes_key_fingerprints }}"
+    argv: "{{ [playbook_dir ~ '/scripts/verify-key-fingerprint.sh', nikos_key_staging_dir ~ '/kubernetes-apt-release.key'] + kubernetes_key_fingerprints }}"
   changed_when: false
   check_mode: false
+  become: true
 
 - name: Dearmor the Kubernetes apt key
   ansible.builtin.command:
-    argv: [gpg, --batch, --yes, --dearmor, -o, /tmp/kubernetes-apt-keyring.gpg, /tmp/kubernetes-apt-release.key]
+    argv:
+      - gpg
+      - --batch
+      - --yes
+      - --dearmor
+      - -o
+      - "{{ nikos_key_staging_dir }}/kubernetes-apt-keyring.gpg"
+      - "{{ nikos_key_staging_dir }}/kubernetes-apt-release.key"
   changed_when: false
   check_mode: false
+  become: true
 
 - name: Install the Kubernetes apt key
   ansible.builtin.copy:
-    src: /tmp/kubernetes-apt-keyring.gpg
+    src: "{{ nikos_key_staging_dir }}/kubernetes-apt-keyring.gpg"
     remote_src: true
     dest: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
     mode: "0644"

@@ -1,23 +1,36 @@
 ---
-# Downloaded to /tmp, checked against github_cli_key_fingerprints in
+# Downloaded to the root-only staging directory, checked against github_cli_key_fingerprints in
 # vars/versions.yml, and only then installed where apt trusts it.
+- name: Create the root-only key staging directory
+  ansible.builtin.file:
+    path: "{{ nikos_key_staging_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  # The downloads below run in check mode too, so the directory must exist.
+  check_mode: false
+
 - name: Download the GitHub CLI apt key
   ansible.builtin.get_url:
     url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
-    dest: /tmp/githubcli-archive-keyring.gpg
+    dest: "{{ nikos_key_staging_dir }}/githubcli-archive-keyring.gpg"
     mode: "0644"
     force: true
   check_mode: false
+  become: true
 
 - name: Verify the GitHub CLI apt key fingerprint
   ansible.builtin.command:
-    argv: "{{ [playbook_dir ~ '/scripts/verify-key-fingerprint.sh', '/tmp/githubcli-archive-keyring.gpg'] + github_cli_key_fingerprints }}"
+    argv: "{{ [playbook_dir ~ '/scripts/verify-key-fingerprint.sh', nikos_key_staging_dir ~ '/githubcli-archive-keyring.gpg'] + github_cli_key_fingerprints }}"
   changed_when: false
   check_mode: false
+  become: true
 
 - name: Install the GitHub CLI apt key
   ansible.builtin.copy:
-    src: /tmp/githubcli-archive-keyring.gpg
+    src: "{{ nikos_key_staging_dir }}/githubcli-archive-keyring.gpg"
     remote_src: true
     dest: /usr/share/keyrings/githubcli-archive-keyring.gpg
     mode: "0644"

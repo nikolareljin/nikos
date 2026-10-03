@@ -182,6 +182,9 @@ ollama_optional_models: >-
 # true: when an NVIDIA GPU has no loaded driver, install Ubuntu's recommended
 # one (ubuntu-drivers install, signed Ubuntu archive). false: leave GPU drivers alone.
 nikos_nvidia_drivers: true
+# apt signing keys are downloaded, fingerprint-checked and dearmored here, not in
+# /tmp, which every local user can write to. Root-only (0700).
+nikos_key_staging_dir: /var/lib/nikos/keys
 nikos_tools_dir: "{{ nikos_home }}/.local/share/nikos-tools"
 # Where the dev-tools role clones and resolves distrodeck from (tests point it
 # at a local repository). install.sh reads its catalog preview from GitHub.

@@ -462,3 +462,15 @@ _upgrade_ansible
         assert result.returncode == 1
         assert "not the pinned" in result.stderr
         assert "apt-get install -y ansible" not in calls and "ansible-ppa.gpg" not in calls
+
+
+def test_apt_keys_are_staged_root_only_not_in_tmp():
+    # /tmp is writable by every local user; a key verified there and trusted
+    # in a later step is not the same guarantee as one in a 0700 root dir.
+    import re as _re
+    for path in sorted((REPO / "roles").glob("**/tasks/*.yml")):
+        text = path.read_text(encoding="utf-8")
+        if "verify-key-fingerprint.sh" not in text:
+            continue
+        assert not _re.search(r"/tmp/[\w.-]*(\.asc|\.gpg|\.key|Release\.key)\b", text), path
+        assert "nikos_key_staging_dir" in text, path
