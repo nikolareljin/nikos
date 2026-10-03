@@ -1,8 +1,8 @@
 ---
 # MongoDB Community from the vendor's apt repository. Ubuntu ships no MongoDB
-# server package. 8.2 is the series distrodeck uses; its noble repository has
-# mongodb-org, mongodb-mongosh and mongodb-atlas-cli, and its Release file is
-# signed with the 8.0 key (4B0752C1...4E7DCA05). The 9.0 noble repository has
+# server package. 8.2 is the series distrodeck uses; its jammy and noble
+# repositories have mongodb-org, mongodb-mongosh and mongodb-atlas-cli, and
+# their Release files are signed with the 8.0 key (4B0752C1...4E7DCA05). The 9.0 noble repository has
 # no mongodb-atlas-cli.
 #
 # The key is checked against mongodb_key_fingerprints in vars/versions.yml

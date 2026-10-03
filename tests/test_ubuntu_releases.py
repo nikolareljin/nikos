@@ -97,3 +97,27 @@ def test_mongodb_is_skipped_with_a_message_where_the_vendor_has_no_repository(tm
     assert run.returncode == 0, out
     assert "mongodb is not available on Ubuntu 26.04: MongoDB publishes no repository for resolute" in out
     assert "Download the MongoDB repository signing key" not in out
+
+
+@pytest.mark.skipif(shutil.which("ansible-playbook") is None, reason="ansible-playbook not installed")
+@pytest.mark.parametrize(
+    "distribution,version,ok",
+    [("Ubuntu", "22.04", True), ("Ubuntu", "26.04", True), ("Ubuntu", "20.04", False),
+     ("Debian", "24.04", False)],
+)
+def test_the_play_refuses_an_unsupported_release(tmp_path, distribution, version, ok):
+    site = yaml.safe_load((REPO / "site.yml").read_text(encoding="utf-8"))
+    task = next(t for t in site[0]["pre_tasks"] if t["name"] == "Check this is a supported Ubuntu release")
+    playbook = tmp_path / "play.yml"
+    playbook.write_text(yaml.safe_dump([{
+        "hosts": "localhost", "gather_facts": False,
+        "vars_files": [str(REPO / "vars/main.yml")], "tasks": [task],
+    }]))
+    run = subprocess.run(
+        ["ansible-playbook", "-i", "localhost,", "-c", "local", str(playbook),
+         "-e", json.dumps({"ansible_facts": {"distribution": distribution, "distribution_version": version}})],
+        capture_output=True, text=True, cwd=REPO,
+    )
+    assert (run.returncode == 0) == ok, run.stdout + run.stderr
+    if not ok:
+        assert f"this is {distribution} {version}" in run.stdout

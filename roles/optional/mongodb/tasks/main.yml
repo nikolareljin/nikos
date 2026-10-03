@@ -1,6 +1,6 @@
 ---
 # repo.mongodb.org publishes one repository per Ubuntu codename. Releases it
-# has none for (mongodb_repo_codenames in vars/versions.yml) skip the bundle
+# has none for (mongodb_repo_codenames in vars/main.yml) skip the bundle
 # rather than borrow another release's repository.
 - name: Report MongoDB as unavailable on this release
   ansible.builtin.debug:

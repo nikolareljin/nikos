@@ -12,6 +12,9 @@ All notable changes to NikOS are documented here.
   vendor repository / no archive package); 22.04 gets PostgreSQL without
   pgvector. The ISO stays Xubuntu 24.04.
 - The dry-run CI job runs on ubuntu-22.04, ubuntu-24.04 and ubuntu-26.04.
+- `site.yml` stops with a clear message on an unsupported release, so
+  `nikos update` (which skips `install.sh`) fails early instead of on a
+  missing package name.
 
 ### Fixed
 - **The Ansible upgrade works on 22.04.** The PPA's ansible-core refused to
