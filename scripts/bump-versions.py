@@ -406,8 +406,25 @@ class Pins:
         meta = self.http.json(f"https://registry.npmjs.org/{urllib.parse.quote(src['package'], safe='@')}")
         times = meta.get("time", {})
         if src.get("dist_tag"):
-            version = meta.get("dist-tags", {}).get(src["dist_tag"])
-            return version if version and parse_time(times[version]) <= self.cutoff else None
+            tagged = meta.get("dist-tags", {}).get(src["dist_tag"])
+            if not tagged:
+                return None
+            if tagged in times and parse_time(times[tagged]) <= self.cutoff:
+                return tagged
+            # The channel's head is too new. Take the newest old-enough release
+            # on the same line (same first two version parts, not above the
+            # head): a daily-release channel would otherwise never be eligible.
+            line = tagged.split(".")[:2]
+            best = None
+            for version in meta.get("versions", {}):
+                if (is_prerelease(version) or version not in times
+                        or version.split(".")[:2] != line
+                        or vkey(version) > vkey(tagged)
+                        or parse_time(times[version]) > self.cutoff):
+                    continue
+                if best is None or vkey(version) > vkey(best):
+                    best = version
+            return best
         best = None
         for version in meta.get("versions", {}):
             if is_prerelease(version) or version not in times or parse_time(times[version]) > self.cutoff:

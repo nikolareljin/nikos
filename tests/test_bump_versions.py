@@ -277,3 +277,22 @@ def test_a_claude_manifest_is_trusted_only_when_signed_by_the_pinned_key(tmp_pat
     else:
         with pytest.raises(bump.ChecksumMismatch):
             p.hash_artifacts(src, "9.9.9", require_vendor=True)
+
+
+def test_a_dist_tag_head_too_new_falls_back_on_its_own_line(vfile: Path) -> None:
+    # openclaw's extended-stable channel publishes almost daily; returning
+    # nothing when the head is younger than the minimum age meant --bump never
+    # moved it. The fallback stays on the channel's line (2026.8.x), never
+    # crossing to the newer 2026.9 line or going above the head.
+    meta = {
+        "dist-tags": {"extended-stable": "2026.8.35", "latest": "2026.9.8"},
+        "time": {"2026.8.33": ago(6), "2026.8.34": ago(4), "2026.8.35": ago(1),
+                 "2026.9.7": ago(5), "2026.9.8": ago(1)},
+        "versions": {v: {} for v in ["2026.8.33", "2026.8.34", "2026.8.35", "2026.9.7", "2026.9.8"]},
+    }
+    http = FakeHttp({"https://registry.npmjs.org/openclaw": meta})
+    _, versions = bump.load(vfile)
+    p = bump.Pins(versions, http, 3)
+    assert p.newest_npm({"package": "openclaw", "dist_tag": "extended-stable"}) == "2026.8.34"
+    meta["time"]["2026.8.35"] = ago(10)
+    assert p.newest_npm({"package": "openclaw", "dist_tag": "extended-stable"}) == "2026.8.35"
