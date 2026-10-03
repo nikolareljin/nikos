@@ -13,6 +13,9 @@
     mode: "0700"
   become: false
   check_mode: false
+  # The downloads below are tagged one by one, not at the role level; this
+  # carries the same tags so a run limited to one of them still creates it.
+  tags: [ai-node, ai-gemini, openclaw]
 
 - name: Locate the Node on PATH
   ansible.builtin.command:

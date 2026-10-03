@@ -487,3 +487,22 @@ def test_no_role_downloads_to_a_fixed_tmp_path():
             if "/tmp" in line and not line.lstrip().startswith("#"):
                 hits.append(f"{path.relative_to(REPO)}:{n}")
     assert hits == [], hits
+
+
+def test_download_dir_tasks_run_under_a_single_tag():
+    # agent-dev and cloud-ai-cli tag their tasks one by one (ai-claude,
+    # ai-node...), not at the role level; an untagged directory task is skipped
+    # by `--tags ai-claude` and the download then has nowhere to go.
+    import yaml as _yaml
+    for rel in ("roles/agent-dev/tasks/main.yml", "roles/cloud-ai-cli/tasks/main.yml"):
+        tasks = _yaml.safe_load((REPO / rel).read_text(encoding="utf-8"))
+        task = next(t for t in tasks if t["name"] == "Create the private download directory")
+        # Same tags as its downloads, not `always`: always also runs (and
+        # changes the host) under unrelated tags such as a server-profile run.
+        users = set()
+        for t in tasks:
+            body = _yaml.safe_dump(t)
+            if "nikos_user_download_dir" in body and t is not task:
+                users |= set(t.get("tags", []))
+        assert users and users <= set(task.get("tags", [])), (rel, users, task.get("tags"))
+        assert "always" not in task.get("tags", []), rel
