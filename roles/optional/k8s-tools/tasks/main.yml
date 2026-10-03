@@ -1,4 +1,12 @@
 ---
+- name: Create the private download directory
+  ansible.builtin.file:
+    path: "{{ nikos_user_download_dir }}"
+    state: directory
+    mode: "0700"
+  become: false
+  check_mode: false
+
 - name: Ensure apt keyrings directory exists
   ansible.builtin.file:
     path: /etc/apt/keyrings
@@ -103,13 +111,13 @@
     - name: Download the Helm release archive
       ansible.builtin.get_url:
         url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
-        dest: "/tmp/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: "{{ nikos_user_download_dir }}/helm-{{ helm_version }}-linux-amd64.tar.gz"
         checksum: "sha256:{{ helm_sha256 }}"
         mode: "0644"
 
     - name: Unpack the Helm binary
       ansible.builtin.unarchive:
-        src: "/tmp/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        src: "{{ nikos_user_download_dir }}/helm-{{ helm_version }}-linux-amd64.tar.gz"
         dest: /usr/local/bin
         remote_src: true
         include: [linux-amd64/helm]

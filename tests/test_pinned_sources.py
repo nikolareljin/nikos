@@ -308,7 +308,8 @@ def test_act_installs_only_when_missing_or_older(tmp_path: Path, installed, expe
         old="act version 0.1.0", pin=f"act version {pin.lstrip('v')}", new="act version 9.0.0")
     _fake_tool(tmp_path / ".local" / "bin" / "act", out)
     result = _gate_play(tmp_path, upto + [{"ansible.builtin.debug": {"msg": "INSTALL={{ pin_gate_install }}"}}],
-                        {"nikos_home": str(tmp_path), "act_version": pin})
+                        {"nikos_home": str(tmp_path), "act_version": pin,
+                         "nikos_user_download_dir": str(tmp_path / "dl")})
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"INSTALL={expected}" in result.stdout, result.stdout
     if message:
@@ -474,3 +475,15 @@ def test_apt_keys_are_staged_root_only_not_in_tmp():
             continue
         assert not _re.search(r"/tmp/[\w.-]*(\.asc|\.gpg|\.key|Release\.key)\b", text), path
         assert "nikos_key_staging_dir" in text, path
+
+
+def test_no_role_downloads_to_a_fixed_tmp_path():
+    # get_url skips a file whose checksum already matches; at a fixed /tmp path
+    # another local user could plant that file and swap it after the check,
+    # before it is executed or unpacked (by root, for Ollama and Nordic).
+    hits = []
+    for path in sorted((REPO / "roles").glob("**/tasks/*.yml")):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "/tmp" in line and not line.lstrip().startswith("#"):
+                hits.append(f"{path.relative_to(REPO)}:{n}")
+    assert hits == [], hits

@@ -1,4 +1,12 @@
 ---
+- name: Create the private download directory
+  ansible.builtin.file:
+    path: "{{ nikos_user_download_dir }}"
+    state: directory
+    mode: "0700"
+  become: false
+  check_mode: false
+
 - name: Ensure local bin directory exists
   ansible.builtin.file:
     path: "{{ nikos_home }}/.local/bin"
@@ -33,13 +41,13 @@
     - name: Download the act release archive
       ansible.builtin.get_url:
         url: "https://github.com/nektos/act/releases/download/{{ act_version }}/act_Linux_x86_64.tar.gz"
-        dest: "/tmp/act_Linux_x86_64-{{ act_version }}.tar.gz"
+        dest: "{{ nikos_user_download_dir }}/act_Linux_x86_64-{{ act_version }}.tar.gz"
         checksum: "sha256:{{ act_sha256 }}"
         mode: "0644"
 
     - name: Unpack act
       ansible.builtin.unarchive:
-        src: "/tmp/act_Linux_x86_64-{{ act_version }}.tar.gz"
+        src: "{{ nikos_user_download_dir }}/act_Linux_x86_64-{{ act_version }}.tar.gz"
         dest: "{{ nikos_home }}/.local/bin"
         remote_src: true
         include: [act]

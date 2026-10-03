@@ -185,6 +185,15 @@ nikos_nvidia_drivers: true
 # apt signing keys are downloaded, fingerprint-checked and dearmored here, not in
 # /tmp, which every local user can write to. Root-only (0700).
 nikos_key_staging_dir: /var/lib/nikos/keys
+# Downloads go to private directories, never fixed /tmp paths: get_url skips a
+# file whose checksum already matches, so a file another local user planted in
+# /tmp could be swapped after the check and before it is run or unpacked.
+nikos_root_download_dir: /var/lib/nikos/downloads
+# An image build provisions /etc/skel as root: caching there would copy every
+# archive into each new user's home, so it uses the root directory instead.
+nikos_user_download_dir: >-
+  {{ nikos_root_download_dir if (nikos_image_build | default(false) | bool)
+     else nikos_home ~ '/.cache/nikos/downloads' }}
 nikos_tools_dir: "{{ nikos_home }}/.local/share/nikos-tools"
 # Where the dev-tools role clones and resolves distrodeck from (tests point it
 # at a local repository). install.sh reads its catalog preview from GitHub.

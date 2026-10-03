@@ -7,6 +7,24 @@
 
 # MainPID is 0 when the unit is stopped and the task fails when it does not
 # exist yet; both mean "no listener of ours".
+- name: Create the root-only download directory
+  ansible.builtin.file:
+    path: "{{ nikos_root_download_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  check_mode: false
+
+- name: Create the private download directory
+  ansible.builtin.file:
+    path: "{{ nikos_user_download_dir }}"
+    state: directory
+    mode: "0700"
+  become: false
+  check_mode: false
+
 - name: Read the Ollama service main PID
   ansible.builtin.systemd:
     name: ollama
@@ -152,14 +170,14 @@
     - name: Download the Ollama release archive
       ansible.builtin.get_url:
         url: "https://github.com/ollama/ollama/releases/download/{{ ollama_version }}/ollama-linux-amd64.tar.zst"
-        dest: "/tmp/ollama-linux-amd64-{{ ollama_version }}.tar.zst"
+        dest: "{{ nikos_root_download_dir }}/ollama-linux-amd64-{{ ollama_version }}.tar.zst"
         checksum: "sha256:{{ ollama_sha256 }}"
         mode: "0644"
 
     - name: Download the Ollama ROCm archive
       ansible.builtin.get_url:
         url: "https://github.com/ollama/ollama/releases/download/{{ ollama_version }}/ollama-linux-amd64-rocm.tar.zst"
-        dest: "/tmp/ollama-linux-amd64-rocm-{{ ollama_version }}.tar.zst"
+        dest: "{{ nikos_root_download_dir }}/ollama-linux-amd64-rocm-{{ ollama_version }}.tar.zst"
         checksum: "sha256:{{ ollama_rocm_sha256 }}"
         mode: "0644"
       when: ai_stack_amd_gpu.rc | default(1) == 0
@@ -172,13 +190,13 @@
 
     - name: Unpack Ollama into /usr/local
       ansible.builtin.command:
-        argv: [tar, --zstd, -xf, "/tmp/ollama-linux-amd64-{{ ollama_version }}.tar.zst", -C, /usr/local]
+        argv: [tar, --zstd, -xf, "{{ nikos_root_download_dir }}/ollama-linux-amd64-{{ ollama_version }}.tar.zst", -C, /usr/local]
       changed_when: true
       register: ai_stack_ollama_update
 
     - name: Unpack the Ollama ROCm runners into /usr/local
       ansible.builtin.command:
-        argv: [tar, --zstd, -xf, "/tmp/ollama-linux-amd64-rocm-{{ ollama_version }}.tar.zst", -C, /usr/local]
+        argv: [tar, --zstd, -xf, "{{ nikos_root_download_dir }}/ollama-linux-amd64-rocm-{{ ollama_version }}.tar.zst", -C, /usr/local]
       changed_when: true
       when: ai_stack_amd_gpu.rc | default(1) == 0
 
@@ -187,8 +205,8 @@
         path: "{{ item }}"
         state: absent
       loop:
-        - "/tmp/ollama-linux-amd64-{{ ollama_version }}.tar.zst"
-        - "/tmp/ollama-linux-amd64-rocm-{{ ollama_version }}.tar.zst"
+        - "{{ nikos_root_download_dir }}/ollama-linux-amd64-{{ ollama_version }}.tar.zst"
+        - "{{ nikos_root_download_dir }}/ollama-linux-amd64-rocm-{{ ollama_version }}.tar.zst"
 
 - name: Create the ollama system group
   ansible.builtin.group:
@@ -434,21 +452,21 @@
   block:
     - name: Create llama.cpp extraction directory
       ansible.builtin.file:
-        path: "/tmp/llama-{{ llama_cpp_version }}"
+        path: "{{ nikos_user_download_dir }}/llama-{{ llama_cpp_version }}"
         state: directory
         mode: "0755"
 
     - name: Download llama.cpp CPU binary archive
       ansible.builtin.get_url:
         url: "https://github.com/ggml-org/llama.cpp/releases/download/{{ llama_cpp_version }}/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
-        dest: "/tmp/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
+        dest: "{{ nikos_user_download_dir }}/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
         checksum: "sha256:{{ llama_cpp_sha256 }}"
         mode: "0644"
 
     - name: Extract llama.cpp CPU binaries
       ansible.builtin.unarchive:
-        src: "/tmp/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
-        dest: "/tmp/llama-{{ llama_cpp_version }}"
+        src: "{{ nikos_user_download_dir }}/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
+        dest: "{{ nikos_user_download_dir }}/llama-{{ llama_cpp_version }}"
         remote_src: true
 
     # The archive layout is not stable across releases: older builds nested the
@@ -456,7 +474,7 @@
     # top-level directory. Find them instead of assuming a path.
     - name: Locate the llama.cpp server binary
       ansible.builtin.find:
-        paths: "/tmp/llama-{{ llama_cpp_version }}"
+        paths: "{{ nikos_user_download_dir }}/llama-{{ llama_cpp_version }}"
         patterns: llama-server
         recurse: true
         file_type: file
@@ -532,13 +550,13 @@
 - name: Download Miniforge installer
   ansible.builtin.get_url:
     url: "{{ miniforge_url }}"
-    dest: /tmp/miniforge.sh
+    dest: "{{ nikos_user_download_dir }}/miniforge.sh"
     checksum: "sha256:{{ miniforge_sha256 }}"
     mode: "0755"
   when: not ai_stack_miniforge_stat.stat.exists
 
 - name: Install Miniforge
-  ansible.builtin.command: bash /tmp/miniforge.sh -b -p {{ nikos_home }}/miniforge3
+  ansible.builtin.command: bash {{ nikos_user_download_dir }}/miniforge.sh -b -p {{ nikos_home }}/miniforge3
   when: not ai_stack_miniforge_stat.stat.exists
   changed_when: true
 

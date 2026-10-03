@@ -1,4 +1,12 @@
 ---
+- name: Create the private download directory
+  ansible.builtin.file:
+    path: "{{ nikos_user_download_dir }}"
+    state: directory
+    mode: "0700"
+  become: false
+  check_mode: false
+
 - name: Install agent frameworks in nikos-ai env
   ansible.builtin.include_role:
     name: pin-gate
@@ -116,18 +124,18 @@
     - name: Download the Claude Code binary
       ansible.builtin.get_url:
         url: "https://downloads.claude.ai/claude-code-releases/{{ claude_code_version }}/linux-x64/claude"
-        dest: "/tmp/claude-{{ claude_code_version }}-linux-x64"
+        dest: "{{ nikos_user_download_dir }}/claude-{{ claude_code_version }}-linux-x64"
         checksum: "sha256:{{ claude_code_sha256 }}"
         mode: "0755"
 
     - name: Install Claude Code from the verified binary
       ansible.builtin.command:
-        argv: ["/tmp/claude-{{ claude_code_version }}-linux-x64", install, "{{ claude_code_version }}"]
+        argv: ["{{ nikos_user_download_dir }}/claude-{{ claude_code_version }}-linux-x64", install, "{{ claude_code_version }}"]
       environment:
         HOME: "{{ nikos_home }}"
       changed_when: true
 
     - name: Remove the downloaded Claude Code binary
       ansible.builtin.file:
-        path: "/tmp/claude-{{ claude_code_version }}-linux-x64"
+        path: "{{ nikos_user_download_dir }}/claude-{{ claude_code_version }}-linux-x64"
         state: absent
