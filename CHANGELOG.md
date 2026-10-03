@@ -4,6 +4,8 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-02
+
 ### Fixed
 - **NikOS no longer clones its tools into `~/Projects`.** distrodeck,
   image-view, git-lantern, ai-runner and bitnet.cpp now live in
