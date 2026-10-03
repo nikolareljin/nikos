@@ -1,9 +1,14 @@
 ---
+- name: Report Anki as unavailable on this release
+  ansible.builtin.debug:
+    msg: >-
+      anki is not available on Ubuntu {{ ansible_distribution_version }}:
+      the Ubuntu archive has no anki package for {{ ansible_distribution_release }}.
+  when: not nikos_release.anki_package
+
 - name: Install education tools
   ansible.builtin.apt:
-    name:
-      - libreoffice
-      - anki
+    name: "{{ ['libreoffice', nikos_release.anki_package] | select | list }}"
     state: present
     update_cache: true
     cache_valid_time: 3600

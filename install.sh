@@ -223,7 +223,12 @@ _is_supported_ubuntu_system() {
   os_id="$(_os_release_value ID || true)"
   version_id="$(_os_release_value VERSION_ID || true)"
 
-  [[ "${os_id}" == "ubuntu" && "${version_id}" == "24.04" ]]
+  # Keep in step with nikos_ubuntu_releases in vars/main.yml.
+  [[ "${os_id}" == "ubuntu" ]] || return 1
+  case "${version_id}" in
+    22.04|24.04|26.04) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 _ansible_playbook_version() {
@@ -307,6 +312,12 @@ _upgrade_ansible() {
   printf 'deb [signed-by=/etc/apt/keyrings/ansible-ppa.gpg] https://ppa.launchpadcontent.net/ansible/ansible/ubuntu %s main\n' \
     "${codename}" | sudo tee /etc/apt/sources.list.d/ansible-ppa.list >/dev/null || return 1
   sudo apt-get update -qq || return 1
+  # Ubuntu 22.04's ansible 2.10 ships /usr/bin/ansible, which the PPA's
+  # ansible-core also ships without Replaces, so dpkg refuses to unpack it over
+  # the old package. It is too old to keep, so remove it first.
+  if dpkg-query -W -f='${Status}' ansible 2>/dev/null | grep -q 'install ok installed'; then
+    sudo apt-get remove -y ansible || return 1
+  fi
   sudo apt-get install -y ansible
 }
 
@@ -649,9 +660,9 @@ if ! _is_supported_ubuntu_system || ! command -v apt-get &>/dev/null; then
   command -v apt-get &>/dev/null || _found_os="${_found_os}, no apt-get"
   if _can_use_dialog; then
     dialog --title "Error" \
-      --msgbox "NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS.\n\nFound: ${_found_os}" 9 64 0</dev/tty
+      --msgbox "NikOS requires Ubuntu or Xubuntu 22.04, 24.04 or 26.04 LTS.\n\nFound: ${_found_os}" 9 64 0</dev/tty
   fi
-  echo "ERROR: NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS (found: ${_found_os})." >&2
+  echo "ERROR: NikOS requires Ubuntu or Xubuntu 22.04, 24.04 or 26.04 LTS (found: ${_found_os})." >&2
   exit 1
 fi
 

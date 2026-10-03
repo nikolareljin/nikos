@@ -4,6 +4,20 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+### Added
+- **Ubuntu and Xubuntu 22.04 and 26.04 LTS are supported** next to
+  24.04. `install.sh` accepts all three; package names that differ are picked
+  per release from `nikos_ubuntu_releases` in `vars/main.yml`. On 26.04 the
+  `mongodb` and `monitoring` bundles and Anki are skipped with a message (no
+  vendor repository / no archive package); 22.04 gets PostgreSQL without
+  pgvector. The ISO stays Xubuntu 24.04.
+- The dry-run CI job runs on ubuntu-22.04, ubuntu-24.04 and ubuntu-26.04.
+
+### Fixed
+- **The Ansible upgrade works on 22.04.** The PPA's ansible-core refused to
+  unpack over the archive's ansible 2.10 (both ship `/usr/bin/ansible`);
+  `install.sh` now removes the old package first.
+
 ### Fixed
 - **Nothing installs from an unverified source any more.** Ollama, Bun, Helm,
   act, Starship, mkcert, llama.cpp, Miniforge, mistral.rs, the nvm script and

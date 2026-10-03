@@ -9,6 +9,13 @@
 # `netdata` package from Netdata's repository (apt sees it as installed and
 # leaves it), or as a static build under /opt/netdata, which is left alone
 # rather than starting a second agent on the same port.
+- name: Report Netdata as unavailable on this release
+  ansible.builtin.debug:
+    msg: >-
+      monitoring is not available on Ubuntu {{ ansible_distribution_version }}:
+      the Ubuntu archive has no netdata package for {{ ansible_distribution_release }}.
+  when: not nikos_release.netdata_package
+
 - name: Check for a static Netdata build from the kickstart script
   ansible.builtin.stat:
     path: /opt/netdata/usr/sbin/netdata
@@ -16,9 +23,10 @@
 
 - name: Install Netdata
   ansible.builtin.apt:
-    name: netdata
+    name: "{{ nikos_release.netdata_package }}"
     state: present
   become: true
   when:
+    - nikos_release.netdata_package | length > 0
     - not ansible_check_mode
     - not monitoring_static_netdata.stat.exists

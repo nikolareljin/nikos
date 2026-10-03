@@ -55,6 +55,42 @@ nikos_version: "{{ lookup('file', playbook_dir + '/VERSION') | trim }}"
 nikos_timezone: "Europe/London"
 nikos_locale: "en_US.UTF-8"
 
+# -- Ubuntu release --------------------------------------------------------
+# NikOS supports these Ubuntu / Xubuntu LTS releases (install.sh refuses the
+# rest). Package names that differ between them, and distro packages a release
+# does not have, are listed here and picked by the running release. An empty
+# name means the package does not exist there; the role skips it and says why.
+# Measured with apt-cache policy in the ubuntu:22.04/24.04/26.04 images.
+nikos_ubuntu_releases:
+  "22.04":
+    glib_package: libglib2.0-0           # renamed libglib2.0-0t64 in 24.04
+    xubuntu_minimal_package: xubuntu-core  # xubuntu-desktop-minimal is 24.04+
+    postgres_contrib_package: postgresql-contrib
+    pgvector_package: ""                 # jammy has no pgvector package
+    netdata_package: netdata
+    anki_package: anki
+  "24.04":
+    glib_package: libglib2.0-0t64
+    xubuntu_minimal_package: xubuntu-desktop-minimal
+    postgres_contrib_package: postgresql-contrib
+    pgvector_package: postgresql-16-pgvector
+    netdata_package: netdata
+    anki_package: anki
+  "26.04":
+    glib_package: libglib2.0-0t64
+    xubuntu_minimal_package: xubuntu-desktop-minimal
+    postgres_contrib_package: ""         # merged into postgresql-18
+    pgvector_package: postgresql-18-pgvector
+    netdata_package: ""                  # dropped from the archive
+    anki_package: ""                     # dropped from the archive
+nikos_release: "{{ nikos_ubuntu_releases[ansible_distribution_version] }}"
+
+# Codenames repo.mongodb.org publishes the mongodb_series repository for
+# (dists/<codename>). On any other release the mongodb bundle is skipped,
+# never pointed at another release's repository. resolute (26.04) had none
+# on 2026-10-03.
+mongodb_repo_codenames: [jammy, noble]
+
 # ── Desktop environment ──────────────────────────────────────────────────────
 # nikos_desktop_flavor selects the package set installed by the desktop role:
 #   xubuntu-minimal — Xubuntu session, artwork and greeter without the full
@@ -65,7 +101,7 @@ nikos_desktop_flavor: "xubuntu-minimal"
 
 nikos_desktop_packages:
   xubuntu-minimal:
-    - xubuntu-desktop-minimal
+    - "{{ nikos_release.xubuntu_minimal_package }}"
     - xubuntu-default-settings
     - xubuntu-artwork
   xubuntu-full:
@@ -239,7 +275,7 @@ nikos_node_min_version: "22.22.3"
 # working on a minimal or headless host too.
 nikos_vision_apt_packages:
   - libgl1
-  - libglib2.0-0t64
+  - "{{ nikos_release.glib_package }}"
   - libsm6
   - libxext6
   - ffmpeg
