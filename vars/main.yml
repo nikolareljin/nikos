@@ -69,6 +69,8 @@ nikos_ubuntu_releases:
     pgvector_package: ""                 # jammy has no pgvector package
     netdata_package: netdata
     anki_package: anki
+    netdata_vendor_repo: false
+    anki_release: false
   "24.04":
     glib_package: libglib2.0-0t64
     xubuntu_minimal_package: xubuntu-desktop-minimal
@@ -76,6 +78,8 @@ nikos_ubuntu_releases:
     pgvector_package: postgresql-16-pgvector
     netdata_package: netdata
     anki_package: anki
+    netdata_vendor_repo: false
+    anki_release: false
   "26.04":
     glib_package: libglib2.0-0t64
     xubuntu_minimal_package: xubuntu-desktop-minimal
@@ -83,6 +87,9 @@ nikos_ubuntu_releases:
     pgvector_package: postgresql-18-pgvector
     netdata_package: ""                  # dropped from the archive
     anki_package: ""                     # dropped from the archive
+    # Not in the archive, so from verified vendor sources instead (only here):
+    netdata_vendor_repo: true            # repo.netdata.cloud, key fingerprint-checked
+    anki_release: true                   # ankitects/anki release tarball, sha256-checked
 nikos_release: "{{ nikos_ubuntu_releases[ansible_facts['distribution_version']] }}"
 
 # Codenames repo.mongodb.org publishes the mongodb_series repository for

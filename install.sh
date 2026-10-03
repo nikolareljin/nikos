@@ -1234,8 +1234,7 @@ _release_note() {
   version="$(_os_release_value VERSION_ID || true)"
   case "${version}:$1" in
     22.04:postgres) printf ' (no pgvector on 22.04)' ;;
-    26.04:education) printf ' (no Anki on 26.04)' ;;
-    26.04:mongodb | 26.04:monitoring) printf ' (not available on 26.04)' ;;
+    26.04:mongodb) printf ' (not available on 26.04)' ;;
   esac
 }
 

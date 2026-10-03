@@ -14,7 +14,9 @@
     msg: >-
       monitoring is not available on Ubuntu {{ ansible_facts['distribution_version'] }}:
       the Ubuntu archive has no netdata package for {{ ansible_facts['distribution_release'] }}.
-  when: not nikos_release.netdata_package
+  when:
+    - not nikos_release.netdata_package
+    - not (nikos_release.netdata_vendor_repo | default(false) | bool)
 
 - name: Check for a static Netdata build from the kickstart script
   ansible.builtin.stat:
@@ -29,4 +31,13 @@
   when:
     - nikos_release.netdata_package | length > 0
     - not ansible_check_mode
+    - not monitoring_static_netdata.stat.exists
+
+# 26.04 has no netdata in the archive: there it comes from Netdata's own apt
+# repository (key fingerprint-checked). Nothing changes on 22.04/24.04.
+- name: Install Netdata from Netdata's repository
+  ansible.builtin.include_tasks: vendor_repo.yml
+  when:
+    - not nikos_release.netdata_package
+    - nikos_release.netdata_vendor_repo | default(false) | bool
     - not monitoring_static_netdata.stat.exists

@@ -217,8 +217,8 @@ What differs per release (`nikos_ubuntu_releases` in `vars/main.yml`):
 | Xubuntu minimal desktop | `xubuntu-core` | `xubuntu-desktop-minimal` | `xubuntu-desktop-minimal` |
 | `postgres` bundle | no pgvector (not in the archive) | `postgresql-16-pgvector` | `postgresql-18-pgvector` |
 | `mongodb` bundle | yes | yes | skipped: MongoDB publishes no `resolute` repository |
-| `monitoring` bundle | yes | yes | skipped: no `netdata` in the archive |
-| `education` bundle | yes | yes | no Anki (not in the archive) |
+| `monitoring` bundle | yes | yes | Netdata from Netdata's own apt repository (signing key fingerprint-checked), bound to 127.0.0.1 |
+| `education` bundle | yes | yes | Anki from the official ankitects/anki release tarball (sha256-checked) |
 
 A skipped bundle prints why and the rest of the install carries on.
 

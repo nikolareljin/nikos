@@ -154,5 +154,17 @@ def test_installer_menu_notes_match_the_release_table(tmp_path):
             if bundle == "mongodb":
                 expect = codenames[version] not in vars_main["mongodb_repo_codenames"]
             else:
-                expect = not rel[missing_by[bundle]]
+                alt = {"education": "anki_release", "monitoring": "netdata_vendor_repo"}.get(bundle)
+                expect = not rel[missing_by[bundle]] and not (alt and rel.get(alt))
             assert bool(out) == expect, (version, bundle, out)
+
+
+def test_vendor_sources_only_where_the_archive_has_no_package():
+    # 22.04 and 24.04 must install exactly as before: the Netdata repository
+    # and the Anki tarball are used only where the archive lacks the package.
+    import yaml as _yaml
+    releases = _yaml.safe_load((REPO / "vars/main.yml").read_text(encoding="utf-8"))["nikos_ubuntu_releases"]
+    for version, rel in releases.items():
+        assert bool(rel.get("netdata_vendor_repo")) == (not rel["netdata_package"]), version
+        assert bool(rel.get("anki_release")) == (not rel["anki_package"]), version
+    assert releases["24.04"]["netdata_package"] == "netdata" and releases["24.04"]["anki_package"] == "anki"

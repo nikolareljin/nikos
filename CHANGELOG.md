@@ -8,11 +8,14 @@ All notable changes to NikOS are documented here.
 - **Ubuntu and Xubuntu 22.04 and 26.04 LTS are supported** next to
   24.04. `install.sh` accepts all three; package names that differ are picked
   per release from `nikos_ubuntu_releases` in `vars/main.yml`. On 26.04 the
-  `mongodb` and `monitoring` bundles and Anki are skipped with a message (no
-  vendor repository / no archive package); 22.04 gets PostgreSQL without
-  pgvector. The ISO stays Xubuntu 24.04.
+  `mongodb` bundle is skipped with a message (no vendor repository), and
+  Netdata and Anki, which the archive dropped, come from verified vendor
+  sources: Netdata's apt repository (key fingerprint-checked, bound to
+  127.0.0.1) and the official Anki release tarball (sha256-checked). 22.04
+  gets PostgreSQL without pgvector. 22.04 and 24.04 install exactly as before.
+  The ISO stays Xubuntu 24.04.
 - The installer's bundle menu says what a release lacks before you pick it,
-  e.g. `Netdata monitoring dashboard (not available on 26.04)` or
+  e.g. `MongoDB Community, mongosh and Atlas CLI (not available on 26.04)` or
   `PostgreSQL with pgvector (no pgvector on 22.04)`.
 - The dry-run CI job runs on ubuntu-22.04, ubuntu-24.04 and ubuntu-26.04.
 - `site.yml` stops with a clear message on an unsupported release, so
