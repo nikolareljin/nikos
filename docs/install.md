@@ -107,7 +107,7 @@ HEAD, which is expected.
 ### Dev mode
 
 ```bash
-cd ~/Projects/nikos
+cd nikos    # your clone of this repository
 bash install.sh --dev
 ```
 

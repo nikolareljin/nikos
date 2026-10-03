@@ -38,3 +38,27 @@ def test_fabric_is_pinned_to_a_release_tag():
     tasks = (ROOT / "roles/optional/fabric/tasks/main.yml").read_text()
     assert "fabric/cmd/fabric@{{ fabric_version }}" in tasks
     assert "GOSUMDB: sum.golang.org" in tasks
+
+
+def test_the_cli_never_runs_a_distrodeck_from_projects(tmp_path):
+    # ~/Projects/distrodeck may be the user's own working copy.
+    import subprocess
+    nikos = (ROOT / "scripts/nikos").read_text()
+    start = nikos.index("_distrodeck_bin() {")
+    func = nikos[start:nikos.index("\n}\n", start) + 3]
+    dd = tmp_path / "Projects" / "distrodeck" / "distrodeck"
+    dd.parent.mkdir(parents=True)
+    dd.write_text("#!/bin/sh\n")
+    dd.chmod(0o755)
+    out = subprocess.run(["bash", "-c", func + "\n_distrodeck_bin || echo NONE"],
+                         capture_output=True, text=True,
+                         env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}).stdout
+    assert "Projects" not in out, out
+    nt = tmp_path / ".local/share/nikos-tools/distrodeck/distrodeck"
+    nt.parent.mkdir(parents=True)
+    nt.write_text("#!/bin/sh\n")
+    nt.chmod(0o755)
+    out = subprocess.run(["bash", "-c", func + "\n_distrodeck_bin"],
+                         capture_output=True, text=True,
+                         env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}).stdout
+    assert out.strip() == str(nt)
