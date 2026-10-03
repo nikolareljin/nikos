@@ -32,8 +32,9 @@ All notable changes to NikOS are documented here.
   checkout is left alone and the run says so (`roles/pin-gate`).
 - **Ollama is installed from its release archive** (with the ROCm runners on
   an AMD GPU) and `ollama.service` is written by NikOS, so existing installs
-  restart Ollama once. NVIDIA drivers are no longer installed alongside it;
-  use Ubuntu's (`ubuntu-drivers`).
+  restart Ollama once. On an NVIDIA GPU with no driver loaded, NikOS runs
+  Ubuntu's `ubuntu-drivers install` (signed archive) in place of the driver
+  install the script did; `nikos_nvidia_drivers: false` turns it off.
 - **Netdata comes from Ubuntu's `netdata` package** instead of the kickstart
   script; the role configures nothing that needs the upstream build. A static
   kickstart install under `/opt/netdata` is left alone.

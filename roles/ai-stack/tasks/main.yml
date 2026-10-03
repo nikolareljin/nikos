@@ -52,7 +52,7 @@
 # ollama.com/install.sh piped into a shell. The tasks below do what that
 # script did on Ubuntu: /usr/local/bin/ollama, /usr/local/lib/ollama, the
 # ROCm runners on an AMD GPU, the `ollama` system user and ollama.service.
-# NVIDIA drivers are not installed here; use Ubuntu's (ubuntu-drivers).
+# NVIDIA drivers come from Ubuntu (ubuntu-drivers), below.
 - name: Read the installed Ollama version
   ansible.builtin.command: /usr/local/bin/ollama --version
   register: ai_stack_ollama_installed
@@ -92,6 +92,47 @@
   failed_when: false
   check_mode: false
   when: nikos_ollama_mode == 'local'
+
+# install.sh also installed an NVIDIA driver when it found an NVIDIA GPU with
+# none loaded. Ubuntu's ubuntu-drivers does that from the signed Ubuntu archive
+# (Canonical-signed prebuilt modules), so GPU machines keep CUDA acceleration.
+# Skipped in image builds (the target hardware is unknown) and when
+# nikos_nvidia_drivers is false.
+- name: Look for an NVIDIA GPU without a loaded driver
+  ansible.builtin.shell: >-
+    set -o pipefail;
+    lspci -d '10de:' 2>/dev/null | grep -Eiq 'VGA|3D|Display'
+    && ! nvidia-smi -L >/dev/null 2>&1
+  args:
+    executable: /bin/bash
+  register: ai_stack_nvidia_needs_driver
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - nikos_ollama_mode == 'local'
+    - nikos_nvidia_drivers | default(true) | bool
+    - not (nikos_image_build | default(false) | bool)
+
+- name: Install the recommended NVIDIA driver from Ubuntu
+  when:
+    - not ansible_check_mode
+    - ai_stack_nvidia_needs_driver.rc | default(1) == 0
+  become: true
+  block:
+    - name: Install ubuntu-drivers
+      ansible.builtin.apt:
+        name: ubuntu-drivers-common
+        state: present
+
+    - name: Run ubuntu-drivers install
+      ansible.builtin.command: ubuntu-drivers install
+      register: ai_stack_nvidia_install
+      changed_when: true
+
+    - name: Say that the NVIDIA driver needs a reboot
+      ansible.builtin.debug:
+        msg: "NVIDIA driver installed from Ubuntu; reboot so Ollama can use the GPU."
 
 # After the port check, so a machine whose port is already taken is refused
 # before a second engine is installed onto it.

@@ -179,6 +179,9 @@ ollama_optional_models: >-
 # image-view, git-lantern, ai-runner, bitnet.cpp). Per user, no root: the tools
 # build as the user. Not ~/Projects, which is the user's own workspace, and not
 # under ~/.local/share/nikos, which is the NikOS git checkout itself.
+# true: when an NVIDIA GPU has no loaded driver, install Ubuntu's recommended
+# one (ubuntu-drivers install, signed Ubuntu archive). false: leave GPU drivers alone.
+nikos_nvidia_drivers: true
 nikos_tools_dir: "{{ nikos_home }}/.local/share/nikos-tools"
 # Where the dev-tools role clones and resolves distrodeck from (tests point it
 # at a local repository). install.sh reads its catalog preview from GitHub.
