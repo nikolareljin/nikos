@@ -11,7 +11,9 @@ All notable changes to NikOS are documented here.
   workspace, often absent, and a developer's own clone of one of these repos
   there failed `nikos update` with "Local modifications exist in the
   destination". Existing `~/Projects` copies are left untouched; NikOS clones
-  fresh into the new directory and its wrappers point there.
+  fresh into the new directory and its wrappers point there. With the
+  `bitnet` bundle, the next update builds bitnet.cpp once more there (several
+  minutes); the old `~/Projects/bitnet.cpp` tree can then be deleted.
 - **Fabric is pinned** (`fabric_version`, v1.4.505) instead of installed from
   `@latest`. `go install` checks it against sum.golang.org, and a changed pin
   now reinstalls (the old `creates:` guard never upgraded).
