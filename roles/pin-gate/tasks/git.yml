@@ -1,0 +1,21 @@
+---
+# Decides whether a pinned git checkout has to move. A clone whose HEAD
+# already contains the pinned commit is left where it is, so `nikos update`
+# never moves a checkout backwards; one that does not is moved forward.
+#
+# Inputs:
+#   pin_gate_dest     the checkout
+#   pin_gate_commit   the pinned commit (or tag)
+# Output:
+#   pin_gate_clone_current  true when the checkout exists and contains the pin
+- name: Check whether {{ pin_gate_dest | basename }} already contains its pin
+  ansible.builtin.command:
+    argv: [git, -C, "{{ pin_gate_dest }}", merge-base, --is-ancestor, "{{ pin_gate_commit }}", HEAD]
+  register: pin_gate_ancestor
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Record whether {{ pin_gate_dest | basename }} has to move
+  ansible.builtin.set_fact:
+    pin_gate_clone_current: "{{ pin_gate_ancestor.rc == 0 }}"

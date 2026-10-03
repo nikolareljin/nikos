@@ -4,9 +4,43 @@
 # mongodb-org, mongodb-mongosh and mongodb-atlas-cli, and its Release file is
 # signed with the 8.0 key (4B0752C1...4E7DCA05). The 9.0 noble repository has
 # no mongodb-atlas-cli.
-- name: Install the MongoDB repository signing key
+#
+# The key is checked against mongodb_key_fingerprints in vars/versions.yml
+# before apt trusts it.
+- name: Create the root-only key staging directory
+  ansible.builtin.file:
+    path: "{{ nikos_key_staging_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  # The downloads below run in check mode too, so the directory must exist.
+  check_mode: false
+
+- name: Download the MongoDB repository signing key
   ansible.builtin.get_url:
     url: "https://pgp.mongodb.com/server-{{ mongodb_key_series }}.asc"
+    dest: "{{ nikos_key_staging_dir }}/mongodb-server-{{ mongodb_key_series }}.asc"
+    mode: "0644"
+    force: true
+  check_mode: false
+  become: true
+
+- name: Verify the MongoDB repository signing key fingerprint
+  ansible.builtin.command:
+    argv: >-
+      {{ [playbook_dir ~ '/scripts/verify-key-fingerprint.sh',
+          nikos_key_staging_dir ~ '/mongodb-server-' ~ mongodb_key_series ~ '.asc']
+         + mongodb_key_fingerprints }}
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Install the MongoDB repository signing key
+  ansible.builtin.copy:
+    src: "{{ nikos_key_staging_dir }}/mongodb-server-{{ mongodb_key_series }}.asc"
+    remote_src: true
     dest: "/usr/share/keyrings/mongodb-server-{{ mongodb_key_series }}.asc"
     mode: "0644"
   become: true
@@ -55,7 +89,10 @@
   when: not ansible_check_mode
 
 - name: Install the MongoDB Python client in nikos-ai env
-  ansible.builtin.command: >
-    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }} pymongo
-  changed_when: false
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: pip
+  vars:
+    pin_gate_pip: "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip"
+    pin_gate_names: [pymongo]
   when: not ansible_check_mode

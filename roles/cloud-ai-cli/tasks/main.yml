@@ -6,6 +6,17 @@
 #
 # Use the system Node when it is already new enough; otherwise put a pinned
 # Node under the user's home with nvm, where a global npm install needs no root.
+- name: Create the private download directory
+  ansible.builtin.file:
+    path: "{{ nikos_user_download_dir }}"
+    state: directory
+    mode: "0700"
+  become: false
+  check_mode: false
+  # The downloads below are tagged one by one, not at the role level; this
+  # carries the same tags so a run limited to one of them still creates it.
+  tags: [ai-node, ai-gemini, openclaw]
+
 - name: Locate the Node on PATH
   ansible.builtin.command:
     argv:
@@ -67,9 +78,13 @@
     - name: Download the nvm install script
       ansible.builtin.get_url:
         url: "https://raw.githubusercontent.com/nvm-sh/nvm/{{ nikos_nvm_version }}/install.sh"
-        dest: /tmp/nvm-install.sh
+        dest: "{{ nikos_user_download_dir }}/nvm-install.sh"
+        checksum: "sha256:{{ nvm_install_sha256 }}"
         mode: "0755"
 
+    # The script clones nvm at the same tag (NVM_INSTALL_VERSION is what it
+    # reads, set here so it cannot drift from the hashed script), and nvm
+    # checks every Node tarball against nodejs.org's SHASUMS256.txt.
     # PROFILE=/dev/null stops the script appending its shell snippet on every
     # run; the profile lines are written once by the task below instead.
     # NVM_DIR is set explicitly rather than left to $HOME/.nvm. The installer
@@ -78,12 +93,13 @@
     # rather than a live account, and a stray NVM_DIR in the environment would
     # override it either way.
     - name: Run the nvm install script
-      ansible.builtin.command: bash /tmp/nvm-install.sh
+      ansible.builtin.command: bash {{ nikos_user_download_dir }}/nvm-install.sh
       args:
         creates: "{{ nikos_home }}/.nvm/nvm.sh"
       environment:
         PROFILE: /dev/null
         NVM_DIR: "{{ nikos_home }}/.nvm"
+        NVM_INSTALL_VERSION: "{{ nikos_nvm_version }}"
 
     # executable: /bin/bash is load-bearing. ansible.builtin.shell runs /bin/sh,
     # which is dash here, and nvm.sh works out its own directory from
@@ -98,7 +114,11 @@
         export NVM_DIR="{{ nikos_home }}/.nvm"
         . "$NVM_DIR/nvm.sh"
         nvm install "{{ nikos_node_version }}"
-        nvm alias default "{{ nikos_node_version }}"
+        # Only when there is no default yet: an existing default (possibly a
+        # newer Node the user chose) is never moved back to the pin.
+        if [ "$(nvm version default)" = "N/A" ]; then
+          nvm alias default "{{ nikos_node_version }}"
+        fi
       args:
         creates: "{{ nikos_home }}/.nvm/versions/node/v{{ nikos_node_version }}/bin/node"
         executable: /bin/bash
@@ -159,16 +179,43 @@
   when: not ansible_check_mode
   tags: [ai-node, ai-gemini, openclaw]
 
-- name: Install or upgrade Gemini CLI
+# An exact version from vars/versions.yml; npm checks the tarball against the
+# registry's integrity hash. Installed when missing or older than the pin;
+# never downgraded.
+- name: Read the installed Gemini CLI version
+  ansible.builtin.slurp:
+    src: "{{ (cloud_ai_cli_npm_prefix.stdout | default('/usr/local', true) | trim) ~ '/lib/node_modules/@google/gemini-cli/package.json' }}"
+  register: cloud_ai_cli_gemini_installed
+  failed_when: false
+  check_mode: false
+  tags: [ai-gemini]
+
+- name: Decide whether Gemini CLI needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+    apply:
+      tags: [ai-gemini]
+  vars:
+    pin_gate_name: Gemini CLI
+    pin_gate_want: "{{ gemini_cli_version }}"
+    pin_gate_path: "{{ (cloud_ai_cli_npm_prefix.stdout | default('/usr/local', true) | trim) ~ '/lib/node_modules/@google/gemini-cli/package.json' }}"
+    pin_gate_output: "{{ (cloud_ai_cli_gemini_installed.content | default('e30=') | b64decode | from_json).version | default('') }}"
+  tags: [ai-gemini]
+
+- name: Install Gemini CLI {{ gemini_cli_version }}
   community.general.npm:
     name: "@google/gemini-cli"
+    version: "{{ gemini_cli_version }}"
     global: true
-    state: latest
+    state: present
     executable: "{{ cloud_ai_cli_node_bin }}/npm"
   become: "{{ cloud_ai_cli_npm_needs_root }}"
   environment:
     PATH: "{{ cloud_ai_cli_node_bin }}:{{ ansible_env.PATH }}"
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
   tags: [ai-gemini]
 
 - name: Check whether GitHub CLI is installed
@@ -181,20 +228,11 @@
   failed_when: false
   tags: [ai-copilot-cli]
 
-- name: Check GitHub CLI authentication status
-  ansible.builtin.command: gh auth status
-  register: cloud_ai_cli_gh_auth
-  changed_when: false
-  failed_when: false
-  when: cloud_ai_cli_gh_installed.rc == 0
-  tags: [ai-copilot-cli]
-
-# gh 2.98.0 promoted `copilot` to a built-in command, and `gh extension install`
-# refuses any extension whose name collides with one:
-#   "copilot" matches the name of a built-in command or alias
-# Ask whether gh can already run `copilot` rather than testing the gh version,
-# so this holds whether the command arrives built in or as the extension.
-- name: Check whether gh already provides a copilot command
+# gh 2.98.0 made `copilot` a built-in command, and gh from cli.github.com (the
+# github-setup role) is newer than that. The old github/gh-copilot extension
+# was a release binary gh downloads without a checksum, so NikOS no longer
+# installs it; an older gh is told to upgrade instead.
+- name: Check whether gh provides the copilot command
   ansible.builtin.command: gh copilot --help
   register: cloud_ai_cli_gh_copilot
   changed_when: false
@@ -202,66 +240,74 @@
   when: cloud_ai_cli_gh_installed.rc == 0
   tags: [ai-copilot-cli]
 
-- name: Install GitHub Copilot CLI extension
-  ansible.builtin.command: gh extension install github/gh-copilot
-  args:
-    creates: "{{ nikos_home }}/.local/share/gh/extensions/gh-copilot"
+- name: Say that this gh has no copilot command
+  ansible.builtin.debug:
+    msg: >-
+      gh has no built-in `copilot` command (it arrived in gh 2.98.0). Upgrade gh
+      from cli.github.com (`sudo apt install --only-upgrade gh`) to get it.
   when:
-    - not ansible_check_mode
     - cloud_ai_cli_gh_installed.rc == 0
-    - cloud_ai_cli_gh_auth.rc == 0
     - cloud_ai_cli_gh_copilot.rc | default(1) != 0
   tags: [ai-copilot-cli]
 
-- name: Install shell-gpt via pipx
-  ansible.builtin.command: pipx install shell-gpt
-  args:
-    creates: "{{ nikos_home }}/.local/bin/sgpt"
-  environment:
-    PIPX_HOME: "{{ nikos_home }}/.local/pipx"
-    PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
-  when: not ansible_check_mode
-
-- name: Install glances via pipx
-  ansible.builtin.command: pipx install glances
-  args:
-    creates: "{{ nikos_home }}/.local/bin/glances"
-  environment:
-    PIPX_HOME: "{{ nikos_home }}/.local/pipx"
-    PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
-  when: not ansible_check_mode
-
-- name: Refresh pipx applications installed by NikOS
-  ansible.builtin.command: "pipx upgrade {{ item }}"
-  loop:
-    - shell-gpt
-    - glances
-  environment:
-    PIPX_HOME: "{{ nikos_home }}/.local/pipx"
-    PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
+# Exact versions from vars/versions.yml, installed when missing or older than
+# the pin and never downgraded. `--force` replaces an older install.
+- name: Read the pipx applications NikOS installs
+  ansible.builtin.command: pipx list --short
+  register: cloud_ai_cli_pipx_list
   changed_when: false
+  failed_when: false
+  check_mode: false
+  environment:
+    PIPX_HOME: "{{ nikos_home }}/.local/pipx"
+    PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
+
+- name: Decide whether shell-gpt needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: shell-gpt
+    pin_gate_want: "{{ shell_gpt_version }}"
+    pin_gate_path: "{{ nikos_home }}/.local/bin/sgpt"
+    pin_gate_output: >-
+      {{ cloud_ai_cli_pipx_list.stdout_lines | default([]) | select('match', '^shell-gpt ')
+         | first | default('') | regex_replace('^shell-gpt ', '') }}
+
+- name: Install shell-gpt via pipx at {{ shell_gpt_version }}
+  ansible.builtin.command: pipx install --force shell-gpt=={{ shell_gpt_version }}
+  changed_when: true
   when:
     - not ansible_check_mode
-    - nikos_update_mode | bool
+    - pin_gate_install | bool
+  environment:
+    PIPX_HOME: "{{ nikos_home }}/.local/pipx"
+    PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
 
-- name: Skip GitHub Copilot CLI extension because gh is not installed
+- name: Decide whether glances needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: glances
+    pin_gate_want: "{{ glances_version }}"
+    pin_gate_path: "{{ nikos_home }}/.local/bin/glances"
+    pin_gate_output: >-
+      {{ cloud_ai_cli_pipx_list.stdout_lines | default([]) | select('match', '^glances ')
+         | first | default('') | regex_replace('^glances ', '') }}
+
+- name: Install glances via pipx at {{ glances_version }}
+  ansible.builtin.command: pipx install --force glances=={{ glances_version }}
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
+  environment:
+    PIPX_HOME: "{{ nikos_home }}/.local/pipx"
+    PIPX_BIN_DIR: "{{ nikos_home }}/.local/bin"
+
+- name: Skip the GitHub Copilot CLI because gh is not installed
   ansible.builtin.debug:
-    msg: "Skipping GitHub Copilot CLI extension install because 'gh' is not installed or not available in PATH."
+    msg: "Skipping the GitHub Copilot CLI because 'gh' is not installed or not available in PATH."
   when: cloud_ai_cli_gh_installed.rc != 0
-  tags: [ai-copilot-cli]
-
-- name: Skip GitHub Copilot CLI extension until gh is authenticated
-  ansible.builtin.debug:
-    msg: "Skipping GitHub Copilot CLI extension install because gh is not authenticated yet. Run 'gh auth login' and rerun NikOS update to add it."
-  when:
-    - cloud_ai_cli_gh_installed.rc == 0
-    - cloud_ai_cli_gh_auth.rc == 1
-  tags: [ai-copilot-cli]
-
-- name: Skip GitHub Copilot CLI extension because gh auth status failed
-  ansible.builtin.debug:
-    msg: "Skipping GitHub Copilot CLI extension install because 'gh auth status' failed with exit code {{ cloud_ai_cli_gh_auth.rc }}."
-  when:
-    - cloud_ai_cli_gh_installed.rc == 0
-    - cloud_ai_cli_gh_auth.rc not in [0, 1]
   tags: [ai-copilot-cli]

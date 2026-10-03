@@ -49,7 +49,7 @@ Roles marked *desktop* run only on the `desktop` profile; see
 | `github-setup` | gh CLI, first-login wizard (SSH key, git identity) |
 | `ai-stack` | Ollama on 127.0.0.1:11434 + qwen3.5:4b, llama.cpp, Miniforge, nikos-ai conda env, aider, uv |
 | `editors` (*desktop*) | VS Code + AI extensions + Nord theme + JetBrains Mono |
-| `cloud-ai-cli` | Node (system or nvm-pinned), Gemini CLI, GitHub Copilot CLI extension, shell-gpt, glances |
+| `cloud-ai-cli` | Node (system or nvm-pinned), Gemini CLI, shell-gpt, glances |
 | `agent-dev` | LangChain, LlamaIndex, ML/data libraries, Claude Code |
 | `dev-tools` | distrodeck tools, image-view, git-lantern, mkcert, ai-runner |
 | `optional/*` | network / music / education / neovim / java / podman / bun / databases / LLM tools / monitoring (opt-in) |
@@ -130,21 +130,21 @@ nikos update --ref release/0.6.0  # a specific branch or tag
 updates submodules and re-runs the playbook. All roles are idempotent —
 already-installed components are skipped.
 
-Two components follow their upstream releases on every `nikos update` rather
-than a version NikOS pins:
+Everything NikOS downloads is pinned in `vars/versions.yml`: release files to
+a version and a sha256, registry packages to an exact version, git checkouts to
+a commit, vendor apt keys to a fingerprint. For an existing install the pin is a
+minimum: `nikos update` installs a component that is missing or older than its
+pin and leaves one that is newer (it prints that it did). It never downgrades,
+and a git checkout that already contains its pinned commit is not moved.
 
-- **Ollama.** When the newest release on GitHub is newer than
-  `ollama --version`, the official installer is re-run and `ollama.service`
-  restarted. The NikOS drop-in (`ollama.service.d/nikos.conf`, the listen
-  address) is kept. `nikos setup` installs Ollama once and does not upgrade it.
-  When GitHub cannot be read (offline, or its unauthenticated API limit of 60
-  requests an hour) or the installed version cannot be read, Ollama is left as
-  it is and the run says so.
-- **distrodeck.** `distrodeck_version: latest` (the default) moves
-  `~/.local/share/nikos-tools/distrodeck` to the newest `X.Y.Z` release tag. Set a release,
-  e.g. `distrodeck_version: "0.10.3"`, in `vars/local.yml` to pin it. Offline,
-  or when the clone has uncommitted edits to tracked files, the existing clone
-  is kept and the run prints a warning.
+- **Ollama.** Installed from the pinned release archive when missing or older
+  than `ollama_version`; `ollama.service` is restarted after a change. The
+  NikOS drop-in (`ollama.service.d/nikos.conf`, the listen address) is kept.
+- **distrodeck.** Checked out at `distrodeck_commit` after confirming that tag
+  `distrodeck_version` still points there. `distrodeck_version: latest` in
+  `vars/local.yml` follows the newest `X.Y.Z` tag instead. Offline, or when the
+  clone has uncommitted edits to tracked files, the existing clone is kept and
+  the run prints a warning.
 
 The target is chosen from what is currently checked out:
 

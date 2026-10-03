@@ -1,6 +1,16 @@
 ---
 # Renders the SVG wallpaper to PNG below. Installed here rather than in base so
 # a server install does not pull a vector graphics editor.
+- name: Create the root-only download directory
+  ansible.builtin.file:
+    path: "{{ nikos_root_download_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  check_mode: false
+
 - name: Install inkscape for the wallpaper export
   ansible.builtin.apt:
     name: inkscape
@@ -72,7 +82,7 @@
   ansible.builtin.get_url:
     url: "{{ nordic_gtk_url }}"
     checksum: "sha256:{{ nordic_gtk_sha256 }}"
-    dest: /tmp/Nordic.tar.xz
+    dest: "{{ nikos_root_download_dir }}/Nordic.tar.xz"
     mode: "0644"
   when: not ansible_check_mode
 
@@ -84,7 +94,7 @@
 
 - name: Extract Nordic GTK theme
   ansible.builtin.unarchive:
-    src: /tmp/Nordic.tar.xz
+    src: "{{ nikos_root_download_dir }}/Nordic.tar.xz"
     dest: /usr/share/themes/
     remote_src: true
     creates: /usr/share/themes/Nordic

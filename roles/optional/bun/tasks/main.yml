@@ -1,9 +1,59 @@
 ---
-- name: Install Bun
-  ansible.builtin.shell: curl -fsSL https://bun.sh/install | bash  # noqa: command-instead-of-module risky-shell-pipe
-  args:
-    creates: "{{ nikos_home }}/.bun/bin/bun"
-    executable: /bin/bash
-  environment:
-    HOME: "{{ nikos_home }}"
-  when: not ansible_check_mode
+# Pinned release (bun_version) checked against the release's SHASUMS256.txt,
+# unpacked to ~/.bun/bin where bun.sh/install put it, so existing PATH lines
+# stay valid. Installed when missing or older than the pin; never downgraded.
+- name: Create the private download directory
+  ansible.builtin.file:
+    path: "{{ nikos_user_download_dir }}"
+    state: directory
+    mode: "0700"
+  become: false
+  check_mode: false
+
+- name: Read the installed Bun version
+  ansible.builtin.command: "{{ nikos_home }}/.bun/bin/bun --version"
+  register: bun_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether Bun needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: Bun
+    pin_gate_want: "{{ bun_version }}"
+    pin_gate_path: "{{ nikos_home }}/.bun/bin/bun"
+    pin_gate_output: "{{ bun_installed.stdout | default('') }}"
+
+- name: Install Bun {{ bun_version }}
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
+  block:
+    - name: Download the Bun release archive
+      ansible.builtin.get_url:
+        url: "https://github.com/oven-sh/bun/releases/download/bun-v{{ bun_version }}/bun-linux-x64.zip"
+        dest: "{{ nikos_user_download_dir }}/bun-linux-x64-{{ bun_version }}.zip"
+        checksum: "sha256:{{ bun_sha256 }}"
+        mode: "0644"
+
+    - name: Create the Bun bin directory
+      ansible.builtin.file:
+        path: "{{ nikos_home }}/.bun/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Unpack Bun
+      ansible.builtin.unarchive:
+        src: "{{ nikos_user_download_dir }}/bun-linux-x64-{{ bun_version }}.zip"
+        dest: "{{ nikos_user_download_dir }}"
+        remote_src: true
+
+    - name: Install the Bun binary
+      ansible.builtin.copy:
+        src: "{{ nikos_user_download_dir }}/bun-linux-x64/bun"
+        dest: "{{ nikos_home }}/.bun/bin/bun"
+        remote_src: true
+        mode: "0755"

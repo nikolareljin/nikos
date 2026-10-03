@@ -4,24 +4,45 @@
 # makes VS Code's postinst idempotent (it overwrites with identical content) and
 # prevents the "Conflicting values set for option Signed-By" apt error that occurs
 # when our entry and VS Code's entry disagree on the keyring path.
+- name: Create the root-only key staging directory
+  ansible.builtin.file:
+    path: "{{ nikos_key_staging_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  # The downloads below run in check mode too, so the directory must exist.
+  check_mode: false
+
 - name: Download Microsoft VS Code apt key
   ansible.builtin.get_url:
     url: https://packages.microsoft.com/keys/microsoft.asc
-    dest: /tmp/microsoft.asc
+    dest: "{{ nikos_key_staging_dir }}/microsoft.asc"
     mode: "0644"
+    force: true
+  check_mode: false
+  become: true
+
+# The key reaches apt's keyring only after its fingerprint matches the pin in
+# vars/versions.yml (vscode_key_fingerprints).
+- name: Verify the Microsoft VS Code apt key fingerprint
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/verify-key-fingerprint.sh', nikos_key_staging_dir ~ '/microsoft.asc'] + vscode_key_fingerprints }}"
+  changed_when: false
   check_mode: false
   become: true
 
 - name: Dearmor Microsoft VS Code apt key to temp file
   ansible.builtin.command:
-    cmd: gpg --dearmor --yes -o /tmp/microsoft.gpg /tmp/microsoft.asc
+    cmd: gpg --batch --dearmor --yes -o {{ nikos_key_staging_dir }}/microsoft.gpg {{ nikos_key_staging_dir }}/microsoft.asc
   changed_when: false
   check_mode: false
   become: true
 
 - name: Install refreshed Microsoft VS Code apt key
   ansible.builtin.copy:
-    src: /tmp/microsoft.gpg
+    src: "{{ nikos_key_staging_dir }}/microsoft.gpg"
     remote_src: true
     dest: /usr/share/keyrings/microsoft.gpg
     mode: "0644"
@@ -32,8 +53,8 @@
     path: "{{ item }}"
     state: absent
   loop:
-    - /tmp/microsoft.asc
-    - /tmp/microsoft.gpg
+    - "{{ nikos_key_staging_dir }}/microsoft.asc"
+    - "{{ nikos_key_staging_dir }}/microsoft.gpg"
   become: true
 
 - name: Add VS Code apt repository (DEB822)

@@ -11,21 +11,28 @@
 
 # ── distrodeck (installs Rust/cargo, bat, eza, fzf, lazygit, gh, go, docker…) ──
 
-# distrodeck_version "latest" follows distrodeck's newest release tag, so
-# `nikos update` moves an existing clone forward; any other value pins.
-# Offline, an existing clone is kept with a warning; with none there is
-# nothing to fall back to.
+# distrodeck_version is a release tag pinned in vars/versions.yml, checked out
+# as distrodeck_commit after confirming the tag still points there; `nikos
+# update` moves an existing clone to a changed pin. "latest" (vars/local.yml)
+# follows the newest release tag instead. Offline, an existing clone is kept
+# with a warning; with none there is nothing to fall back to.
 - name: Resolve the distrodeck release
   ansible.builtin.command:
     argv:
       - "{{ playbook_dir }}/scripts/distrodeck-version.sh"
       - "{{ distrodeck_version }}"
+      - "{{ '' if distrodeck_version == 'latest' else (distrodeck_commit | default('')) }}"
   environment:
     DISTRODECK_REPO_URL: "{{ distrodeck_repo_url }}"
   register: dev_tools_distrodeck_resolve
   changed_when: false
   failed_when: false
   check_mode: false
+
+- name: Stop when the distrodeck tag does not match its pinned commit
+  ansible.builtin.fail:
+    msg: "{{ dev_tools_distrodeck_resolve.stderr | trim }}"
+  when: dev_tools_distrodeck_resolve.rc == 3
 
 - name: Check for an existing distrodeck clone
   ansible.builtin.stat:
@@ -71,6 +78,16 @@
     - dev_tools_distrodeck_resolve.rc == 0
     - (dev_tools_distrodeck_dirty.stdout | default('') | trim) | length > 0
 
+# A clone that already contains the resolved release (one ahead of the pin)
+# stays where it is: `nikos update` never moves a checkout backwards.
+- name: Decide whether the distrodeck checkout has to move
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: git
+  vars:
+    pin_gate_dest: "{{ nikos_tools_dir }}/distrodeck"
+    pin_gate_commit: "{{ dev_tools_distrodeck_resolve.stdout | default('') | trim }}"
+
 - name: Clone distrodeck
   ansible.builtin.git:
     repo: "{{ distrodeck_repo_url }}"
@@ -80,6 +97,7 @@
   when:
     - dev_tools_distrodeck_resolve.rc == 0
     - (dev_tools_distrodeck_dirty.stdout | default('') | trim) | length == 0
+    - not pin_gate_clone_current | bool
 
 - name: Install distrodeck PATH wrapper
   ansible.builtin.copy:
@@ -256,12 +274,23 @@
     - dev_tools_image_view_lock.rc == 0
     - dev_tools_image_view_lock.stdout | trim | length > 0
 
+- name: Decide whether the image-view checkout has to move
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: git
+  vars:
+    pin_gate_dest: "{{ nikos_tools_dir }}/image-view"
+    pin_gate_commit: "{{ image_view_commit }}"
+
 - name: Clone image-view
   ansible.builtin.git:
     repo: https://github.com/nikolareljin/image-view.git
     dest: "{{ nikos_tools_dir }}/image-view"
-    version: main
+    # The commit of release tag image_view_version; `nikos update` moves an
+    # existing clone to it.
+    version: "{{ image_view_commit }}"
     update: "{{ nikos_update_mode | bool }}"
+  when: not pin_gate_clone_current | bool
 
 - name: Resolve cargo binary for image-view build
   # Prefer the rustup-managed cargo over any system apt cargo.
@@ -374,13 +403,24 @@
 
 # ── git-lantern (repo dashboard CLI — command: lantern) ──
 
+- name: Decide whether the git-lantern checkout has to move
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: git
+  vars:
+    pin_gate_dest: "{{ nikos_tools_dir }}/git-lantern"
+    pin_gate_commit: "{{ git_lantern_commit }}"
+
 - name: Clone git-lantern
   ansible.builtin.git:
     repo: https://github.com/nikolareljin/git-lantern.git
     dest: "{{ nikos_tools_dir }}/git-lantern"
-    version: main
+    # The commit of release tag git_lantern_version; `nikos update` moves an
+    # existing clone to it.
+    version: "{{ git_lantern_commit }}"
     update: "{{ nikos_update_mode | bool }}"
     recursive: false
+  when: not pin_gate_clone_current | bool
 
 - name: Check whether git-lantern is installed
   ansible.builtin.stat:
@@ -403,19 +443,56 @@
     - not ansible_check_mode
     - nikos_update_mode | bool or not dev_tools_git_lantern_bin.stat.exists
 
-- name: Install mkcert
+# Pinned release (mkcert_version), checked against mkcert_sha256. Installed
+# when missing or older than the pin; never downgraded. Prints "v1.4.4".
+- name: Read the installed mkcert version
+  ansible.builtin.command: "{{ nikos_home }}/.local/bin/mkcert -version"
+  register: dev_tools_mkcert_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether mkcert needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: mkcert
+    pin_gate_want: "{{ mkcert_version }}"
+    pin_gate_path: "{{ nikos_home }}/.local/bin/mkcert"
+    pin_gate_output: "{{ dev_tools_mkcert_installed.stdout | default('') }}"
+
+- name: Install mkcert {{ mkcert_version }}
   ansible.builtin.get_url:
     url: "https://github.com/FiloSottile/mkcert/releases/download/{{ mkcert_version }}/mkcert-{{ mkcert_version }}-linux-amd64"
     dest: "{{ nikos_home }}/.local/bin/mkcert"
+    checksum: "sha256:{{ mkcert_sha256 }}"
+    force: true
     mode: "0755"
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
 
 # ── ai-runner (local Ollama model runner with simple UI) ──
+
+- name: Decide whether the ai-runner checkout has to move
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: git
+    apply:
+      tags: [ai-runner]
+  vars:
+    pin_gate_dest: "{{ nikos_tools_dir }}/ai-runner"
+    pin_gate_commit: "{{ ai_runner_commit }}"
+  tags: [ai-runner]
 
 - name: Clone ai-runner
   ansible.builtin.git:
     repo: https://github.com/nikolareljin/ai-runner.git
     dest: "{{ nikos_tools_dir }}/ai-runner"
-    version: main
+    # The commit of release tag ai_runner_version; `nikos update` moves an
+    # existing clone to it.
+    version: "{{ ai_runner_commit }}"
     update: "{{ nikos_update_mode | bool }}"
+  when: not pin_gate_clone_current | bool
   tags: [ai-runner]

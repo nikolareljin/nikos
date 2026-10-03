@@ -1,16 +1,19 @@
-"""What `nikos update` moves forward on its own: distrodeck and Ollama.
+"""What `nikos update` moves forward: distrodeck and Ollama.
 
-Neither is pinned by default. Each test covers one way that could go wrong:
+Both are pinned in vars/versions.yml; the pin is a minimum for an existing
+install. Each test covers one way that could go wrong:
 
-* "latest" resolving to a pre-release, a v-prefixed tag, or 0.9 over 0.10,
-* an explicit pin being overridden by the remote,
+* "latest" (opt-in) resolving to a pre-release, a v-prefixed tag, or 0.9 over 0.10,
+* an explicit pin being overridden by the remote, or a moved tag accepted,
 * an offline run failing, or deleting a working clone,
-* Ollama re-downloaded when it is current, or not updated when it is not.
+* a clone ahead of the pin moved backwards,
+* Ollama re-downloaded when it is current, downgraded, or not updated when older.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -21,6 +24,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 RESOLVER = REPO / "scripts" / "distrodeck-version.sh"
+ROLES = str(REPO / "roles")
 
 
 def _fake_git(tmp_path: Path, body: str) -> Path:
@@ -93,7 +97,7 @@ def _run_distrodeck_clone_tasks(tmp_path: Path, *, clone_exists: bool) -> subpro
         ],
         cwd=tmp_path, capture_output=True, text=True, timeout=120,
         env={"PATH": f"{bin_dir}:{Path(shutil.which('ansible-playbook')).parent}:/usr/bin:/bin",
-             "HOME": str(tmp_path)},
+             "HOME": str(tmp_path), "ANSIBLE_ROLES_PATH": ROLES},
     )
 
 
@@ -135,7 +139,9 @@ def _origin_with_releases(tmp_path: Path) -> Path:
     return origin
 
 
-def _run_real_clone_tasks(tmp_path: Path, origin: Path, update_mode: bool) -> subprocess.CompletedProcess:
+def _run_real_clone_tasks(
+    tmp_path: Path, origin: Path, update_mode: bool, version: str = "latest", commit: str = ""
+) -> subprocess.CompletedProcess:
     role = (REPO / "roles" / "dev-tools" / "tasks" / "main.yml").read_text(encoding="utf-8")
     start = role.index("- name: Resolve the distrodeck release")
     end = role.index("- name: Install distrodeck PATH wrapper")
@@ -150,10 +156,12 @@ def _run_real_clone_tasks(tmp_path: Path, origin: Path, update_mode: bool) -> su
     return subprocess.run(
         [
             "ansible-playbook", "play.yml", "-i", "localhost,",
-            "-e", f"nikos_home={tmp_path}", "-e", f"nikos_tools_dir={tmp_path}/tools", "-e", "distrodeck_version=latest",
+            "-e", f"nikos_home={tmp_path}", "-e", f"nikos_tools_dir={tmp_path}/tools",
+            "-e", f"distrodeck_version={version}", "-e", f"distrodeck_commit={commit}",
             "-e", f"distrodeck_repo_url={origin}", "-e", f"nikos_update_mode={update_mode}",
         ],
         cwd=tmp_path, capture_output=True, text=True, timeout=120,
+        env={**os.environ, "ANSIBLE_ROLES_PATH": ROLES},
     )
 
 
@@ -185,6 +193,48 @@ def test_a_first_clone_takes_the_newest_release_not_main(tmp_path: Path) -> None
     assert _git("describe", "--tags", "--exact-match", cwd=tmp_path / "tools" / "distrodeck") == "0.2.0"
 
 
+def test_a_pinned_release_checks_out_the_pinned_commit(tmp_path: Path) -> None:
+    origin = _origin_with_releases(tmp_path)
+    commit = _git("rev-parse", "0.1.0", cwd=origin)
+    result = _run_real_clone_tasks(tmp_path, origin, False, version="0.1.0", commit=commit)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _git("rev-parse", "HEAD", cwd=tmp_path / "tools" / "distrodeck") == commit
+
+
+def test_a_tag_that_moved_off_its_pinned_commit_stops_the_run(tmp_path: Path) -> None:
+    origin = _origin_with_releases(tmp_path)
+    wrong = _git("rev-parse", "0.2.0", cwd=origin)
+    result = _run_real_clone_tasks(tmp_path, origin, False, version="0.1.0", commit=wrong)
+    assert result.returncode != 0
+    assert "is commit" in result.stdout and wrong in result.stdout
+    assert not (tmp_path / "tools" / "distrodeck").exists()
+
+
+def test_a_clone_ahead_of_the_pin_is_not_moved_back(tmp_path: Path) -> None:
+    # The pin is a minimum: a checkout already past it (0.2.0 here, or a newer
+    # release the user moved to) stays where it is on `nikos update`.
+    origin = _origin_with_releases(tmp_path)
+    clone = tmp_path / "tools" / "distrodeck"
+    clone.parent.mkdir()
+    _git("clone", "-q", "--branch", "0.2.0", str(origin), str(clone), cwd=tmp_path)
+    commit = _git("rev-parse", "0.1.0", cwd=origin)
+    result = _run_real_clone_tasks(tmp_path, origin, True, version="0.1.0", commit=commit)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _git("describe", "--tags", "--exact-match", cwd=clone) == "0.2.0"
+    assert re.search(r"TASK \[Clone distrodeck\][^\n]*\n[^\n]*skipping", result.stdout), result.stdout
+
+
+def test_a_clone_behind_the_pin_moves_forward_to_it(tmp_path: Path) -> None:
+    origin = _origin_with_releases(tmp_path)
+    clone = tmp_path / "tools" / "distrodeck"
+    clone.parent.mkdir()
+    _git("clone", "-q", "--branch", "0.1.0", str(origin), str(clone), cwd=tmp_path)
+    commit = _git("rev-parse", "0.2.0", cwd=origin)
+    result = _run_real_clone_tasks(tmp_path, origin, True, version="0.2.0", commit=commit)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _git("rev-parse", "HEAD", cwd=clone) == commit
+
+
 # -- Ollama ------------------------------------------------------------------
 
 
@@ -193,80 +243,65 @@ def _ai_stack() -> list[dict]:
 
 
 @pytest.mark.parametrize(
-    "installed,latest,update_mode,expected",
+    "installed,present,expected",
     [
-        ("ollama version is 0.12.0", {"tag_name": "v0.13.1"}, True, True),
-        ("ollama version is 0.13.1", {"tag_name": "v0.13.1"}, True, False),
-        ("ollama version is 0.13.1\nWarning: client version is 0.13.1", {"tag_name": "v0.13.2"}, True, True),
+        ("", False, True),
+        ("ollama version is 0.12.0", True, True),
+        ("ollama version is 0.34.4", True, False),
+        ("ollama version is 0.35.1", True, False),
+        ("ollama version is 0.34.4\nWarning: client version is 0.34.3", True, True),
         ("Warning: could not connect to a running Ollama instance\n"
-         "Warning: client version is 0.13.1", {"tag_name": "v0.13.1"}, True, False),
+         "Warning: client version is 0.34.4", True, False),
         ("Warning: could not connect to a running Ollama instance\n"
-         "Warning: client version is 0.12.0", {"tag_name": "v0.13.1"}, True, True),
-        ("ollama version is 0.12.0\nWarning: client version is 0.13.1", {"tag_name": "v0.13.1"}, True, False),
-        ("", {"tag_name": "v0.13.1"}, True, False),
-        ("ollama version is 0.13.1", {"tag_name": "v0.14.0-rc1"}, True, False),
-        ("ollama version is 0.12.0", {"message": "API rate limit exceeded"}, True, False),
-        ("ollama version is 0.12.0", {}, True, False),
-        ("ollama version is 0.12.0", {"tag_name": "v0.13.1"}, False, False),
+         "Warning: client version is 0.12.0", True, True),
+        ("ollama version is 0.12.0\nWarning: client version is 0.34.4", True, False),
+        ("", True, False),
     ],
-    ids=["newer-release", "current", "client-warning", "server-down-current", "server-down-older",
-         "old-server-new-client", "unreadable-version", "pre-release-tag", "rate-limited",
-         "lookup-failed", "setup-run"],
+    ids=["missing", "older", "equal", "newer-kept", "client-older", "server-down-current",
+         "server-down-older", "old-server-new-client", "unreadable-kept"],
 )
-def test_update_reruns_the_installer_only_for_a_newer_release(
-    tmp_path: Path, installed: str, latest: dict, update_mode: bool, expected: bool
+def test_ollama_is_installed_only_when_missing_or_older_than_the_pin(
+    tmp_path: Path, installed: str, present: bool, expected: bool
 ) -> None:
+    # The role's own gate task, against a fake /usr/local/bin/ollama.
     assert shutil.which("ansible-playbook"), "ansible-playbook is required"
-    task = next(t for t in _ai_stack() if t.get("name") == "Update Ollama to the latest release")
-    task = dict(task)
-    task["ansible.builtin.shell"] = "true"  # never the real installer in a test
-    task.pop("become", None)
+    gate = dict(next(t for t in _ai_stack() if t.get("name") == "Decide whether Ollama needs installing"))
+    gate["vars"] = dict(gate["vars"], pin_gate_path=str(tmp_path / "ollama"))
+    if present:
+        (tmp_path / "ollama").write_text("", encoding="utf-8")
     play = [{
         "hosts": "localhost", "connection": "local", "gather_facts": False,
-        "tasks": [task, {"ansible.builtin.debug": {"msg": "RAN={{ ai_stack_ollama_update is changed }}"}}],
+        "tasks": [gate, {"ansible.builtin.debug": {"msg": "RAN={{ pin_gate_install | bool }}"}}],
     }]
     (tmp_path / "play.yml").write_text(yaml.safe_dump(play), encoding="utf-8")
     extra = {
         "nikos_ollama_mode": "local",
-        "nikos_update_mode": update_mode,
-        "ai_stack_ollama_install": {"changed": False},
-        "ai_stack_ollama_installed": {"stdout": installed},
-        "ai_stack_ollama_latest": {"json": latest} if latest else {"status": -1},
+        "ollama_version": "v0.34.4",
+        "ai_stack_ollama_installed": {"stdout": installed, "rc": 0 if present else 2},
     }
     result = subprocess.run(
         ["ansible-playbook", "play.yml", "-i", "localhost,", "-e", json.dumps(extra)],
         cwd=tmp_path, capture_output=True, text=True, timeout=120,
+        env={**os.environ, "ANSIBLE_ROLES_PATH": ROLES},
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"RAN={expected}" in result.stdout, result.stdout
+    if installed.endswith("0.35.1"):
+        assert "Ollama 0.35.1 is newer than the pin 0.34.4; leaving it." in result.stdout
 
 
-def test_nikos_update_takes_the_ollama_update_path() -> None:
-    # `nikos update` runs the play with nikos_update_mode=true; the update task
-    # is gated on it and sits before the restart that reads its result.
-    cli = (REPO / "scripts" / "nikos").read_text(encoding="utf-8")
-    update = re.search(r"^cmd_update\(\) \{.*?^\}", cli, re.M | re.S).group(0)
-    assert "_playbook -e nikos_update_mode=true" in update
+def test_ollama_installs_from_the_checked_archive_before_the_restart() -> None:
     names = [t.get("name") for t in _ai_stack()]
-    upd = names.index("Update Ollama to the latest release")
+    install = names.index("Install Ollama {{ ollama_version }}")
     start = names.index("Enable and start the Ollama system service")
-    assert names.index("Install Ollama") < upd < names.index("Write the Ollama listen address drop-in") < start
+    assert names.index("Refuse to start a second owner of the Ollama port") < install
+    assert names.index("Decide whether Ollama needs installing") < install < start
     tasks = _ai_stack()
-    assert "nikos_update_mode | bool" in tasks[upd]["when"]
-    assert "ai_stack_ollama_update is changed" in tasks[start]["ansible.builtin.systemd"]["state"]
-
-
-def test_a_failed_download_fails_the_installer_task(tmp_path: Path) -> None:
-    # `curl | sh` without pipefail: curl fails, sh reads nothing and exits 0,
-    # so the task reported a successful update and restarted the old engine.
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "curl").write_text("#!/bin/sh\nexit 22\n", encoding="utf-8")
-    (bin_dir / "curl").chmod(0o755)
-    for name in ("Install Ollama", "Update Ollama to the latest release"):
-        task = next(t for t in _ai_stack() if t.get("name") == name)
-        cmd = task["ansible.builtin.shell"]
-        assert task["args"]["executable"] == "/bin/bash"
-        result = subprocess.run(["/bin/bash", "-c", cmd], env={"PATH": f"{bin_dir}:/usr/bin:/bin"},
-                                capture_output=True, text=True, timeout=30)
-        assert result.returncode != 0, name
+    block = {t["name"]: t for t in tasks[install]["block"]}
+    download = block["Download the Ollama release archive"]["ansible.builtin.get_url"]
+    assert download["checksum"] == "sha256:{{ ollama_sha256 }}"
+    assert "/releases/download/{{ ollama_version }}/" in download["url"]
+    assert "pin_gate_install | bool" in tasks[install]["when"]
+    state = tasks[start]["ansible.builtin.systemd"]["state"]
+    for changed in ("ai_stack_ollama_update", "ai_stack_ollama_unitfile", "ai_stack_ollama_dropin"):
+        assert f"{changed} is changed" in state

@@ -4,6 +4,57 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **Nothing installs from an unverified source any more.** Ollama, Bun, Helm,
+  act, Starship, mkcert, llama.cpp, Miniforge, mistral.rs, the nvm script and
+  Claude Code are pinned release files checked against a sha256 (the vendor's
+  published sum where there is one). No `curl | sh`, no vendor install script
+  run unchecked, no `releases/latest`, `@latest` or `state: latest`.
+- **Vendor apt keys are fingerprint-checked before apt trusts them**: VS Code,
+  GitHub CLI, Kubernetes, MongoDB, and the Ansible PPA in `install.sh`
+  (`scripts/verify-key-fingerprint.sh`; a wrong or extra key stops the run).
+- **Git checkouts are pinned to a release tag's commit** (image-view,
+  git-lantern, ai-runner, distrodeck) or a commit (BitNet, which has no tags),
+  not `main`. distrodeck checks the tag still points at its pinned commit.
+- **npm, PyPI and pipx installs use exact versions** (Gemini CLI, OpenClaw,
+  shell-gpt, glances, every package in the nikos-ai env), and the Qdrant image
+  is pinned by tag and digest.
+- **`nikos add mistral-rs` works.** It ran `cargo install mistralrs-server`,
+  a crate crates.io does not have; it now installs the pinned CPU release
+  (`mistralrs serve` is the server).
+
+### Changed
+- **All pins live in `vars/versions.yml`**, one entry per dependency with its
+  version, sha256 / commit / fingerprint and source. `site.yml` loads it after
+  `vars/main.yml`; `vars/local.yml` still overrides.
+- **Nothing is downloaded to a fixed `/tmp` path.** Root steps use
+  `/var/lib/nikos/downloads` and user steps `~/.cache/nikos/downloads`, both
+  0700, and apt keys are fetched, checked and dearmored as root in
+  `/var/lib/nikos/keys`. At a predictable `/tmp` path another local user could
+  plant a file with the right checksum, which `get_url` then skips
+  downloading, and swap it before it is run or unpacked by root.
+- **`nikos update` never downgrades.** A pin is the exact version for a new
+  install and a minimum for an existing one: a newer tool, Python package or
+  checkout is left alone and the run says so (`roles/pin-gate`).
+- **Ollama is installed from its release archive** (with the ROCm runners on
+  an AMD GPU) and `ollama.service` is written by NikOS, so existing installs
+  restart Ollama once. On an NVIDIA GPU with no driver loaded, NikOS runs
+  Ubuntu's `ubuntu-drivers install` (signed archive) in place of the driver
+  install the script did; `nikos_nvidia_drivers: false` turns it off.
+- **Netdata comes from Ubuntu's `netdata` package** instead of the kickstart
+  script; the role configures nothing that needs the upstream build. A static
+  kickstart install under `/opt/netdata` is left alone.
+- **The `gh-copilot` extension is no longer installed.** gh 2.98+ from
+  cli.github.com has `gh copilot` built in; the extension was an unchecked
+  release binary. An older gh gets a one-line hint to upgrade.
+
+### Added
+- **`scripts/bump-versions.py`**: `--check` lists each pin against the newest
+  release at least 3 days old, `--bump NAME` moves a pin and records the new
+  sha256 after cross-checking the vendor's sums file (for Claude Code, its
+  manifest signed by the pinned release key), and `--verify` re-downloads
+  every pin and compares. See docs/development.md.
+
 ## [0.8.1] - 2026-10-02
 
 ### Fixed

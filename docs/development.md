@@ -7,6 +7,7 @@ nikos/
 ├── install.sh                      # bootstrap: installs Ansible, clones repo, runs ansible-playbook
 ├── site.yml                        # top-level playbook — ordered roles
 ├── vars/main.yml                   # tracked defaults
+├── vars/versions.yml               # every pinned external version, sha256, commit, key fingerprint
 ├── vars/local.yml                  # untracked local overrides (optional)
 ├── inventory/local                 # localhost ansible_connection=local
 ├── assets/wallpaper.svg            # Nord-palette wallpaper (exported to PNG on install)
@@ -19,7 +20,7 @@ nikos/
 │   ├── github-setup/               # gh CLI, first-login wizard
 │   ├── ai-stack/                   # Ollama, Miniforge, conda env, aider
 │   ├── editors/                    # VS Code + extensions + settings
-│   ├── cloud-ai-cli/               # Node.js, Gemini CLI, Copilot extension
+│   ├── cloud-ai-cli/               # Node.js, Gemini CLI, shell-gpt, glances
 │   ├── agent-dev/                  # LangChain, LlamaIndex, Claude Code
 │   ├── dev-tools/                  # distrodeck, image-view, git-lantern, ai-runner
 │   └── optional/
@@ -63,6 +64,29 @@ python3 -m pytest tests/ -v
 # Dry-run (needs ansible installed)
 ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education -e nikos_update_mode=false
 ```
+
+## Pinned versions
+
+Every external download is pinned in `vars/versions.yml`, with a one-line
+source comment and an entry in `nikos_pin_sources` that `scripts/bump-versions.py`
+reads. `tests/test_pinned_sources.py` fails on `curl | sh`, `releases/latest`,
+`@latest`, a branch checkout, a `get_url` without a sha256, or an apt key that
+is not fingerprint-checked. Roles install a pin when the tool is missing or
+older (`roles/pin-gate`): for an existing install the pin is a minimum.
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)         # optional, lifts the GitHub API limit
+python3 scripts/bump-versions.py             # --check: current, newest eligible, status
+python3 scripts/bump-versions.py --bump act  # new version + sha256, cross-checked, then tests
+python3 scripts/bump-versions.py --verify    # re-download every pin and compare (slow: ~3 GB)
+```
+
+Eligible means not a draft or pre-release and at least `--min-age-days` (3)
+old. `--bump` never changes an apt key fingerprint, a pin whose artifact has
+no vendor checksum (mkcert, Nordic, the nvm script), or the Python packages as
+a group: it says what is newer, and a person updates those by hand and proves
+them with `--verify`. Python packages share one env; resolve them together
+(`uv pip compile`) and bump one with `--bump nikos_pip_pins.<package>`.
 
 ## Writing a new role
 

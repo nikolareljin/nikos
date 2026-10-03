@@ -1,4 +1,7 @@
 ---
+# Every pinned external dependency (version, sha256, commit, apt key
+# fingerprint) lives in vars/versions.yml, not here.
+
 # Default to update mode so the 0.6.4 CLI, which invokes the newly checked-out
 # playbook without extra variables, refreshes dependencies on its first 0.6.5
 # update. `nikos setup` and `nikos add` explicitly set this false, keeping
@@ -118,9 +121,6 @@ nikos_default_session: "auto"
 nikos_firefox_dark: true
 # Same for Chromium (snap/deb) and Google Chrome: dark, seeded with #2E3440.
 nikos_chromium_dark: true
-nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/download/v2.2.0/Nordic.tar.xz"
-# The release asset is unsigned; the hash pins the bytes. Update both together.
-nordic_gtk_sha256: "d162d694e13bec518636b193fbe84ccea44da9a81a89015c6713f6b258ee36d5"
 
 # ── Ollama models ────────────────────────────────────────────────────────────
 # Sizes are the download size of the default quantisation, checked against the
@@ -175,14 +175,25 @@ ollama_optional_models: >-
      + ollama_models_vision + ollama_models_embedding }}
 
 # ── distrodeck ──────────────────────────────────────────────────────────────
-# "latest" follows distrodeck's newest X.Y.Z release tag, resolved at run
-# time; `nikos update` moves an existing clone to it. Set a release such as
-# "0.10.3" in vars/local.yml to pin. Never main: only tagged releases install.
-distrodeck_version: "latest"
 # Where NikOS keeps the tool repositories it clones and builds (distrodeck,
 # image-view, git-lantern, ai-runner, bitnet.cpp). Per user, no root: the tools
 # build as the user. Not ~/Projects, which is the user's own workspace, and not
 # under ~/.local/share/nikos, which is the NikOS git checkout itself.
+# true: when an NVIDIA GPU has no loaded driver, install Ubuntu's recommended
+# one (ubuntu-drivers install, signed Ubuntu archive). false: leave GPU drivers alone.
+nikos_nvidia_drivers: true
+# apt signing keys are downloaded, fingerprint-checked and dearmored here, not in
+# /tmp, which every local user can write to. Root-only (0700).
+nikos_key_staging_dir: /var/lib/nikos/keys
+# Downloads go to private directories, never fixed /tmp paths: get_url skips a
+# file whose checksum already matches, so a file another local user planted in
+# /tmp could be swapped after the check and before it is run or unpacked.
+nikos_root_download_dir: /var/lib/nikos/downloads
+# An image build provisions /etc/skel as root: caching there would copy every
+# archive into each new user's home, so it uses the root directory instead.
+nikos_user_download_dir: >-
+  {{ nikos_root_download_dir if (nikos_image_build | default(false) | bool)
+     else nikos_home ~ '/.cache/nikos/downloads' }}
 nikos_tools_dir: "{{ nikos_home }}/.local/share/nikos-tools"
 # Where the dev-tools role clones and resolves distrodeck from (tests point it
 # at a local repository). install.sh reads its catalog preview from GitHub.
@@ -203,12 +214,6 @@ nikos_distrodeck_owned_tools:
 # OpenJDK releases `nikos add java` installs. The first is the default java.
 nikos_java_versions: [21]
 
-# ── MongoDB (optional bundle) ────────────────────────────────────────────────
-# The 8.2 noble repository is signed with the 8.0 release key; MongoDB
-# publishes no server-8.2.asc. Matches distrodeck's series.
-mongodb_series: "8.2"
-mongodb_key_series: "8.0"
-
 # ── Node.js for the npm-only CLIs ────────────────────────────────────────────
 # Gemini CLI and OpenClaw publish through npm only - the Gemini release carries
 # macOS binaries and a JS bundle, nothing native for Linux - so a Node new
@@ -227,8 +232,6 @@ mongodb_key_series: "8.0"
 # A full version, not a major. OpenClaw requires >=22.22.3, and a major-only
 # check would accept 22.22.2 and then fail at install time.
 nikos_node_min_version: "22.22.3"
-nikos_node_version: "22.23.2"      # installed through nvm when the system Node is too old
-nikos_nvm_version: "v0.40.7"
 
 # ── Image analysis ───────────────────────────────────────────────────────────
 # Shared object dependencies of the opencv-python wheels, plus video I/O.
@@ -255,7 +258,9 @@ nikos_tesseract_languages:
   - ell
   - srp
 
-# Python image analysis packages, installed into the nikos-ai conda env.
+# Python image analysis packages, installed into the nikos-ai conda env at
+# their pins in nikos_pip_pins (vars/versions.yml). A name added here without
+# a pin installs whatever PyPI has newest; add its pin too.
 nikos_vision_pip_packages:
   - opencv-contrib-python   # OpenCV with the contrib modules
   - pillow
@@ -264,17 +269,7 @@ nikos_vision_pip_packages:
   - pytesseract             # Python binding for the tesseract binary above
   - timm                    # pretrained vision backbones for torch
 
-# Deliberately not the newest build. llama.cpp tags several releases a day;
-# this one had a week to settle. Bump it to a tag that is a few days old rather
-# than whatever was cut this morning.
-llama_cpp_version: "b10444"
-mkcert_version: "v1.4.4"
-kubernetes_apt_version: "v1.36"
-
 # Python / conda
-# 26.5.3-0 exists but is days old; 26.3.2-3 has been out for months.
-miniforge_version: "26.3.2-3"
-miniforge_url: "https://github.com/conda-forge/miniforge/releases/download/{{ miniforge_version }}/Miniforge3-{{ miniforge_version }}-Linux-x86_64.sh"
 nikos_conda_env: "nikos-ai"
 # A conda version spec, operator included, not a bare version. A range lets
 # conda pick whichever 3.1x actually solves against the AI stack; pinning an

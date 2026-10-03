@@ -1,22 +1,54 @@
 ---
+- name: Create the private download directory
+  ansible.builtin.file:
+    path: "{{ nikos_user_download_dir }}"
+    state: directory
+    mode: "0700"
+  become: false
+  check_mode: false
+
 - name: Ensure local bin directory exists
   ansible.builtin.file:
     path: "{{ nikos_home }}/.local/bin"
     state: directory
     mode: "0755"
 
-- name: Download act archive
-  ansible.builtin.get_url:
-    url: https://github.com/nektos/act/releases/latest/download/act_Linux_x86_64.tar.gz
-    dest: /tmp/act_Linux_x86_64.tar.gz
-    mode: "0644"
-  when: not ansible_check_mode
+# Pinned release (act_version) checked against the sha256 from the release's
+# checksums.txt. Installed when missing or older than the pin; never
+# downgraded. Prints "act version 0.2.89".
+- name: Read the installed act version
+  ansible.builtin.command: "{{ nikos_home }}/.local/bin/act --version"
+  register: act_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
 
-- name: Install act
-  ansible.builtin.unarchive:
-    src: /tmp/act_Linux_x86_64.tar.gz
-    dest: "{{ nikos_home }}/.local/bin"
-    remote_src: true
-    creates: "{{ nikos_home }}/.local/bin/act"
-    mode: "0755"
-  when: not ansible_check_mode
+- name: Decide whether act needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: act
+    pin_gate_want: "{{ act_version }}"
+    pin_gate_path: "{{ nikos_home }}/.local/bin/act"
+    pin_gate_output: "{{ act_installed.stdout | default('') }}"
+
+- name: Install act {{ act_version }}
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
+  block:
+    - name: Download the act release archive
+      ansible.builtin.get_url:
+        url: "https://github.com/nektos/act/releases/download/{{ act_version }}/act_Linux_x86_64.tar.gz"
+        dest: "{{ nikos_user_download_dir }}/act_Linux_x86_64-{{ act_version }}.tar.gz"
+        checksum: "sha256:{{ act_sha256 }}"
+        mode: "0644"
+
+    - name: Unpack act
+      ansible.builtin.unarchive:
+        src: "{{ nikos_user_download_dir }}/act_Linux_x86_64-{{ act_version }}.tar.gz"
+        dest: "{{ nikos_home }}/.local/bin"
+        remote_src: true
+        include: [act]
+        mode: "0755"

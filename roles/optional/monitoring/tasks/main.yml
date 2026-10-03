@@ -1,8 +1,24 @@
 ---
+# Ubuntu's own netdata package (signed by the Ubuntu archive) replaces the
+# get.netdata.cloud kickstart script, which was piped into a shell unchecked.
+# The role only installs and starts the agent; it configures nothing that
+# needs the upstream build or Netdata Cloud. The Ubuntu package listens on
+# 127.0.0.1:19999.
+#
+# A machine set up by the kickstart script already has the agent: as the
+# `netdata` package from Netdata's repository (apt sees it as installed and
+# leaves it), or as a static build under /opt/netdata, which is left alone
+# rather than starting a second agent on the same port.
+- name: Check for a static Netdata build from the kickstart script
+  ansible.builtin.stat:
+    path: /opt/netdata/usr/sbin/netdata
+  register: monitoring_static_netdata
+
 - name: Install Netdata
-  ansible.builtin.shell: curl -fsSL https://get.netdata.cloud/kickstart.sh | sh -s -- --dont-wait  # noqa: command-instead-of-module risky-shell-pipe
-  args:
-    creates: /usr/sbin/netdata
-    executable: /bin/bash
+  ansible.builtin.apt:
+    name: netdata
+    state: present
   become: true
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - not monitoring_static_netdata.stat.exists

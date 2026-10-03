@@ -1,0 +1,48 @@
+---
+# Decides whether a pinned tool is installed. The pin in vars/versions.yml is
+# the exact version for a fresh install and a minimum for an existing one:
+# `nikos update` never downgrades.
+#
+# Inputs:
+#   pin_gate_name     what to call the tool in messages
+#   pin_gate_want     the pin (a leading "v" or "b" is ignored)
+#   pin_gate_path     the installed binary; missing means not installed
+#   pin_gate_output   what the installed tool reports as its version; the
+#                     first number in it (X, X.Y or X.Y.Z...) is the version
+# Output:
+#   pin_gate_install  true when missing, or older than the pin
+- name: Check whether {{ pin_gate_name }} is installed
+  ansible.builtin.stat:
+    path: "{{ pin_gate_path }}"
+  register: pin_gate_binary
+
+- name: Compare the installed {{ pin_gate_name }} with its pin
+  vars:
+    pin_gate_have: >-
+      {{ (pin_gate_output | default('') | string)
+         | regex_search('[0-9]+([.][0-9]+)*') | default('', true) }}
+    pin_gate_pin: "{{ pin_gate_want | string | regex_replace('^[vb]', '') }}"
+  ansible.builtin.set_fact:
+    pin_gate_install: >-
+      {{ not pin_gate_binary.stat.exists
+         or (pin_gate_have | length > 0 and pin_gate_pin is version(pin_gate_have, '>')) }}
+    pin_gate_have_version: "{{ pin_gate_have }}"
+    pin_gate_present: "{{ pin_gate_binary.stat.exists }}"
+    pin_gate_pin_version: "{{ pin_gate_pin }}"
+
+- name: Say that {{ pin_gate_name }} is newer than its pin
+  ansible.builtin.debug:
+    msg: "{{ pin_gate_name }} {{ pin_gate_have_version }} is newer than the pin {{ pin_gate_pin_version }}; leaving it."
+  when:
+    - pin_gate_present | bool
+    - pin_gate_have_version | length > 0
+    - pin_gate_have_version is version(pin_gate_pin_version, '>')
+
+- name: Say that the {{ pin_gate_name }} version could not be read
+  ansible.builtin.debug:
+    msg: >-
+      Could not read the installed {{ pin_gate_name }} version; leaving it rather
+      than reinstalling over it. The pin is {{ pin_gate_pin_version }}.
+  when:
+    - pin_gate_present | bool
+    - pin_gate_have_version | length == 0

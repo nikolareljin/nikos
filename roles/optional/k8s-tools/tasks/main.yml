@@ -1,4 +1,12 @@
 ---
+- name: Create the private download directory
+  ansible.builtin.file:
+    path: "{{ nikos_user_download_dir }}"
+    state: directory
+    mode: "0700"
+  become: false
+  check_mode: false
+
 - name: Ensure apt keyrings directory exists
   ansible.builtin.file:
     path: /etc/apt/keyrings
@@ -6,21 +14,57 @@
     mode: "0755"
   become: true
 
+- name: Create the root-only key staging directory
+  ansible.builtin.file:
+    path: "{{ nikos_key_staging_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  # The downloads below run in check mode too, so the directory must exist.
+  check_mode: false
+
 - name: Download Kubernetes apt key
   ansible.builtin.get_url:
     url: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_apt_version }}/deb/Release.key"
-    dest: /tmp/kubernetes-apt-release.key
+    dest: "{{ nikos_key_staging_dir }}/kubernetes-apt-release.key"
     mode: "0644"
+    force: true
+  check_mode: false
   become: true
 
-- name: Dearmor Kubernetes apt key
-  ansible.builtin.command: >
-    gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-    /tmp/kubernetes-apt-release.key
-  args:
-    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+# Checked against kubernetes_key_fingerprints in vars/versions.yml before apt
+# trusts it. Dearmored in the staging directory and copied rather than written behind a
+# `creates:` guard, which kept whatever keyring an earlier run left there.
+- name: Verify the Kubernetes apt key fingerprint
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/verify-key-fingerprint.sh', nikos_key_staging_dir ~ '/kubernetes-apt-release.key'] + kubernetes_key_fingerprints }}"
+  changed_when: false
+  check_mode: false
   become: true
-  when: not ansible_check_mode
+
+- name: Dearmor the Kubernetes apt key
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --yes
+      - --dearmor
+      - -o
+      - "{{ nikos_key_staging_dir }}/kubernetes-apt-keyring.gpg"
+      - "{{ nikos_key_staging_dir }}/kubernetes-apt-release.key"
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Install the Kubernetes apt key
+  ansible.builtin.copy:
+    src: "{{ nikos_key_staging_dir }}/kubernetes-apt-keyring.gpg"
+    remote_src: true
+    dest: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    mode: "0644"
+  become: true
 
 - name: Add Kubernetes apt repository
   ansible.builtin.apt_repository:
@@ -39,16 +83,46 @@
   become: true
   when: not ansible_check_mode
 
-- name: Download Helm installer
-  ansible.builtin.get_url:
-    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-    dest: /tmp/get-helm-3
-    mode: "0755"
-  when: not ansible_check_mode
+# Pinned Helm 3 release (helm_version) checked against get.helm.sh's
+# .sha256sum for it. Installed when missing or older than the pin; never
+# downgraded. `helm version --short` prints "v3.22.0+g<commit>".
+- name: Read the installed Helm version
+  ansible.builtin.command: /usr/local/bin/helm version --short
+  register: k8s_tools_helm_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
 
-- name: Install Helm
-  ansible.builtin.command: bash /tmp/get-helm-3
-  args:
-    creates: /usr/local/bin/helm
-  become: true
-  when: not ansible_check_mode
+- name: Decide whether Helm needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: Helm
+    pin_gate_want: "{{ helm_version }}"
+    pin_gate_path: /usr/local/bin/helm
+    pin_gate_output: "{{ k8s_tools_helm_installed.stdout | default('') }}"
+
+- name: Install Helm {{ helm_version }}
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
+  block:
+    - name: Download the Helm release archive
+      ansible.builtin.get_url:
+        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: "{{ nikos_user_download_dir }}/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        checksum: "sha256:{{ helm_sha256 }}"
+        mode: "0644"
+
+    - name: Unpack the Helm binary
+      ansible.builtin.unarchive:
+        src: "{{ nikos_user_download_dir }}/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: /usr/local/bin
+        remote_src: true
+        include: [linux-amd64/helm]
+        extra_opts: [--strip-components=1]
+        owner: root
+        group: root
+        mode: "0755"
+      become: true

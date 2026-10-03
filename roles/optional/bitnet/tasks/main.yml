@@ -9,13 +9,28 @@
     cache_valid_time: 3600
   become: true
 
+# Pinned to bitnet_commit (BitNet has no release tags), which also fixes the
+# llama.cpp submodule. `nikos update` moves an existing clone forward to a
+# changed pin and the build below reruns; a clone that already contains the
+# pin is left where it is.
+- name: Decide whether the BitNet.cpp checkout has to move
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: git
+  vars:
+    pin_gate_dest: "{{ nikos_tools_dir }}/bitnet.cpp"
+    pin_gate_commit: "{{ bitnet_commit }}"
+
 - name: Clone BitNet.cpp
   ansible.builtin.git:
     repo: https://github.com/microsoft/BitNet.git
     dest: "{{ nikos_tools_dir }}/bitnet.cpp"
-    version: main
-    update: false
-  when: not ansible_check_mode
+    version: "{{ bitnet_commit }}"
+    update: "{{ nikos_update_mode | bool }}"
+  register: bitnet_clone
+  when:
+    - not ansible_check_mode
+    - not pin_gate_clone_current | bool
 
 # BitNet adds llama.cpp with add_subdirectory, which leaves LLAMA_STANDALONE
 # off, and llama.cpp defaults LLAMA_BUILD_COMMON and LLAMA_BUILD_TOOLS to that
@@ -47,12 +62,21 @@
     - not ansible_check_mode
     - bitnet_tools_configured.rc | default(1) != 0
 
+- name: Check for a built BitNet.cpp CLI
+  ansible.builtin.stat:
+    path: "{{ nikos_tools_dir }}/bitnet.cpp/build/bin/llama-cli"
+  register: bitnet_build_cli
+
+# Not a `creates:` guard: that skipped the build after the clone moved to a
+# new commit, so the old binary stayed installed.
 - name: Build BitNet.cpp
   ansible.builtin.command: cmake --build build --config Release -j
   args:
     chdir: "{{ nikos_tools_dir }}/bitnet.cpp"
-    creates: "{{ nikos_tools_dir }}/bitnet.cpp/build/bin/llama-cli"
-  when: not ansible_check_mode
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - bitnet_clone is changed or not bitnet_build_cli.stat.exists
 
 # The CLI is installed away from the build tree, not linked back into it.
 # llama-cli is built with a RUNPATH holding the build directory's absolute
