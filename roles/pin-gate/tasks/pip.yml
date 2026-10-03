@@ -1,0 +1,47 @@
+---
+# Installs Python packages at their pins in vars/versions.yml
+# (nikos_pip_pins): the exact version when a package is missing or older, and
+# nothing when the installed one is the same or newer, so `nikos update`
+# never downgrades. A name with no pin (added in vars/local.yml) is installed
+# when missing and otherwise left alone.
+#
+# Inputs:
+#   pin_gate_pip      the pip to run
+#   pin_gate_names    package names
+#   pin_gate_pip_args extra pip arguments (optional list)
+- name: Read the installed Python packages
+  ansible.builtin.command:
+    argv: ["{{ pin_gate_pip }}", list, --format=json, --disable-pip-version-check]
+  register: pin_gate_pip_list
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Choose the Python packages to install
+  vars:
+    pin_gate_installed: >-
+      {{ dict((pin_gate_pip_list.stdout | default('[]', true) | from_json)
+              | map(attribute='name') | map('lower') | map('replace', '_', '-')
+              | zip((pin_gate_pip_list.stdout | default('[]', true) | from_json) | map(attribute='version'))) }}
+  ansible.builtin.set_fact:
+    pin_gate_pip_wanted: >-
+      {%- set out = [] -%}
+      {%- for name in pin_gate_names -%}
+      {%-   set key = name | lower | replace('_', '-') -%}
+      {%-   set have = pin_gate_installed.get(key, '') -%}
+      {%-   set pin = nikos_pip_pins.get(name, '') -%}
+      {%-   if have == '' -%}
+      {%-     set _ = out.append(name ~ (('==' ~ pin) if pin else '')) -%}
+      {%-   elif pin and pin is version(have, '>') -%}
+      {%-     set _ = out.append(name ~ '==' ~ pin) -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ out }}
+
+- name: Install the Python packages that are missing or older than their pins
+  ansible.builtin.command:
+    argv: "{{ [pin_gate_pip, 'install'] + (pin_gate_pip_args | default([])) + pin_gate_pip_wanted }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - pin_gate_pip_wanted | length > 0

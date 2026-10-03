@@ -252,10 +252,42 @@ Upgrade Ansible from the Ansible Ubuntu PPA now?"
   [[ "${answer,,}" == "y" || "${answer,,}" == "yes" ]]
 }
 
+# Signing key of ppa:ansible/ansible, from the Launchpad API
+# (signing_key_fingerprint). The same value is ansible_ppa_key_fingerprints in
+# vars/versions.yml; install.sh runs before the checkout exists, so it carries
+# its own copy and tests/test_pinned_sources.py keeps the two equal.
+ANSIBLE_PPA_KEY_FINGERPRINT="6125E2A8C77F2818FB7BD15B93C4A3FD7BB9C367"
+
+# The PPA key is fetched by fingerprint, checked, and only then trusted for
+# that one repository. apt-add-repository trusted whatever key it was given.
 _upgrade_ansible() {
+  local key gnupghome have codename
   sudo apt-get update -qq
-  sudo apt-get install -y software-properties-common
-  sudo apt-add-repository --yes --update ppa:ansible/ansible
+  sudo apt-get install -y gnupg curl ca-certificates
+  key="$(mktemp)"
+  gnupghome="$(mktemp -d)"
+  if ! curl -fsSL -o "${key}" \
+    "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${ANSIBLE_PPA_KEY_FINGERPRINT}"; then
+    rm -rf "${key}" "${gnupghome}"
+    echo "ERROR: could not download the Ansible PPA signing key." >&2
+    return 1
+  fi
+  have="$(GNUPGHOME="${gnupghome}" gpg --batch --show-keys --with-colons "${key}" 2>/dev/null |
+    awk -F: '$1 == "pub" { p = 1; next } $1 == "fpr" && p { print $10; p = 0 }')"
+  if [[ "${have}" != "${ANSIBLE_PPA_KEY_FINGERPRINT}" ]]; then
+    rm -rf "${key}" "${gnupghome}"
+    echo "ERROR: the Ansible PPA key is ${have:-unreadable}, not the pinned ${ANSIBLE_PPA_KEY_FINGERPRINT}." >&2
+    return 1
+  fi
+  sudo install -d -m 0755 /etc/apt/keyrings
+  GNUPGHOME="${gnupghome}" gpg --batch --yes --dearmor -o "${key}.gpg" "${key}"
+  sudo install -m 0644 "${key}.gpg" /etc/apt/keyrings/ansible-ppa.gpg
+  rm -rf "${key}" "${key}.gpg" "${gnupghome}"
+  # shellcheck source=/dev/null
+  codename="$(. /etc/os-release && printf '%s' "${UBUNTU_CODENAME:-${VERSION_CODENAME}}")"
+  printf 'deb [signed-by=/etc/apt/keyrings/ansible-ppa.gpg] https://ppa.launchpadcontent.net/ansible/ansible/ubuntu %s main\n' \
+    "${codename}" | sudo tee /etc/apt/sources.list.d/ansible-ppa.list >/dev/null
+  sudo apt-get update -qq
   sudo apt-get install -y ansible
 }
 
@@ -966,7 +998,7 @@ _select_profile_plain() {
 # dev-tools role resolves it; an empty result (offline) skips the screen.
 _pinned_distrodeck_version() {
   local file value="" resolver
-  for file in "${NIKOS_HOME}/${LOCAL_VARS_REL}" "${NIKOS_HOME}/vars/main.yml"; do
+  for file in "${NIKOS_HOME}/${LOCAL_VARS_REL}" "${NIKOS_HOME}/vars/versions.yml"; do
     [[ -f "${file}" ]] || continue
     value="$(grep -oP '^distrodeck_version:\s*["\x27]?\K[^"\x27\s]+' "${file}" 2>/dev/null | tail -n 1 || true)"
     [[ -n "${value}" ]] && break

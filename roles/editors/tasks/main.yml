@@ -9,8 +9,17 @@
     url: https://packages.microsoft.com/keys/microsoft.asc
     dest: /tmp/microsoft.asc
     mode: "0644"
+    force: true
   check_mode: false
   become: true
+
+# The key reaches apt's keyring only after its fingerprint matches the pin in
+# vars/versions.yml (vscode_key_fingerprints).
+- name: Verify the Microsoft VS Code apt key fingerprint
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/verify-key-fingerprint.sh', '/tmp/microsoft.asc'] + vscode_key_fingerprints }}"
+  changed_when: false
+  check_mode: false
 
 - name: Dearmor Microsoft VS Code apt key to temp file
   ansible.builtin.command:

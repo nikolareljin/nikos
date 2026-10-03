@@ -19,7 +19,7 @@ jobs:
         bash scripts/install-collections.sh requirements.yml
         ansible-lint site.yml
         shellcheck install.sh scripts/nikos scripts/nikos-progress.sh scripts/nikos-tools.sh scripts/distrodeck-version.sh \
-          scripts/repo-sync.sh scripts/install-collections.sh \
+          scripts/repo-sync.sh scripts/install-collections.sh scripts/verify-key-fingerprint.sh \
           roles/theming/files/nikos-apply-wallpaper.sh
       test_command: |
         python -m pytest tests/ -v

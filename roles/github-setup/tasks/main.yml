@@ -1,7 +1,24 @@
 ---
-- name: Add GitHub CLI apt key
+# Downloaded to /tmp, checked against github_cli_key_fingerprints in
+# vars/versions.yml, and only then installed where apt trusts it.
+- name: Download the GitHub CLI apt key
   ansible.builtin.get_url:
     url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /tmp/githubcli-archive-keyring.gpg
+    mode: "0644"
+    force: true
+  check_mode: false
+
+- name: Verify the GitHub CLI apt key fingerprint
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/verify-key-fingerprint.sh', '/tmp/githubcli-archive-keyring.gpg'] + github_cli_key_fingerprints }}"
+  changed_when: false
+  check_mode: false
+
+- name: Install the GitHub CLI apt key
+  ansible.builtin.copy:
+    src: /tmp/githubcli-archive-keyring.gpg
+    remote_src: true
     dest: /usr/share/keyrings/githubcli-archive-keyring.gpg
     mode: "0644"
   become: true

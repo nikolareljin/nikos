@@ -33,7 +33,7 @@ def test_nothing_is_installed_at_latest():
 
 
 def test_fabric_is_pinned_to_a_release_tag():
-    version = yaml.safe_load((ROOT / "roles/optional/fabric/defaults/main.yml").read_text())["fabric_version"]
+    version = yaml.safe_load((ROOT / "vars/versions.yml").read_text())["fabric_version"]
     assert re.fullmatch(r"v\d+\.\d+\.\d+", version), version
     tasks = (ROOT / "roles/optional/fabric/tasks/main.yml").read_text()
     assert "fabric/cmd/fabric@{{ fabric_version }}" in tasks

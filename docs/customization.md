@@ -3,9 +3,10 @@
 Bundles — the optional parts of NikOS you pick at install time, and how that
 list is meant to be published — are described in `docs/bundles.md`.
 
-Keep local overrides in `vars/local.yml`. `site.yml` loads `vars/main.yml` first, then
+Keep local overrides in `vars/local.yml`. `site.yml` loads `vars/main.yml` and
+`vars/versions.yml` (every pinned version, hash, commit and key fingerprint) first, then
 overlays any values from `vars/local.yml`, so updates can refresh tracked defaults without
-clobbering your machine-specific settings.
+clobbering your machine-specific settings. Override a pin and its hash or commit together.
 
 ## vars/local.yml reference
 
@@ -302,7 +303,7 @@ nikos add tools      # choose again and install the new list now
 ```
 
 The catalog flag needs a distrodeck release that has it. `distrodeck_version`
-defaults to `latest`, the newest release tag; a release that predates the flag
+is pinned in `vars/versions.yml` (`latest` follows the newest tag); a release that predates the flag
 (0.10.3 and earlier, or one pinned in `vars/local.yml`) skips the screen with a
 one-line note, and the `dev-tools` role falls back to the previous behaviour,
 `distrodeck install-tools --all`.

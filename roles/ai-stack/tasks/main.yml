@@ -1,5 +1,5 @@
 ---
-# The upstream installer writes a *system* unit, /etc/systemd/system/ollama.service.
+# Ollama runs as a *system* unit, /etc/systemd/system/ollama.service.
 # Earlier releases managed a user-scope unit that does not exist and waited on
 # /tmp/ollama.sock, which Ollama never creates; both had failed_when: false, so
 # every run swallowed two failures and a 30 second timeout. The listen address
@@ -47,83 +47,168 @@
       ai_stack_ollama_main_pid == '0' or ai_stack_ollama_main_pid not in
       (ai_stack_ollama_port.stdout | regex_findall('pid=([0-9]+)'))
 
-# After the port check, so a machine whose port is already taken is refused
-# before a second engine is installed onto it.
-- name: Install Ollama
-  ansible.builtin.shell: set -o pipefail; curl -fsSL https://ollama.com/install.sh | sh  # noqa: command-instead-of-module
-  args:
-    creates: /usr/local/bin/ollama
-    executable: /bin/bash
-  # The role runs unprivileged; the installer writes /usr/local and a system
-  # unit, and its own sudo cannot prompt under Ansible.
-  become: true
-  when: nikos_ollama_mode == 'local'
-  register: ai_stack_ollama_install
-
-# Ollama is not pinned: `nikos update` (nikos_update_mode) moves the engine to
-# the newest release. The installer is idempotent but downloads the whole
-# engine, so it is re-run only when GitHub's latest release is newer than the
-# installed binary. It rewrites ollama.service; the NikOS drop-in lives in
-# ollama.service.d and survives, and the restart below picks up both.
+# Ollama comes from the pinned release archive (ollama_version), checked
+# against ollama_sha256 from that release's sha256sum.txt, not from
+# ollama.com/install.sh piped into a shell. The tasks below do what that
+# script did on Ubuntu: /usr/local/bin/ollama, /usr/local/lib/ollama, the
+# ROCm runners on an AMD GPU, the `ollama` system user and ollama.service.
+# NVIDIA drivers are not installed here; use Ubuntu's (ubuntu-drivers).
 - name: Read the installed Ollama version
   ansible.builtin.command: /usr/local/bin/ollama --version
   register: ai_stack_ollama_installed
   changed_when: false
   failed_when: false
   check_mode: false
-  when:
-    - nikos_ollama_mode == 'local'
-    - nikos_update_mode | bool
+  when: nikos_ollama_mode == 'local'
 
-- name: Read the latest Ollama release
-  ansible.builtin.uri:
-    url: https://api.github.com/repos/ollama/ollama/releases/latest
-    return_content: true
-  register: ai_stack_ollama_latest
-  failed_when: false
-  check_mode: false
-  when:
-    - nikos_ollama_mode == 'local'
-    - nikos_update_mode | bool
-
-- name: Update Ollama to the latest release
+# Installed when the binary is missing or older than ollama_version, by
+# `nikos setup` and `nikos update` alike; a newer binary is left alone, and an
+# unreadable version is not reinstalled over.
+- name: Decide whether Ollama needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
   vars:
+    pin_gate_name: Ollama
+    pin_gate_want: "{{ ollama_version }}"
+    pin_gate_path: /usr/local/bin/ollama
     # With the server down, or older than the binary, `ollama --version`
     # prints "Warning: client version is X" (alone, or after the server's
-    # "ollama version is Y"). The binary is what the installer replaces.
-    ai_stack_ollama_out: "{{ ai_stack_ollama_installed.stdout | default('') }}"
-    ai_stack_ollama_have: >-
-      {{ ((ai_stack_ollama_out | regex_findall('client version is ([0-9]+[.][0-9]+[.][0-9]+)'))
-          + (ai_stack_ollama_out | regex_findall('[0-9]+[.][0-9]+[.][0-9]+'))) | first | default('', true) }}
-    ai_stack_ollama_want: "{{ ((ai_stack_ollama_latest.json | default({})).tag_name | default('')) | regex_replace('^v', '') }}"
-  ansible.builtin.shell: set -o pipefail; curl -fsSL https://ollama.com/install.sh | sh  # noqa: command-instead-of-module
+    # "ollama version is Y"). The binary's own (client) version is the one
+    # that counts, so it goes first.
+    pin_gate_output: >-
+      {{ ((ai_stack_ollama_installed.stdout | default('') | regex_findall('client version is ([0-9]+[.][0-9]+[.][0-9]+)'))
+          + [ai_stack_ollama_installed.stdout | default('')]) | first }}
+  when: nikos_ollama_mode == 'local'
+
+# install.sh's GPU probe: an AMD display device (PCI vendor 1002) gets the
+# ROCm runners as well.
+- name: Look for an AMD GPU
+  ansible.builtin.shell: set -o pipefail; lspci -d '1002:' 2>/dev/null | grep -q AMD
   args:
     executable: /bin/bash
-  become: true
-  # Only reached when a newer release exists, so running it is the change.
-  changed_when: true
-  register: ai_stack_ollama_update
-  when:
-    - nikos_ollama_mode == 'local'
-    - nikos_update_mode | bool
-    - not ansible_check_mode
-    - ai_stack_ollama_install is not changed
-    - ai_stack_ollama_want is match('^[0-9]+[.][0-9]+[.][0-9]+$')
-    # An unreadable installed version skips rather than re-downloading the
-    # engine on every update.
-    - ai_stack_ollama_have is match('^[0-9]+[.][0-9]+[.][0-9]+$')
-    - ai_stack_ollama_want is version(ai_stack_ollama_have, '>')
+  register: ai_stack_amd_gpu
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: nikos_ollama_mode == 'local'
 
-- name: Say why Ollama was not checked for an update
-  ansible.builtin.debug:
-    msg: >-
-      Could not read the latest Ollama release from GitHub (offline, or the
-      unauthenticated API rate limit); Ollama was left at its installed version.
+# After the port check, so a machine whose port is already taken is refused
+# before a second engine is installed onto it.
+- name: Install Ollama {{ ollama_version }}
   when:
     - nikos_ollama_mode == 'local'
-    - nikos_update_mode | bool
-    - ai_stack_ollama_install is not changed
-    - ((ai_stack_ollama_latest.json | default({})).tag_name | default('')) | length == 0
+    - not ansible_check_mode
+    - pin_gate_install | bool
+  # The role runs unprivileged; everything here writes /usr/local.
+  become: true
+  block:
+    - name: Install zstd for the Ollama release archive
+      ansible.builtin.apt:
+        name: zstd
+        state: present
+
+    - name: Download the Ollama release archive
+      ansible.builtin.get_url:
+        url: "https://github.com/ollama/ollama/releases/download/{{ ollama_version }}/ollama-linux-amd64.tar.zst"
+        dest: "/tmp/ollama-linux-amd64-{{ ollama_version }}.tar.zst"
+        checksum: "sha256:{{ ollama_sha256 }}"
+        mode: "0644"
+
+    - name: Download the Ollama ROCm archive
+      ansible.builtin.get_url:
+        url: "https://github.com/ollama/ollama/releases/download/{{ ollama_version }}/ollama-linux-amd64-rocm.tar.zst"
+        dest: "/tmp/ollama-linux-amd64-rocm-{{ ollama_version }}.tar.zst"
+        checksum: "sha256:{{ ollama_rocm_sha256 }}"
+        mode: "0644"
+      when: ai_stack_amd_gpu.rc | default(1) == 0
+
+    # As install.sh did: a stale lib/ollama would mix two releases' runners.
+    - name: Remove the previous Ollama libraries
+      ansible.builtin.file:
+        path: /usr/local/lib/ollama
+        state: absent
+
+    - name: Unpack Ollama into /usr/local
+      ansible.builtin.command:
+        argv: [tar, --zstd, -xf, "/tmp/ollama-linux-amd64-{{ ollama_version }}.tar.zst", -C, /usr/local]
+      changed_when: true
+      register: ai_stack_ollama_update
+
+    - name: Unpack the Ollama ROCm runners into /usr/local
+      ansible.builtin.command:
+        argv: [tar, --zstd, -xf, "/tmp/ollama-linux-amd64-rocm-{{ ollama_version }}.tar.zst", -C, /usr/local]
+      changed_when: true
+      when: ai_stack_amd_gpu.rc | default(1) == 0
+
+    - name: Remove the Ollama release archives
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/tmp/ollama-linux-amd64-{{ ollama_version }}.tar.zst"
+        - "/tmp/ollama-linux-amd64-rocm-{{ ollama_version }}.tar.zst"
+
+- name: Create the ollama system group
+  ansible.builtin.group:
+    name: ollama
+    system: true
+  become: true
+  when: nikos_ollama_mode == 'local'
+
+- name: Create the ollama system user
+  ansible.builtin.user:
+    name: ollama
+    group: ollama
+    system: true
+    shell: /bin/false
+    home: /usr/share/ollama
+    create_home: true
+  become: true
+  when: nikos_ollama_mode == 'local'
+
+# GPU device nodes are group render or video; a group that does not exist is
+# skipped, as install.sh did.
+- name: Read the system groups
+  ansible.builtin.getent:
+    database: group
+  check_mode: false
+  when: nikos_ollama_mode == 'local'
+
+- name: Add the ollama user to the GPU device groups
+  ansible.builtin.user:
+    name: ollama
+    groups: "{{ ['render', 'video'] | select('in', ansible_facts.getent_group | default({})) | list }}"
+    append: true
+  become: true
+  when:
+    - nikos_ollama_mode == 'local'
+    - not ansible_check_mode
+
+# The unit install.sh wrote. Settings NikOS owns go in the drop-in below.
+- name: Write the Ollama system unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ollama.service
+    mode: "0644"
+    content: |
+      # Managed by NikOS (roles/ai-stack). Local settings go in ollama.service.d.
+      [Unit]
+      Description=Ollama Service
+      After=network-online.target
+
+      [Service]
+      ExecStart=/usr/local/bin/ollama serve
+      User=ollama
+      Group=ollama
+      Restart=always
+      RestartSec=3
+      Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+      [Install]
+      WantedBy=default.target
+  become: true
+  register: ai_stack_ollama_unitfile
+  when: nikos_ollama_mode == 'local'
 
 - name: Create the Ollama unit drop-in directory
   ansible.builtin.file:
@@ -150,7 +235,9 @@
     name: ollama
     enabled: true
     daemon_reload: true
-    state: "{{ 'restarted' if (ai_stack_ollama_dropin is changed or ai_stack_ollama_update is changed) else 'started' }}"
+    state: >-
+      {{ 'restarted' if (ai_stack_ollama_dropin is changed or ai_stack_ollama_update is changed
+                         or ai_stack_ollama_unitfile is changed) else 'started' }}
   become: true
   when:
     - nikos_ollama_mode == 'local'
@@ -271,10 +358,30 @@
     state: directory
     mode: "0755"
 
-- name: Check whether this llama.cpp release is already installed
-  ansible.builtin.stat:
-    path: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/llama-server"
-  register: ai_stack_llama_installed
+# Each llama.cpp release lives in its own ~/.local/lib/llama.cpp-bNNNN tree.
+# The pin is installed when no tree is as new as it; a newer tree from an
+# earlier pin stays the active one, so `nikos update` never downgrades.
+# A tree counts only when it holds llama-server, so a half-copied one from an
+# interrupted run is installed again.
+- name: Find the installed llama.cpp release trees
+  ansible.builtin.find:
+    paths: "{{ nikos_home }}/.local/lib"
+    patterns: llama-server
+    recurse: true
+    depth: 2
+    file_type: file
+  register: ai_stack_llama_trees
+
+- name: Choose the llama.cpp release to use
+  vars:
+    ai_stack_llama_newest: >-
+      {{ (ai_stack_llama_trees.files | default([]) | map(attribute='path') | map('dirname') | map('basename')
+          | map('regex_replace', '^llama[.]cpp-b', '') | select('match', '^[0-9]+$')
+          | map('int') | list + [0]) | max }}
+    ai_stack_llama_pin: "{{ llama_cpp_version | regex_replace('^b', '') }}"
+  ansible.builtin.set_fact:
+    ai_stack_llama_install: "{{ (ai_stack_llama_newest | int) < (ai_stack_llama_pin | int) }}"
+    ai_stack_llama_active: "b{{ [ai_stack_llama_newest | int, ai_stack_llama_pin | int] | max }}"
 
 # llama.cpp ships prebuilt binaries from GitHub releases. A missing asset or a
 # network failure used to abort the whole play, taking every role after
@@ -282,7 +389,7 @@
 - name: Install llama.cpp CPU binaries
   when:
     - not ansible_check_mode
-    - not ai_stack_llama_installed.stat.exists
+    - ai_stack_llama_install | bool
   block:
     - name: Create llama.cpp extraction directory
       ansible.builtin.file:
@@ -294,6 +401,7 @@
       ansible.builtin.get_url:
         url: "https://github.com/ggml-org/llama.cpp/releases/download/{{ llama_cpp_version }}/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
         dest: "/tmp/llama-{{ llama_cpp_version }}-bin-ubuntu-x64.tar.gz"
+        checksum: "sha256:{{ llama_cpp_sha256 }}"
         mode: "0644"
 
     - name: Extract llama.cpp CPU binaries
@@ -326,14 +434,23 @@
 
     # The binaries are linked with RUNPATH=$ORIGIN and need libllama.so and the
     # libggml*.so set beside them, so the release tree is installed whole rather
-    # than copying two executables into ~/.local/bin.
+    # than copying two executables into ~/.local/bin. cp -a, not the copy
+    # module: copy with remote_src drops the symlinks, and llama-cli loads
+    # libllama-common.so.0, which is one.
+    - name: Create the llama.cpp release tree
+      ansible.builtin.file:
+        path: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}"
+        state: directory
+        mode: "0755"
+
     - name: Install the llama.cpp release tree
-      ansible.builtin.copy:
-        src: "{{ ai_stack_llama_bin_dir }}/"
-        dest: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/"
-        remote_src: true
-        mode: preserve
-        directory_mode: "0755"
+      ansible.builtin.command:
+        argv:
+          - cp
+          - -a
+          - "{{ ai_stack_llama_bin_dir }}/."
+          - "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/"
+      changed_when: true
   rescue:
     - name: Warn that llama.cpp could not be installed
       ansible.builtin.debug:
@@ -347,7 +464,7 @@
 # that was removed, and the block above is skipped in exactly that case.
 - name: Re-check the llama.cpp release tree
   ansible.builtin.stat:
-    path: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/llama-server"
+    path: "{{ nikos_home }}/.local/lib/llama.cpp-{{ ai_stack_llama_active }}/llama-server"
   register: ai_stack_llama_tree
   when: not ansible_check_mode
 
@@ -355,7 +472,7 @@
 # keeps the libraries reachable.
 - name: Link llama.cpp binaries into the local bin directory
   ansible.builtin.file:
-    src: "{{ nikos_home }}/.local/lib/llama.cpp-{{ llama_cpp_version }}/{{ item }}"
+    src: "{{ nikos_home }}/.local/lib/llama.cpp-{{ ai_stack_llama_active }}/{{ item }}"
     dest: "{{ nikos_home }}/.local/bin/{{ item }}"
     state: link
     force: true
@@ -375,6 +492,7 @@
   ansible.builtin.get_url:
     url: "{{ miniforge_url }}"
     dest: /tmp/miniforge.sh
+    checksum: "sha256:{{ miniforge_sha256 }}"
     mode: "0755"
   when: not ai_stack_miniforge_stat.stat.exists
 
@@ -395,19 +513,26 @@
     creates: "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}"
 
 - name: Install PyTorch CPU in nikos-ai env
-  ansible.builtin.command: >
-    {{ nikos_home }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
-    pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }} torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-  changed_when: false
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: pip
+  vars:
+    pin_gate_pip: "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip"
+    pin_gate_names: [torch, torchvision, torchaudio]
+    pin_gate_pip_args: [--index-url, 'https://download.pytorch.org/whl/cpu']
 
 - name: Install data science packages in nikos-ai env
-  ansible.builtin.command: >
-    {{ nikos_home }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
-    pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }} transformers jupyter jupyterlab pandas numpy scikit-learn matplotlib
-  changed_when: false
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: pip
+  vars:
+    pin_gate_pip: "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip"
+    pin_gate_names: [transformers, jupyter, jupyterlab, pandas, numpy, scikit-learn, matplotlib]
 
 - name: Install aider and uv in nikos-ai env
-  ansible.builtin.command: >
-    {{ nikos_home }}/miniforge3/bin/conda run -n {{ nikos_conda_env }}
-    pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }} aider-chat uv
-  changed_when: false
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: pip
+  vars:
+    pin_gate_pip: "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip"
+    pin_gate_names: [aider-chat, uv]

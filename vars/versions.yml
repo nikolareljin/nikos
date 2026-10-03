@@ -1,0 +1,372 @@
+---
+# Every pinned external dependency NikOS installs, in one place.
+#
+# Rules (enforced by tests/test_pinned_sources.py):
+# - Only verifiable sources: distro packages, vendor apt repos whose key
+#   fingerprint is checked here, release files pinned to a version and a
+#   sha256, registry installs at an exact version, git clones at a tag or
+#   commit. Never `curl | sh`, `releases/latest`, `@latest` or a branch head.
+# - Each pin is a flat variable Ansible reads (site.yml loads this file after
+#   vars/main.yml; vars/local.yml still overrides any of them). Prefer the
+#   upstream release tag as the version.
+# - Each pin has an entry in nikos_pin_sources at the bottom, which
+#   scripts/bump-versions.py reads to check, bump and verify it.
+# - The Jev SDK has its own hash-pinned lock file:
+#   roles/optional/jev/files/requirements.lock.
+#
+# Update with: python3 scripts/bump-versions.py --check | --bump NAME | --verify
+
+# -- Ollama (roles/ai-stack) --------------------------------------------------
+# github.com/ollama/ollama releases; sha256 from the release's sha256sum.txt.
+ollama_version: "v0.34.4"
+ollama_sha256: "c238986e61d40c0cc5f4a9b9e40b9eea104350b77efa34741fc134e105cb9533"
+ollama_rocm_sha256: "dbfcbdff6c36f69bfed177d1807aa2a23ad04ad9208f9a3f648d2fd36136ff3d"
+
+# -- llama.cpp CPU build (roles/ai-stack) -------------------------------------
+# github.com/ggml-org/llama.cpp releases; no sums file, sha256 = GitHub asset digest.
+llama_cpp_version: "b10444"
+llama_cpp_sha256: "4b9023efa16a60c3b07f74a6295bc747bd3c96301b732a35ae3534435e42cf3d"
+
+# -- Miniforge (roles/ai-stack) -----------------------------------------------
+# github.com/conda-forge/miniforge releases; sha256 from the asset's .sha256 file.
+miniforge_version: "26.3.2-3"
+miniforge_sha256: "848194851a98903134187fbb4ab50efe87b003e0c0f808f97644b7524a62bf2c"
+miniforge_url: "https://github.com/conda-forge/miniforge/releases/download/{{ miniforge_version }}/Miniforge3-{{ miniforge_version }}-Linux-x86_64.sh"
+
+# -- Python packages in the nikos-ai conda env (ai-stack, agent-dev, optional DB roles)
+# PyPI (torch, torchvision, torchaudio from download.pytorch.org/whl/cpu).
+# Exact versions, resolved per install group for Python 3.13 with
+# `uv pip compile`; bump them together, not one at a time.
+nikos_pip_pins:
+  torch: "2.14.1"
+  torchvision: "0.29.1"
+  torchaudio: "2.11.0"
+  transformers: "5.18.0"
+  jupyter: "1.1.1"
+  jupyterlab: "4.6.4"
+  pandas: "3.0.6"
+  numpy: "2.5.3"
+  scikit-learn: "1.9.1"
+  matplotlib: "3.11.2"
+  aider-chat: "0.86.2"
+  uv: "0.12.22"
+  langchain: "1.4.3"
+  langchain-community: "0.4.2"
+  langchain-openai: "1.6.7"
+  llama-index: "0.14.25"
+  llama-index-llms-ollama: "0.11.0"
+  openai: "2.54.0"
+  anthropic: "1.11.0"
+  instructor: "1.17.0"
+  fastapi: "0.142.2"
+  uvicorn: "0.54.0"
+  httpx: "0.28.1"
+  sentence-transformers: "6.1.0"
+  chromadb: "1.5.9"
+  qdrant-client: "1.19.1"
+  datasets: "5.0.1"
+  evaluate: "0.4.6"
+  accelerate: "1.15.0"
+  litecli: "1.17.1"
+  opencv-contrib-python: "5.0.0.93"
+  pillow: "12.3.0"
+  scikit-image: "0.26.0"
+  imageio: "2.38.0"
+  pytesseract: "0.3.13"
+  timm: "1.0.30"
+  psycopg2-binary: "2.9.13"
+  pymongo: "4.18.2"
+  redis: "8.1.0"
+
+# -- pipx applications (roles/cloud-ai-cli) -----------------------------------
+# PyPI, exact versions.
+shell_gpt_version: "1.5.1"
+glances_version: "4.5.7"
+
+# -- Node.js, nvm and npm CLIs (roles/cloud-ai-cli, optional/openclaw) --------
+# nodejs.org; nvm checks the tarball against nodejs.org's SHASUMS256.txt.
+nikos_node_version: "22.23.2"
+# github.com/nvm-sh/nvm tag; sha256 of install.sh at that tag, hashed by hand
+# (nvm publishes no sums file). The script clones nvm at the same tag.
+nikos_nvm_version: "v0.40.7"
+nvm_install_sha256: "066ce4eaf4d78eaa6410433bc9ba58faaba646157cbbed6109153e6c24c5f8a5"
+# npm registry, exact versions; npm checks each tarball's registry integrity.
+gemini_cli_version: "0.62.0"
+# The extended-stable line: 2026.9.x needs Node >= 24.16, NikOS installs 22.
+openclaw_version: "2026.8.33"
+
+# -- Claude Code (roles/agent-dev) --------------------------------------------
+# downloads.claude.ai native build; sha256 from that release's manifest.json,
+# whose manifest.json.sig is signed by 31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE.
+claude_code_version: "2.1.285"
+claude_code_sha256: "33dad1ec615a2e08cc78b494f05c110e49916de2c79d78ec8799ebf46b233d29"
+
+# -- Fabric (roles/optional/fabric) -------------------------------------------
+# Go module tag; go install checks it against sum.golang.org.
+fabric_version: "v1.4.505"
+
+# -- Release binaries ---------------------------------------------------------
+# github.com/oven-sh/bun tag bun-v<version>; sha256 from SHASUMS256.txt.
+bun_version: "1.4.2"
+bun_sha256: "36368faef7527875d5ffa52e53cd48021741f2a83eb6208a8dd64068d422a913"
+# get.helm.sh (helm/helm tag), Helm 3 line; sha256 from the .sha256sum file.
+helm_version: "v3.22.0"
+helm_sha256: "1e4ab49e429626cf6c6958d914248b78c9730803c2751b87627e171dc800e7bb"
+# github.com/nektos/act releases; sha256 from checksums.txt.
+act_version: "v0.2.89"
+act_sha256: "0191d6f1f3b716b5c55820032605d05fc3c1cdbf581ebeff655019e5dd1524c0"
+# github.com/starship/starship releases; sha256 from the asset's .sha256 file.
+starship_version: "v1.26.0"
+starship_sha256: "321f0dd7af8340a5f2e6a8fec6538a04f617486f9ec70d878f91c09cd8deef22"
+# github.com/FiloSottile/mkcert releases; no sums file, hashed by hand.
+mkcert_version: "v1.4.4"
+mkcert_sha256: "6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52"
+# github.com/EricLBuehler/mistral.rs releases, CPU build; sha256 = GitHub asset digest.
+mistralrs_version: "v0.9.4"
+mistralrs_sha256: "99a8f233db07927b9af4d6ac8d5c1541bc9e4c6c90ebeec1be97fe6306e00feb"
+# github.com/EliverLara/Nordic releases; the asset is unsigned, hashed by hand.
+nordic_gtk_version: "v2.2.0"
+nordic_gtk_sha256: "d162d694e13bec518636b193fbe84ccea44da9a81a89015c6713f6b258ee36d5"
+nordic_gtk_url: "https://github.com/EliverLara/Nordic/releases/download/{{ nordic_gtk_version }}/Nordic.tar.xz"
+
+# -- Container images (roles/optional/qdrant) ---------------------------------
+# Docker Hub qdrant/qdrant; the digest is the multi-arch index, docker checks it.
+qdrant_version: "v1.19.1"
+qdrant_image_digest: "sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10"
+
+# -- Git checkouts (roles/dev-tools, optional/bitnet) -------------------------
+# Release tag and the commit it points at; the checkout uses the commit.
+# github.com/nikolareljin/distrodeck tag. "latest" in vars/local.yml follows
+# the newest tag instead (opt-in, not verified against a commit).
+distrodeck_version: "0.11.0"
+distrodeck_commit: "68a27e4964ddc49dc5e39155c1a7a74319152d45"
+# github.com/nikolareljin/image-view tag.
+image_view_version: "0.6.2"
+image_view_commit: "52b7d11f2509c31e79defe584cd3d8ddb9b1b692"
+# github.com/nikolareljin/git-lantern tag.
+git_lantern_version: "0.8.2"
+git_lantern_commit: "e596755a9deed1de5762f630a347aeab6f243d9c"
+# github.com/nikolareljin/ai-runner tag.
+ai_runner_version: "0.1.5"
+ai_runner_commit: "5bd3089ba909fc62588629e82f98c86a9f103ec4"
+# github.com/microsoft/BitNet has no tags: a main commit from 2026-07-27.
+bitnet_commit: "0b341e582afbf9e1011f24744b554c96a3477eb5"
+
+# -- Vendor apt repositories: series and signing key fingerprints -------------
+# Each key is downloaded, its primary fingerprints compared with these by
+# scripts/verify-key-fingerprint.sh, and only then installed.
+# packages.microsoft.com; fingerprint from learn.microsoft.com/linux/packages.
+vscode_key_fingerprints:
+  - "BC528686B50D79E339D3721CEB3E94ADBE1229CF"
+# cli.github.com; fingerprints from cli/cli docs/install_linux.md.
+github_cli_key_fingerprints:
+  - "2C6106201985B60E6C7AC87323F3D4EA75716059"
+  - "7F38BBB59D064DBCB3D84D725612B36462313325"
+# pkgs.k8s.io; same key from download.opensuse.org isv:kubernetes and keyserver.ubuntu.com.
+kubernetes_apt_version: "v1.36"
+kubernetes_key_fingerprints:
+  - "DE15B14486CD377B9E876E1A234654DA9A296436"
+# repo.mongodb.org; the 8.2 noble repository is signed with the 8.0 key, and
+# MongoDB publishes no server-8.2.asc. Fingerprint also pinned by the Docker
+# official mongo image (docker-library/mongo).
+mongodb_series: "8.2"
+mongodb_key_series: "8.0"
+mongodb_key_fingerprints:
+  - "4B0752C1BCA238C0B4EE14DC41DE058A4E7DCA05"
+
+# ppa:ansible/ansible (install.sh, when the system Ansible is too old);
+# fingerprint from the Launchpad API. install.sh carries the same value as
+# ANSIBLE_PPA_KEY_FINGERPRINT because it runs before this file exists.
+ansible_ppa_key_fingerprints:
+  - "6125E2A8C77F2818FB7BD15B93C4A3FD7BB9C367"
+
+# -- Machine-readable sources for scripts/bump-versions.py --------------------
+# Keyed by pin name. Fields:
+#   type          github-release | github-tag | github-commit | npm | pypi |
+#                 pypi-map | go-module | nodejs | docker-image | apt-key
+#   repo / package / module / image
+#                 where the versions come from
+#   version_var   the variable above that holds the version (tag)
+#   tag_prefix    added before the version to form the tag (bun: "bun-v")
+#   version_regex only versions matching this are eligible (e.g. Helm 3 only)
+#   dist_tag      npm: follow this dist-tag instead of the newest release
+#   allow_prerelease  GitHub: accept releases marked pre-release (llama.cpp
+#                 marks every build so)
+#   artifacts     files hashed for the pin: asset (release asset name) or url,
+#                 sha256_var, and optional checksums (vendor sums file: asset
+#                 name, URL, or "github-digest" for the API digest, or
+#                 "claude-manifest"). Templates: {version} {tag} {asset} {url}.
+#   commit_var    github-tag / github-commit: variable holding the commit
+#   digest_var    docker-image: variable holding the image digest
+#   url, fingerprints_var
+#                 apt-key: key URL (may use {var} from this file) and the list
+#                 variable of expected fingerprints; never changed by the tool
+nikos_pin_sources:
+  ollama:
+    type: github-release
+    repo: ollama/ollama
+    version_var: ollama_version
+    artifacts:
+      - {asset: ollama-linux-amd64.tar.zst, sha256_var: ollama_sha256, checksums: sha256sum.txt}
+      - {asset: ollama-linux-amd64-rocm.tar.zst, sha256_var: ollama_rocm_sha256, checksums: sha256sum.txt}
+  llama_cpp:
+    type: github-release
+    repo: ggml-org/llama.cpp
+    version_var: llama_cpp_version
+    version_regex: '^b[0-9]+$'
+    # llama.cpp marks every build a GitHub pre-release; bNNNN builds are its releases.
+    allow_prerelease: true
+    artifacts:
+      - {asset: "llama-{tag}-bin-ubuntu-x64.tar.gz", sha256_var: llama_cpp_sha256, checksums: github-digest}
+  miniforge:
+    type: github-release
+    repo: conda-forge/miniforge
+    version_var: miniforge_version
+    version_regex: '^[0-9]+[.][0-9]+[.][0-9]+-[0-9]+$'
+    artifacts:
+      - {asset: "Miniforge3-{tag}-Linux-x86_64.sh", sha256_var: miniforge_sha256, checksums: "{asset}.sha256"}
+  nikos_pip_pins:
+    type: pypi-map
+    version_var: nikos_pip_pins
+  shell_gpt:
+    type: pypi
+    package: shell-gpt
+    version_var: shell_gpt_version
+  glances:
+    type: pypi
+    package: glances
+    version_var: glances_version
+  node:
+    type: nodejs
+    version_regex: '^22[.]'
+    version_var: nikos_node_version
+  nvm:
+    type: github-tag
+    repo: nvm-sh/nvm
+    version_var: nikos_nvm_version
+    version_regex: '^v[0-9]+[.][0-9]+[.][0-9]+$'
+    artifacts:
+      - {url: "https://raw.githubusercontent.com/nvm-sh/nvm/{tag}/install.sh", sha256_var: nvm_install_sha256}
+  gemini_cli:
+    type: npm
+    package: "@google/gemini-cli"
+    version_var: gemini_cli_version
+  openclaw:
+    type: npm
+    package: openclaw
+    dist_tag: extended-stable
+    version_var: openclaw_version
+  claude_code:
+    type: npm
+    package: "@anthropic-ai/claude-code"
+    dist_tag: stable
+    version_var: claude_code_version
+    artifacts:
+      - url: "https://downloads.claude.ai/claude-code-releases/{version}/linux-x64/claude"
+        sha256_var: claude_code_sha256
+        checksums: claude-manifest
+  fabric:
+    type: go-module
+    module: github.com/danielmiessler/fabric
+    version_var: fabric_version
+  bun:
+    type: github-release
+    repo: oven-sh/bun
+    tag_prefix: bun-v
+    version_var: bun_version
+    artifacts:
+      - {asset: bun-linux-x64.zip, sha256_var: bun_sha256, checksums: SHASUMS256.txt}
+  helm:
+    type: github-release
+    repo: helm/helm
+    version_var: helm_version
+    version_regex: '^v3[.][0-9]+[.][0-9]+$'
+    artifacts:
+      - url: "https://get.helm.sh/helm-{tag}-linux-amd64.tar.gz"
+        sha256_var: helm_sha256
+        checksums: "{url}.sha256sum"
+  act:
+    type: github-release
+    repo: nektos/act
+    version_var: act_version
+    artifacts:
+      - {asset: act_Linux_x86_64.tar.gz, sha256_var: act_sha256, checksums: checksums.txt}
+  starship:
+    type: github-release
+    repo: starship/starship
+    version_var: starship_version
+    artifacts:
+      - {asset: starship-x86_64-unknown-linux-gnu.tar.gz, sha256_var: starship_sha256, checksums: "{asset}.sha256"}
+  mkcert:
+    type: github-release
+    repo: FiloSottile/mkcert
+    version_var: mkcert_version
+    artifacts:
+      - {asset: "mkcert-{tag}-linux-amd64", sha256_var: mkcert_sha256}
+  mistralrs:
+    type: github-release
+    repo: EricLBuehler/mistral.rs
+    version_var: mistralrs_version
+    artifacts:
+      - {asset: mistralrs-cpu-x86_64-unknown-linux-gnu.tar.gz, sha256_var: mistralrs_sha256, checksums: github-digest}
+  nordic_gtk:
+    type: github-release
+    repo: EliverLara/Nordic
+    version_var: nordic_gtk_version
+    artifacts:
+      - {asset: Nordic.tar.xz, sha256_var: nordic_gtk_sha256}
+  qdrant:
+    type: docker-image
+    image: qdrant/qdrant
+    repo: qdrant/qdrant
+    version_var: qdrant_version
+    digest_var: qdrant_image_digest
+  distrodeck:
+    type: github-tag
+    repo: nikolareljin/distrodeck
+    version_var: distrodeck_version
+    commit_var: distrodeck_commit
+    version_regex: '^[0-9]+[.][0-9]+[.][0-9]+$'
+  image_view:
+    type: github-tag
+    repo: nikolareljin/image-view
+    version_var: image_view_version
+    commit_var: image_view_commit
+    version_regex: '^[0-9]+[.][0-9]+[.][0-9]+$'
+  git_lantern:
+    type: github-tag
+    repo: nikolareljin/git-lantern
+    version_var: git_lantern_version
+    commit_var: git_lantern_commit
+    version_regex: '^[0-9]+[.][0-9]+[.][0-9]+$'
+  ai_runner:
+    type: github-tag
+    repo: nikolareljin/ai-runner
+    version_var: ai_runner_version
+    commit_var: ai_runner_commit
+    version_regex: '^[0-9]+[.][0-9]+[.][0-9]+$'
+  bitnet:
+    type: github-commit
+    repo: microsoft/BitNet
+    branch: main
+    commit_var: bitnet_commit
+  vscode_key:
+    type: apt-key
+    url: https://packages.microsoft.com/keys/microsoft.asc
+    fingerprints_var: vscode_key_fingerprints
+  github_cli_key:
+    type: apt-key
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    fingerprints_var: github_cli_key_fingerprints
+  kubernetes_key:
+    type: apt-key
+    url: "https://pkgs.k8s.io/core:/stable:/{kubernetes_apt_version}/deb/Release.key"
+    fingerprints_var: kubernetes_key_fingerprints
+  mongodb_key:
+    type: apt-key
+    url: "https://pgp.mongodb.com/server-{mongodb_key_series}.asc"
+    fingerprints_var: mongodb_key_fingerprints
+  ansible_ppa_key:
+    type: apt-key
+    url: "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x6125E2A8C77F2818FB7BD15B93C4A3FD7BB9C367"
+    fingerprints_var: ansible_ppa_key_fingerprints

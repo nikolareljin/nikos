@@ -16,7 +16,10 @@
   when: not ansible_check_mode
 
 - name: Install Redis Python client in nikos-ai env
-  ansible.builtin.command: >
-    {{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip install {{ "--upgrade" if (nikos_update_mode | bool) else "" }} redis
-  changed_when: false
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: pip
+  vars:
+    pin_gate_pip: "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip"
+    pin_gate_names: [redis]
   when: not ansible_check_mode

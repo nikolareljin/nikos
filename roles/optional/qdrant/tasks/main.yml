@@ -5,6 +5,9 @@
     state: directory
     mode: "0755"
 
+# The image is pinned by tag and digest (qdrant_version, qdrant_image_digest
+# in vars/versions.yml); docker refuses an image whose content does not match
+# the digest. The unit is written once (force: false keeps local edits).
 - name: Deploy Qdrant user service
   ansible.builtin.copy:
     dest: "{{ nikos_home }}/.config/systemd/user/qdrant.service"
@@ -17,12 +20,22 @@
 
       [Service]
       ExecStartPre=-/usr/bin/docker rm qdrant
-      ExecStart=/usr/bin/docker run --rm --name qdrant -p 6333:6333 -v qdrant-storage:/qdrant/storage qdrant/qdrant:latest
+      ExecStart=/usr/bin/docker run --rm --name qdrant -p 6333:6333 -v qdrant-storage:/qdrant/storage \
+        qdrant/qdrant:{{ qdrant_version }}@{{ qdrant_image_digest }}
       ExecStop=/usr/bin/docker stop qdrant
       Restart=on-failure
 
       [Install]
       WantedBy=default.target
+
+# Moves a unit NikOS wrote earlier (with :latest, or an older pin) to the
+# current pin, leaving the rest of the file and any other image alone.
+- name: Point an existing Qdrant unit at the pinned image
+  ansible.builtin.replace:
+    path: "{{ nikos_home }}/.config/systemd/user/qdrant.service"
+    regexp: 'qdrant/qdrant:(latest|v[0-9.]+@sha256:[0-9a-f]{64})(?=\s|$)'
+    replace: "qdrant/qdrant:{{ qdrant_version }}@{{ qdrant_image_digest }}"
+  when: not ansible_check_mode
 
 - name: Enable Qdrant user service
   ansible.builtin.systemd:

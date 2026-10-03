@@ -5,12 +5,23 @@
 # database (sum.golang.org), so a tag moved or rewritten upstream fails to
 # install instead of installing different code. Fabric's go.mod needs a newer Go
 # than Ubuntu ships; GOTOOLCHAIN=auto fetches that toolchain, checked the same way.
+# A Fabric newer than the pin is left alone: the pin is a minimum on update.
 - name: Read the installed Fabric version
   ansible.builtin.command: "{{ nikos_home }}/go/bin/fabric --version"
   register: fabric_installed
   changed_when: false
   failed_when: false
   check_mode: false
+
+- name: Decide whether Fabric needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: Fabric
+    pin_gate_want: "{{ fabric_version }}"
+    pin_gate_path: "{{ nikos_home }}/go/bin/fabric"
+    pin_gate_output: "{{ fabric_installed.stdout | default('') }}"
 
 - name: Install Fabric AI pattern CLI {{ fabric_version }}
   ansible.builtin.command:
@@ -29,4 +40,4 @@
   changed_when: true
   when:
     - not ansible_check_mode
-    - (fabric_installed.stdout | default('') | trim) != fabric_version
+    - pin_gate_install | bool

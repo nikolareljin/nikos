@@ -1,4 +1,0 @@
----
-# A release tag, checked against sum.golang.org by go install. Update by hand:
-# pick a tag a few days old (Fabric tags several releases a day).
-fabric_version: "v1.4.505"

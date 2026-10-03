@@ -1,9 +1,48 @@
 ---
-- name: Install mistral.rs server
-  ansible.builtin.command: cargo install mistralrs-server
-  args:
-    creates: "{{ nikos_home }}/.cargo/bin/mistralrs-server"
-  environment:
-    HOME: "{{ nikos_home }}"
-    CARGO_HOME: "{{ nikos_home }}/.cargo"
-  when: not ansible_check_mode
+# mistral.rs from its pinned CPU release build (mistralrs_version), checked
+# against mistralrs_sha256 (the GitHub release asset digest). The old
+# `cargo install mistralrs-server` named a crate crates.io does not have, and
+# was unpinned. The binary is `mistralrs`; `mistralrs serve` is the server.
+# Installed when missing or older than the pin; never downgraded.
+- name: Ensure local bin directory exists
+  ansible.builtin.file:
+    path: "{{ nikos_home }}/.local/bin"
+    state: directory
+    mode: "0755"
+
+- name: Read the installed mistral.rs version
+  ansible.builtin.command: "{{ nikos_home }}/.local/bin/mistralrs --version"
+  register: mistral_rs_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether mistral.rs needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: mistral.rs
+    pin_gate_want: "{{ mistralrs_version }}"
+    pin_gate_path: "{{ nikos_home }}/.local/bin/mistralrs"
+    pin_gate_output: "{{ mistral_rs_installed.stdout | default('') }}"
+
+- name: Install mistral.rs {{ mistralrs_version }}
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
+  block:
+    - name: Download the mistral.rs release archive
+      ansible.builtin.get_url:
+        url: "https://github.com/EricLBuehler/mistral.rs/releases/download/{{ mistralrs_version }}/mistralrs-cpu-x86_64-unknown-linux-gnu.tar.gz"
+        dest: "/tmp/mistralrs-cpu-{{ mistralrs_version }}.tar.gz"
+        checksum: "sha256:{{ mistralrs_sha256 }}"
+        mode: "0644"
+
+    - name: Unpack mistral.rs
+      ansible.builtin.unarchive:
+        src: "/tmp/mistralrs-cpu-{{ mistralrs_version }}.tar.gz"
+        dest: "{{ nikos_home }}/.local/bin"
+        remote_src: true
+        include: [mistralrs]
+        mode: "0755"

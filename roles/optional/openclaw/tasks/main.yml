@@ -1,20 +1,40 @@
 ---
-# `creates: /usr/bin/openclaw` used to short-circuit this task, so
-# `openclaw@latest` was resolved exactly once - on the first install - and the
-# package then stayed frozen at whatever version that was. state: latest lets
-# `nikos update` actually move it forward.
+# An exact version from vars/versions.yml (openclaw_version); npm checks the
+# tarball against the registry's integrity hash. Installed when missing or
+# older than the pin; a newer OpenClaw is left alone.
 #
-# OpenClaw declares `node >=22.22.3 <23 || >=24.15.0 <25 || >=25.9.0`. The
-# cloud-ai-cli role settles which Node the npm-only CLIs use - the system one
-# when it is new enough, otherwise a pinned Node under the user's home through
-# nvm - and records it in cloud_ai_cli_node_bin.
-- name: Install or upgrade OpenClaw globally via npm
+# The pin is on OpenClaw's extended-stable line, which declares
+# `node >=22.22.3 <23 || >=24.15.0 <25 || >=25.9.0`; newer lines need Node 24.
+# The cloud-ai-cli role settles which Node the npm-only CLIs use - the system
+# one when it is new enough, otherwise a pinned Node under the user's home
+# through nvm - and records it in cloud_ai_cli_node_bin.
+- name: Read the installed OpenClaw version
+  ansible.builtin.slurp:
+    src: "{{ (cloud_ai_cli_npm_prefix.stdout | default('/usr/local', true) | trim) ~ '/lib/node_modules/openclaw/package.json' }}"
+  register: openclaw_installed
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether OpenClaw needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: OpenClaw
+    pin_gate_want: "{{ openclaw_version }}"
+    pin_gate_path: "{{ (cloud_ai_cli_npm_prefix.stdout | default('/usr/local', true) | trim) ~ '/lib/node_modules/openclaw/package.json' }}"
+    pin_gate_output: "{{ (openclaw_installed.content | default('e30=') | b64decode | from_json).version | default('') }}"
+
+- name: Install OpenClaw globally via npm at {{ openclaw_version }}
   community.general.npm:
     name: openclaw
+    version: "{{ openclaw_version }}"
     global: true
-    state: latest
+    state: present
     executable: "{{ cloud_ai_cli_node_bin }}/npm"
   become: "{{ cloud_ai_cli_npm_needs_root }}"
   environment:
     PATH: "{{ cloud_ai_cli_node_bin }}:{{ ansible_env.PATH }}"
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool

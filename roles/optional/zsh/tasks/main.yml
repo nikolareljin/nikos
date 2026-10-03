@@ -13,21 +13,45 @@
     state: directory
     mode: "0755"
 
-- name: Download Starship archive
-  ansible.builtin.get_url:
-    url: https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-gnu.tar.gz
-    dest: /tmp/starship-x86_64-unknown-linux-gnu.tar.gz
-    mode: "0644"
-  when: not ansible_check_mode
+# Pinned release (starship_version) checked against the release's .sha256
+# file. Installed when missing or older than the pin; never downgraded.
+# Prints "starship 1.26.0" first.
+- name: Read the installed Starship version
+  ansible.builtin.command: "{{ nikos_home }}/.local/bin/starship --version"
+  register: zsh_starship_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
 
-- name: Install Starship prompt
-  ansible.builtin.unarchive:
-    src: /tmp/starship-x86_64-unknown-linux-gnu.tar.gz
-    dest: "{{ nikos_home }}/.local/bin"
-    remote_src: true
-    creates: "{{ nikos_home }}/.local/bin/starship"
-    mode: "0755"
-  when: not ansible_check_mode
+- name: Decide whether Starship needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: Starship
+    pin_gate_want: "{{ starship_version }}"
+    pin_gate_path: "{{ nikos_home }}/.local/bin/starship"
+    pin_gate_output: "{{ zsh_starship_installed.stdout | default('') }}"
+
+- name: Install Starship {{ starship_version }}
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
+  block:
+    - name: Download the Starship release archive
+      ansible.builtin.get_url:
+        url: "https://github.com/starship/starship/releases/download/{{ starship_version }}/starship-x86_64-unknown-linux-gnu.tar.gz"
+        dest: "/tmp/starship-{{ starship_version }}-x86_64-unknown-linux-gnu.tar.gz"
+        checksum: "sha256:{{ starship_sha256 }}"
+        mode: "0644"
+
+    - name: Unpack Starship
+      ansible.builtin.unarchive:
+        src: "/tmp/starship-{{ starship_version }}-x86_64-unknown-linux-gnu.tar.gz"
+        dest: "{{ nikos_home }}/.local/bin"
+        remote_src: true
+        include: [starship]
+        mode: "0755"
 
 - name: Deploy default zsh config
   ansible.builtin.copy:
