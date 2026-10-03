@@ -307,7 +307,7 @@ def test_nikos_add_tools_saves_and_installs_exactly_the_selection(tmp_path: Path
         encoding="utf-8",
     )
     log = tmp_path / "calls.log"
-    fake_distrodeck(tmp_path / "Projects" / "distrodeck" / "distrodeck", catalog=True, log=log)
+    fake_distrodeck(tmp_path / ".local" / "share" / "nikos-tools" / "distrodeck" / "distrodeck", catalog=True, log=log)
     answers = {"ai": "aider", "media": "vlc"}
     text = "".join(answers.get(c, "-") + "\n" for c in CATEGORIES)
     result = _cli(tmp_path, home, "add", "tools", answers=text)
@@ -330,7 +330,7 @@ def test_nikos_add_tools_with_an_older_distrodeck_says_so_and_changes_nothing(tm
         "NIKOS_OPTIONAL_TAGS_MIGRATED=1\nNIKOS_DISTRODECK_TOOLS_SAVED=gimp\n",
         encoding="utf-8",
     )
-    fake_distrodeck(tmp_path / "Projects" / "distrodeck" / "distrodeck", catalog=False)
+    fake_distrodeck(tmp_path / ".local" / "share" / "nikos-tools" / "distrodeck" / "distrodeck", catalog=False)
     result = _cli(tmp_path, home, "add", "tools")
     out = result.stdout.decode(errors="replace")
     assert "no tool catalog" in out, out
@@ -368,10 +368,10 @@ def _run_dev_tools_selection(tmp_path: Path, *, catalog: bool, tools: str) -> li
         encoding="utf-8",
     )
     log = tmp_path / "calls.log"
-    fake_distrodeck(tmp_path / "Projects" / "distrodeck" / "distrodeck", catalog=catalog, log=log)
+    fake_distrodeck(tmp_path / "tools" / "distrodeck" / "distrodeck", catalog=catalog, log=log)
     if not catalog:
         # The 0.10.3 shape: no --list-catalog, but --all works and is recorded.
-        dd = tmp_path / "Projects" / "distrodeck" / "distrodeck"
+        dd = tmp_path / "tools" / "distrodeck" / "distrodeck"
         dd.write_text(
             "#!/bin/sh\n"
             'if [ "$2" = "--list-catalog" ]; then echo "unrecognized arguments" >&2; exit 2; fi\n'
@@ -381,7 +381,7 @@ def _run_dev_tools_selection(tmp_path: Path, *, catalog: bool, tools: str) -> li
     result = subprocess.run(
         [
             "ansible-playbook", "play.yml", "-i", "localhost,",
-            "-e", f"nikos_home={tmp_path}", "-e", f"nikos_distrodeck_tools={tools}",
+            "-e", f"nikos_home={tmp_path}", "-e", f"nikos_tools_dir={tmp_path}/tools", "-e", f"nikos_distrodeck_tools={tools}",
             "-e", "distrodeck_version=0.10.3",
             "-e", json.dumps({"nikos_distrodeck_owned_tools": OWNED}),
         ],
