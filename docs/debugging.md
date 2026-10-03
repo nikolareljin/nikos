@@ -204,7 +204,7 @@ user hand root-controlled code to anyone else who ran the command.
 which lantern                      # expect ~/.local/bin/lantern
 ls ~/.local/bin/lantern
 # Reinstall if missing (no sudo - everything here is user-owned):
-~/Projects/git-lantern/install --prefix ~/.local/opt/git-lantern --bin-link ~/.local/bin/lantern
+~/.local/share/nikos-tools/git-lantern/install --prefix ~/.local/opt/git-lantern --bin-link ~/.local/bin/lantern
 ```
 
 If `which lantern` finds nothing but the file exists, `~/.local/bin` is not on
@@ -219,7 +219,7 @@ ls /usr/local/lib/nikos/bitnet/llama-cli  # the binary it runs
 
 `bitnet-cli` is a small wrapper. The binary and the shared libraries it loads
 are installed together under `/usr/local/lib/nikos/bitnet`, so the command does
-not depend on the BitNet build tree: `~/Projects/bitnet.cpp` is only needed to
+not depend on the BitNet build tree: `~/.local/share/nikos-tools/bitnet.cpp` is only needed to
 rebuild, and can be deleted to reclaim disk.
 
 Two things to check if it misbehaves:

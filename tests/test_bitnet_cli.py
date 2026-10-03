@@ -26,7 +26,7 @@ TASKS = ROLE / "tasks/main.yml"
 DEFAULTS = ROLE / "defaults/main.yml"
 
 ENTRY_POINT = "/usr/local/bin/bitnet-cli"
-BUILD_TREE = "Projects/bitnet.cpp"
+BUILD_TREE = "nikos-tools/bitnet.cpp"
 
 
 @pytest.fixture(scope="module")
