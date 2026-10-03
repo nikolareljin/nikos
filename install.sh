@@ -1225,6 +1225,20 @@ fi
 _ensure_ansible_collections
 
 # Bundle selection ─────────────────────────────────────────────────
+# _release_note <bundle> - " (...)" when part or all of a bundle is missing on
+# the running Ubuntu release, so the menu says so before it is picked; empty
+# otherwise. Keep in step with nikos_ubuntu_releases and mongodb_repo_codenames
+# in vars/main.yml (tests/test_ubuntu_releases.py checks it).
+_release_note() {
+  local version
+  version="$(_os_release_value VERSION_ID || true)"
+  case "${version}:$1" in
+    22.04:postgres) printf ' (no pgvector on 22.04)' ;;
+    26.04:education) printf ' (no Anki on 26.04)' ;;
+    26.04:mongodb | 26.04:monitoring) printf ' (not available on 26.04)' ;;
+  esac
+}
+
 _select_bundles_dialog() {
   dialog_init
   local result dialog_status
@@ -1235,15 +1249,15 @@ _select_bundles_dialog() {
       "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 20 \
       "network"       "Network tools (nmap, wireshark, OpenVPN)"     off \
       "music"         "Music tools (LMMS, Ardour, Audacity)"         off \
-      "education"     "Education tools (LibreOffice, draw.io, Anki)" off \
+      "education"     "Education tools (LibreOffice, draw.io, Anki)$(_release_note education)" off \
       "neovim"        "Neovim with lazy.nvim starter config"         off \
       "zsh"           "Zsh with Starship prompt"                     off \
       "java"          "OpenJDK 21"                                   off \
       "bun"           "Bun JavaScript runtime"                       off \
       "openclaw"      "OpenClaw LLM gateway CLI"                     off \
       "ollama-models" "Every optional Ollama model, about 75 GB"      off \
-      "postgres"      "PostgreSQL with pgvector"                     off \
-      "mongodb"       "MongoDB Community, mongosh and Atlas CLI"     off \
+      "postgres"      "PostgreSQL with pgvector$(_release_note postgres)" off \
+      "mongodb"       "MongoDB Community, mongosh and Atlas CLI$(_release_note mongodb)" off \
       "redis"         "Redis server and Python client"               off \
       "qdrant"        "Qdrant vector database container"             off \
       "k8s-tools"     "kubectl and Helm"                             off \
@@ -1252,7 +1266,7 @@ _select_bundles_dialog() {
       "fabric"        "Fabric AI pattern CLI"                        off \
       "bitnet"        "BitNet.cpp 1-bit LLM inference"               off \
       "mistral-rs"    "mistral.rs Rust LLM server"                   off \
-      "monitoring"    "Netdata monitoring dashboard"                 off 0</dev/tty
+      "monitoring"    "Netdata monitoring dashboard$(_release_note monitoring)" off 0</dev/tty
   ); then
     echo "${result}"
     return 0
@@ -1354,7 +1368,7 @@ _select_bundles_plain() {
   _say_tty "Optional app bundles (press Enter to skip each):"
   _ask_tty opt_network "  Install network tools? (nmap, wireshark, OpenVPN) [y/N] "
   _ask_tty opt_music "  Install music tools? (LMMS, Ardour, Audacity) [y/N] "
-  _ask_tty opt_education "  Install education tools? (LibreOffice, draw.io, Anki) [y/N] "
+  _ask_tty opt_education "  Install education tools? (LibreOffice, draw.io, Anki)$(_release_note education) [y/N] "
   _say_tty ""
   _say_tty "Dev environment:"
   _ask_tty opt_neovim "  Install Neovim? [y/N] "
@@ -1369,8 +1383,8 @@ _select_bundles_plain() {
   _ask_tty opt_mistral_rs "  Install mistral.rs? [y/N] "
   _say_tty ""
   _say_tty "Databases:"
-  _ask_tty opt_postgres "  Install PostgreSQL + pgvector? [y/N] "
-  _ask_tty opt_mongodb "  Install MongoDB + mongosh + Atlas CLI? [y/N] "
+  _ask_tty opt_postgres "  Install PostgreSQL + pgvector$(_release_note postgres)? [y/N] "
+  _ask_tty opt_mongodb "  Install MongoDB + mongosh + Atlas CLI$(_release_note mongodb)? [y/N] "
   _ask_tty opt_redis "  Install Redis? [y/N] "
   _ask_tty opt_qdrant "  Install Qdrant? [y/N] "
   _say_tty ""
@@ -1380,7 +1394,7 @@ _select_bundles_plain() {
   _ask_tty opt_act "  Install act? [y/N] "
   _say_tty ""
   _say_tty "Monitoring:"
-  _ask_tty opt_monitoring "  Install Netdata? [y/N] "
+  _ask_tty opt_monitoring "  Install Netdata$(_release_note monitoring)? [y/N] "
   _ask_tty opt_fabric "  Install Fabric AI pattern CLI? [y/N] "
   [[ "${opt_network,,}"   == "y" ]] && SELECTED_BUNDLES+=("network")
   [[ "${opt_music,,}"     == "y" ]] && SELECTED_BUNDLES+=("music")

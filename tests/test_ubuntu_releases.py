@@ -121,3 +121,38 @@ def test_the_play_refuses_an_unsupported_release(tmp_path, distribution, version
     assert (run.returncode == 0) == ok, run.stdout + run.stderr
     if not ok:
         assert f"this is {distribution} {version}" in run.stdout
+
+
+def _release_note_func() -> str:
+    import re as _re
+    text = (REPO / "install.sh").read_text(encoding="utf-8")
+    funcs = []
+    for name in ("_os_release_value", "_release_note"):
+        m = _re.search(rf"^{name}\(\) \{{.*?^\}}", text, _re.M | _re.S)
+        assert m, name
+        funcs.append(m.group(0))
+    return "\n".join(funcs)
+
+
+def test_installer_menu_notes_match_the_release_table(tmp_path):
+    # The menu must say which bundles a release lacks, and agree with
+    # vars/main.yml: an empty package name (or no MongoDB repository) there
+    # means a note here, and no note otherwise.
+    import subprocess as _sp
+    import yaml as _yaml
+    vars_main = _yaml.safe_load((REPO / "vars/main.yml").read_text(encoding="utf-8"))
+    releases = vars_main["nikos_ubuntu_releases"]
+    codenames = {"22.04": "jammy", "24.04": "noble", "26.04": "resolute"}
+    missing_by = {"postgres": "pgvector_package", "education": "anki_package", "monitoring": "netdata_package"}
+    for version, rel in releases.items():
+        osr = tmp_path / f"os-{version}"
+        osr.write_text(f'ID=ubuntu\nVERSION_ID="{version}"\n')
+        for bundle in ("postgres", "education", "monitoring", "mongodb"):
+            out = _sp.run(["bash", "-c", _release_note_func() + f"\n_release_note {bundle}"],
+                          capture_output=True, text=True,
+                          env={"NIKOS_OS_RELEASE_FILE": str(osr), "PATH": "/usr/bin:/bin"}).stdout
+            if bundle == "mongodb":
+                expect = codenames[version] not in vars_main["mongodb_repo_codenames"]
+            else:
+                expect = not rel[missing_by[bundle]]
+            assert bool(out) == expect, (version, bundle, out)
