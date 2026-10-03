@@ -11,6 +11,9 @@ All notable changes to NikOS are documented here.
   `mongodb` and `monitoring` bundles and Anki are skipped with a message (no
   vendor repository / no archive package); 22.04 gets PostgreSQL without
   pgvector. The ISO stays Xubuntu 24.04.
+- The installer's bundle menu says what a release lacks before you pick it,
+  e.g. `Netdata monitoring dashboard (not available on 26.04)` or
+  `PostgreSQL with pgvector (no pgvector on 22.04)`.
 - The dry-run CI job runs on ubuntu-22.04, ubuntu-24.04 and ubuntu-26.04.
 - `site.yml` stops with a clear message on an unsupported release, so
   `nikos update` (which skips `install.sh`) fails early instead of on a
