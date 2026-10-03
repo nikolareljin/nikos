@@ -262,8 +262,9 @@ ANSIBLE_PPA_KEY_FINGERPRINT="6125E2A8C77F2818FB7BD15B93C4A3FD7BB9C367"
 # that one repository. apt-add-repository trusted whatever key it was given.
 _upgrade_ansible() {
   local key gnupghome have codename
-  sudo apt-get update -qq
-  sudo apt-get install -y gnupg curl ca-certificates
+  # Called inside `if`, where set -e is off, so each step returns on failure.
+  sudo apt-get update -qq || return 1
+  sudo apt-get install -y gnupg curl ca-certificates || return 1
   key="$(mktemp)"
   gnupghome="$(mktemp -d)"
   if ! curl -fsSL -o "${key}" \
@@ -279,15 +280,22 @@ _upgrade_ansible() {
     echo "ERROR: the Ansible PPA key is ${have:-unreadable}, not the pinned ${ANSIBLE_PPA_KEY_FINGERPRINT}." >&2
     return 1
   fi
-  sudo install -d -m 0755 /etc/apt/keyrings
-  GNUPGHOME="${gnupghome}" gpg --batch --yes --dearmor -o "${key}.gpg" "${key}"
-  sudo install -m 0644 "${key}.gpg" /etc/apt/keyrings/ansible-ppa.gpg
+  if ! sudo install -d -m 0755 /etc/apt/keyrings ||
+    ! GNUPGHOME="${gnupghome}" gpg --batch --yes --dearmor -o "${key}.gpg" "${key}" ||
+    ! sudo install -m 0644 "${key}.gpg" /etc/apt/keyrings/ansible-ppa.gpg; then
+    rm -rf "${key}" "${key}.gpg" "${gnupghome}"
+    return 1
+  fi
   rm -rf "${key}" "${key}.gpg" "${gnupghome}"
+  # An entry apt-add-repository wrote on an earlier run names the same
+  # repository with its own Signed-By, and apt refuses two that disagree.
+  sudo rm -f /etc/apt/sources.list.d/ansible-ubuntu-ansible-*.list \
+    /etc/apt/sources.list.d/ansible-ubuntu-ansible-*.sources
   # shellcheck source=/dev/null
   codename="$(. /etc/os-release && printf '%s' "${UBUNTU_CODENAME:-${VERSION_CODENAME}}")"
   printf 'deb [signed-by=/etc/apt/keyrings/ansible-ppa.gpg] https://ppa.launchpadcontent.net/ansible/ansible/ubuntu %s main\n' \
-    "${codename}" | sudo tee /etc/apt/sources.list.d/ansible-ppa.list >/dev/null
-  sudo apt-get update -qq
+    "${codename}" | sudo tee /etc/apt/sources.list.d/ansible-ppa.list >/dev/null || return 1
+  sudo apt-get update -qq || return 1
   sudo apt-get install -y ansible
 }
 

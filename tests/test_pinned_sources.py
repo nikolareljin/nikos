@@ -427,3 +427,37 @@ def test_fingerprint_check_accepts_the_pinned_key_and_refuses_others(tmp_path: P
     junk.write_text("not a key\n", encoding="utf-8")
     assert subprocess.run(["bash", script, str(junk), good_fpr], capture_output=True).returncode == 1
     assert subprocess.run(["bash", script, str(good)], capture_output=True).returncode == 2
+
+
+@pytest.mark.skipif(not shutil.which("gpg"), reason="gpg is required")
+@pytest.mark.parametrize("right", [True, False], ids=["pinned-key", "other-key"])
+def test_install_sh_trusts_the_ansible_ppa_only_with_the_pinned_key(tmp_path: Path, right: bool) -> None:
+    # install.sh's own _upgrade_ansible, with sudo, apt-get and curl stubbed:
+    # curl serves a generated key, and the pin is that key's fingerprint or not.
+    text = (REPO / "install.sh").read_text(encoding="utf-8")
+    func = re.search(r"^_upgrade_ansible\(\) \{.*?^\}", text, re.M | re.S).group(0)
+    key, fpr = _key(tmp_path, "ppa")
+    pin = fpr if right else "0" * 40
+    script = f"""
+set -uo pipefail
+log={tmp_path}/calls
+sudo() {{ case "$1" in
+  install) shift; echo "install $*" >> "$log";;
+  tee) cat > {tmp_path}/sources.list;;
+  *) echo "$*" >> "$log";;
+esac; }}
+curl() {{ local out=""; while [ $# -gt 0 ]; do [ "$1" = -o ] && {{ out="$2"; shift; }}; shift; done; cp {key} "$out"; }}
+ANSIBLE_PPA_KEY_FINGERPRINT={pin}
+{func}
+_upgrade_ansible
+"""
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    calls = (tmp_path / "calls").read_text(encoding="utf-8")
+    if right:
+        assert result.returncode == 0, result.stderr
+        assert "apt-get install -y ansible" in calls
+        assert "signed-by=/etc/apt/keyrings/ansible-ppa.gpg" in (tmp_path / "sources.list").read_text()
+    else:
+        assert result.returncode == 1
+        assert "not the pinned" in result.stderr
+        assert "apt-get install -y ansible" not in calls and "ansible-ppa.gpg" not in calls
