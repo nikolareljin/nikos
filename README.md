@@ -82,7 +82,7 @@ At the end, you should end up with something like:
 | [Ollama](https://ollama.com) | Local LLM runtime, `qwen3.5:4b` pre-pulled |
 | [aider](https://aider.chat) | AI pair programmer in the terminal |
 | [Miniforge](https://github.com/conda-forge/miniforge) | Python distribution (conda) |
-| `nikos-ai` conda env | Python 3.11-3.13 + PyTorch CPU + Jupyter + transformers + pandas |
+| `nikos-ai` conda env | Python 3.11-3.12 + PyTorch CPU + Jupyter + transformers + pandas |
 | [llama.cpp](https://github.com/ggml-org/llama.cpp) | Prebuilt binaries — `llama-server`, `llama-cli` |
 | Retrieval stack | Chroma, Qdrant client, sentence-transformers |
 | Image analysis | OpenCV, Pillow, scikit-image, timm, Tesseract OCR |

@@ -9,6 +9,7 @@ Not allowed: `curl | sh`, downloaded install scripts run unchecked,
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -162,6 +163,16 @@ def test_no_hash_or_version_literal_outside_versions_yml() -> None:
 PIN_SUFFIX = re.compile(r"_(version|sha256|commit|digest|fingerprints?|series)$")
 # Not pins: a minimum the CLIs need, a conda range, and NikOS's own version.
 NOT_PINS = {"nikos_node_min_version", "nikos_python_version", "nikos_version"}
+
+
+def test_pip_pins_are_checked_against_every_python_the_env_may_have() -> None:
+    spec = importlib.util.spec_from_file_location("bump_versions", REPO / "scripts" / "bump-versions.py")
+    bump = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bump)
+    conda = yaml.safe_load((REPO / "vars" / "main.yml").read_text(encoding="utf-8"))["nikos_python_version"]
+    allowed = [f"3.{n}" for n in range(8, 30) if bump.python_allows(conda, f"3.{n}")]
+    assert allowed, conda
+    assert _versions()["nikos_pin_sources"]["nikos_pip_pins"]["python"] == allowed
 
 
 def test_every_pin_is_defined_only_in_versions_yml() -> None:

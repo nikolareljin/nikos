@@ -39,7 +39,7 @@ llama_cpp_version: "b9151"
 # ── Python ────────────────────────────────────────────
 miniforge_version: "24.11.3-0"
 nikos_conda_env: "nikos-ai"
-nikos_python_version: "3.11"
+nikos_python_version: "=3.12"            # a conda spec, operator included
 
 # ── VS Code extensions ────────────────────────────────
 nikos_vscode_extensions:

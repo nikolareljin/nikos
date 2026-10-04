@@ -35,8 +35,12 @@ miniforge_url: "https://github.com/conda-forge/miniforge/releases/download/{{ mi
 
 # -- Python packages in the nikos-ai conda env (ai-stack, agent-dev, optional DB roles)
 # PyPI (torch, torchvision, torchaudio from download.pytorch.org/whl/cpu).
-# Exact versions, resolved per install group for Python 3.13 with
-# `uv pip compile`; bump them together, not one at a time. vars/local.yml
+# Exact versions, resolved per install group with `uv pip compile` for every
+# Python the env may have: the `python` list of this pin's entry in
+# nikos_pin_sources, which matches nikos_python_version in vars/main.yml. An
+# env made by an earlier release keeps its Python, so a pin that needs a newer
+# one fails `nikos update` there (numpy 2.5 needs 3.12; aider-chat needs
+# <3.13). Bump them together, not one at a time. vars/local.yml
 # replaces this whole mapping: list every package in an override, or one left
 # out is installed at PyPI's newest when it is missing.
 nikos_pip_pins:
@@ -47,7 +51,7 @@ nikos_pip_pins:
   jupyter: "1.1.1"
   jupyterlab: "4.6.4"
   pandas: "3.0.6"
-  numpy: "2.5.3"
+  numpy: "2.4.6"
   scikit-learn: "1.9.1"
   matplotlib: "3.11.2"
   aider-chat: "0.86.2"
@@ -205,6 +209,8 @@ ansible_ppa_key_fingerprints:
 #   tag_prefix    added before the version to form the tag (bun: "bun-v")
 #   version_regex only versions matching this are eligible (e.g. Helm 3 only)
 #   dist_tag      npm: follow this dist-tag instead of the newest release
+#   python        pypi-map: the Python minors every pin must install on
+#                 (Requires-Python); the same set nikos_python_version allows
 #   allow_prerelease  GitHub: accept releases marked pre-release (llama.cpp
 #                 marks every build so)
 #   artifacts     files hashed for the pin: asset (release asset name) or url,
@@ -244,6 +250,7 @@ nikos_pin_sources:
   nikos_pip_pins:
     type: pypi-map
     version_var: nikos_pip_pins
+    python: ["3.11", "3.12"]
   shell_gpt:
     type: pypi
     package: shell-gpt

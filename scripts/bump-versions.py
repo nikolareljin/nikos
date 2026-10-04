@@ -128,6 +128,25 @@ def is_prerelease(version: str) -> bool:
     return bool(re.search(r"[A-Za-z-]", core))
 
 
+def python_allows(spec: str, minor: str) -> bool:
+    """Whether a Requires-Python or conda spec admits a Python minor: (">=3.12", "3.11") is False.
+
+    The minor is tested at a high patch level, the way conda installs it.
+    """
+    have = tuple(int(n) for n in minor.split(".")) + (99,)
+    for clause in filter(None, (c.strip() for c in spec.split(","))):
+        m = re.fullmatch(r"(~=|==|!=|<=|>=|<|>|=)\s*(\d+(?:\.\d+)*)(?:\.\*)?", clause)
+        if not m:
+            raise ValueError(f"cannot read the Python spec {spec!r}")
+        op, want = m.group(1), tuple(int(n) for n in m.group(2).split("."))
+        same = have[:len(want)] == want
+        if not {"=": same, "==": same, "!=": not same, ">=": have >= want, ">": have > want and not same,
+                "<": have < want, "<=": have <= want or same,
+                "~=": have >= want and have[:len(want) - 1] == want[:-1]}[op]:
+            return False
+    return True
+
+
 def fill(template: str, **values: str) -> str:
     return re.sub(r"\{(\w+)\}", lambda m: str(values.get(m.group(1), m.group(0))), template)
 
@@ -389,7 +408,7 @@ class Pins:
         if kind == "npm":
             return Result(self.newest_npm(src))
         if kind == "pypi":
-            return Result(self.newest_pypi(src["package"]))
+            return Result(self.newest_pypi(src["package"], src.get("python", [])))
         if kind == "go-module":
             return Result(self.newest_go(src["module"]))
         if kind == "nodejs":
@@ -433,11 +452,14 @@ class Pins:
                 best = version
         return best
 
-    def newest_pypi(self, package: str) -> str | None:
+    def newest_pypi(self, package: str, pythons: list[str] | tuple = ()) -> str | None:
+        """The newest eligible release that installs on every Python in pythons."""
         meta = self.http.json(f"https://pypi.org/pypi/{package}/json")
         best = None
         for version, files in meta.get("releases", {}).items():
             if not files or is_prerelease(version) or all(f.get("yanked") for f in files):
+                continue
+            if self.python_gaps(files, pythons):
                 continue
             uploaded = min(parse_time(f["upload_time_iso_8601"]) for f in files)
             if uploaded > self.cutoff:
@@ -514,10 +536,10 @@ class Pins:
             if current not in meta.get("versions", {}):
                 problems.append(f"{src['package']}@{current} is not in the npm registry")
         if kind == "pypi":
-            problems += self.verify_pypi(src["package"], current)
+            problems += self.verify_pypi(src["package"], current, src.get("python", []))
         if kind == "pypi-map":
             for package, version in v[src["version_var"]].items():
-                problems += self.verify_pypi(package, version)
+                problems += self.verify_pypi(package, version, src.get("python", []))
         if kind == "go-module":
             base = f"https://proxy.golang.org/{self.go_escape(src['module'])}/@v"
             self.http.json(f"{base}/{current}.info")
@@ -538,13 +560,26 @@ class Pins:
                 problems.append(f"key at {self.key_url(src)} is {have}, pinned {want}")
         return problems
 
-    def verify_pypi(self, package: str, version: str) -> list[str]:
+    def verify_pypi(self, package: str, version: str, pythons: list[str] | tuple = ()) -> list[str]:
         files = self.http.json(f"https://pypi.org/pypi/{package}/json").get("releases", {}).get(version)
         if not files:
             return [f"{package}=={version} is not on PyPI"]
         if all(f.get("yanked") for f in files):
             return [f"{package}=={version} is yanked"]
+        gaps = self.python_gaps(files, pythons)
+        if gaps:
+            return [f"{package}=={version} does not install on Python {', '.join(gaps)} "
+                    f"(Requires-Python {self.requires_python(files)})"]
         return []
+
+    @staticmethod
+    def requires_python(files: list[dict]) -> str:
+        return next((f["requires_python"] for f in files if f.get("requires_python")), "")
+
+    def python_gaps(self, files: list[dict], pythons: list[str] | tuple) -> list[str]:
+        """The Python minors in pythons that a release's Requires-Python excludes."""
+        spec = self.requires_python(files)
+        return [p for p in pythons if spec and not python_allows(spec, p)]
 
     def key_url(self, src: dict) -> str:
         return fill(src["url"], **{k: str(val) for k, val in self.v.items() if isinstance(val, str)})
@@ -581,7 +616,8 @@ def select(sources: dict, names: list[str], versions: dict | None = None) -> dic
             chosen[name] = sources[name]
         elif child and sources.get(parent, {}).get("type") == "pypi-map" and child in (
                 (versions or {}).get(sources[parent]["version_var"]) or {}):
-            chosen[name] = {"type": "pypi", "package": child, "version_var": f"{sources[parent]['version_var']}.{child}"}
+            chosen[name] = {"type": "pypi", "package": child, "python": sources[parent].get("python", []),
+                            "version_var": f"{sources[parent]['version_var']}.{child}"}
         else:
             unknown.append(name)
     if unknown:
@@ -600,7 +636,7 @@ def cmd_check(pins: Pins, sources: dict) -> int:
             continue
         if src["type"] == "pypi-map":
             for package, version in pins.v[src["version_var"]].items():
-                newest = pins.newest_pypi(package)
+                newest = pins.newest_pypi(package, src.get("python", []))
                 rows.append((f"{name}.{package}", version, newest or "-", status(version, newest)))
             continue
         current = current_of(pins.v, src)
@@ -650,7 +686,7 @@ def plan_bump(pins: Pins, name: str, src: dict) -> tuple[dict, str]:
         # per-package bump cannot check. Report; bump one at a time by name.
         newer = []
         for package, version in v[src["version_var"]].items():
-            newest = pins.newest_pypi(package)
+            newest = pins.newest_pypi(package, src.get("python", []))
             if newest and vkey(newest) > vkey(version):
                 newer.append(f"{package} {version} -> {newest}")
         if not newer:

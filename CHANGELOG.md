@@ -10,6 +10,17 @@ All notable changes to NikOS are documented here.
   forms, and a pull request template; the README and the site's help page ask
   for bug reports and contributions.
 
+### Fixed
+- **`nikos update` no longer stops at `numpy==2.5.3`.** numpy 2.5 needs
+  Python 3.12, and an env created by an earlier release is 3.11, so the
+  `ai-stack` role failed and every role after it was skipped. numpy is pinned
+  to 2.4.6, which installs on 3.11 and 3.12.
+- **New envs get Python 3.11-3.12, not 3.13**: `aider-chat` 0.86.2 needs
+  Python <3.13, so `nikos_python_version` is now `>=3.11,<3.13`.
+- **`bump-versions.py` checks Requires-Python**: `--verify` fails on a pip
+  pin that does not install on every Python the env may have, and `--check`
+  and `--bump` skip releases that do not.
+
 ## [1.0.1] - 2026-10-04
 
 ### Fixed
