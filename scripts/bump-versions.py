@@ -13,7 +13,9 @@ is given). Eligible means: not a draft or pre-release, and published at least
 the vendor's checksum file when there is one; a mismatch skips that pin. Pins
 whose artifacts have no vendor checksum, and apt key fingerprints, are never
 changed automatically: they are reported for a person to update by hand (and
-then proven with --verify). Only the changed values are rewritten, comments
+then proven with --verify). The Python packages move together: each goes to
+its newest release only if the whole set still resolves (`uv pip compile`) for
+every Python the env may have; one that does not is held back and named. Only the changed values are rewritten, comments
 and layout are kept, and the file is replaced atomically. The changed pins
 are then verified again from upstream and `python3 -m pytest tests -q` runs,
 unless --no-tests.
@@ -145,6 +147,18 @@ def python_allows(spec: str, minor: str) -> bool:
                 "~=": have >= want and have[:len(want) - 1] == want[:-1]}[op]:
             return False
     return True
+
+
+def uv_resolve(requirements: list[str], python: str, extra_index: str | None) -> str | None:
+    """None when the requirements resolve together on that Python, else uv's error.
+
+    Raises FileNotFoundError when uv is not installed.
+    """
+    cmd = ["uv", "pip", "compile", "-", "--quiet", "--no-header", "--python-version", python]
+    if extra_index:
+        cmd += ["--extra-index-url", extra_index, "--index-strategy", "unsafe-best-match"]
+    done = subprocess.run(cmd, input="\n".join(requirements) + "\n", capture_output=True, text=True)
+    return None if done.returncode == 0 else (done.stderr.strip() or "uv pip compile failed")
 
 
 def fill(template: str, **values: str) -> str:
@@ -689,17 +703,7 @@ def plan_bump(pins: Pins, name: str, src: dict) -> tuple[dict, str]:
         want = sorted(f.upper() for f in v[src["fingerprints_var"]])
         return {}, "fingerprint matches" if have == want else f"CHANGED - needs a person (now {have})"
     if kind == "pypi-map":
-        # These share one environment and have to resolve together, which a
-        # per-package bump cannot check. Report; bump one at a time by name.
-        newer = []
-        for package, version in v[src["version_var"]].items():
-            newest = pins.newest_pypi(package, src.get("python", []))
-            if newest and vkey(newest) > vkey(version):
-                newer.append(f"{package} {version} -> {newest}")
-        if not newer:
-            return {}, "all current"
-        return {}, ("needs a person: resolve these together (uv pip compile), then "
-                    f"--bump {src['version_var']}.<package>: " + "; ".join(newer))
+        return plan_pip_map(pins, src)
     current = current_of(v, src)
     newest = pins.newest(name, src)
     if not newest.version or newest.version == current:
@@ -717,6 +721,56 @@ def plan_bump(pins: Pins, name: str, src: dict) -> tuple[dict, str]:
             return {}, f"{newest.version} available; {hashed.manual}"
         values.update(hashed.values)
     return values, f"{current} -> {newest.version}"
+
+
+def plan_pip_map(pins: Pins, src: dict) -> tuple[dict, str]:
+    """Move every package of a pypi-map to its newest release that still resolves.
+
+    The packages share one env. All the newest are tried at once; when that
+    does not resolve, they are applied one at a time and the ones that break
+    the set are held back. A package in resolve_alone pins its own
+    dependencies exactly (aider-chat), so it is resolved by itself.
+    """
+    var, pythons = src["version_var"], src.get("python", [])
+    current = {package: str(version) for package, version in pins.v[var].items()}
+    newer = {}
+    for package, version in current.items():
+        newest = pins.newest_pypi(package, pythons)
+        if newest and vkey(newest) > vkey(version):
+            newer[package] = newest
+    if not newer:
+        return {}, "all current"
+    alone = set(src.get("resolve_alone", []))
+
+    def problem(target: dict, changed) -> str | None:
+        sets = [[f"{p}=={target[p]}"] for p in changed if p in alone]
+        if any(p not in alone for p in changed):
+            sets.append([f"{p}=={version}" for p, version in target.items() if p not in alone])
+        for requirements in sets:
+            for python in pythons:
+                error = uv_resolve(requirements, python, src.get("extra_index"))
+                if error:
+                    return error
+        return None
+
+    try:
+        target, held = {**current, **newer}, {}
+        if problem(target, newer):
+            target = dict(current)
+            for package, newest in newer.items():
+                if problem({**target, package: newest}, [package]):
+                    held[package] = newest
+                else:
+                    target[package] = newest
+    except FileNotFoundError:
+        return {}, ("needs uv to resolve these together (https://docs.astral.sh/uv/), or bump one with "
+                    f"--bump {var}.<package>: " + "; ".join(f"{p} {current[p]} -> {n}" for p, n in newer.items()))
+    moved = [p for p in newer if p not in held]
+    parts = [f"{p} {current[p]} -> {newer[p]}" for p in moved]
+    if held:
+        parts.append("held back, does not resolve with the rest: "
+                     + ", ".join(f"{p} {n}" for p, n in held.items()))
+    return {f"{var}.{p}": newer[p] for p in moved}, "; ".join(parts)
 
 
 def cmd_bump(pins: Pins, sources: dict, run_tests: bool, path: Path = VERSIONS) -> int:

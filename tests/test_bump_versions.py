@@ -171,7 +171,10 @@ def test_a_changed_apt_key_is_reported_not_written(vfile: Path, monkeypatch, cap
     assert bump.main(["--verify", "repo_key"], http=FakeHttp({}), path=vfile) == 1
 
 
-def test_a_pypi_group_is_reported_not_bumped_in_bulk(vfile: Path, capsys) -> None:
+def test_a_pypi_group_is_reported_not_bumped_without_uv(vfile: Path, capsys, monkeypatch) -> None:
+    def no_uv(requirements, python, extra_index):
+        raise FileNotFoundError("uv")
+    monkeypatch.setattr(bump, "uv_resolve", no_uv)
     http = FakeHttp({
         "https://pypi.org/pypi/requests/json": {"releases": {
             "2.0.0": [{"upload_time_iso_8601": ago(400)}],
@@ -186,6 +189,45 @@ def test_a_pypi_group_is_reported_not_bumped_in_bulk(vfile: Path, capsys) -> Non
     assert "requests 2.0.0 -> 2.5.0" in capsys.readouterr().out
     assert bump.main(["--bump", "pip_pins.requests", "--no-tests"], http=http, path=vfile) == 0
     assert '  requests: "2.5.0"\n' in vfile.read_text(encoding="utf-8")
+
+
+def _pip_http() -> FakeHttp:
+    return FakeHttp({
+        "https://pypi.org/pypi/requests/json": {"releases": {
+            "2.0.0": [{"upload_time_iso_8601": ago(400)}], "2.5.0": [{"upload_time_iso_8601": ago(10)}]}},
+        "https://pypi.org/pypi/idna/json": {"releases": {
+            "3.0": [{"upload_time_iso_8601": ago(400)}], "4.0": [{"upload_time_iso_8601": ago(10)}]}},
+    })
+
+
+def test_a_pypi_group_moves_together_when_it_resolves(vfile: Path, capsys, monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(bump, "uv_resolve", lambda reqs, python, index: calls.append((reqs, python, index)))
+    assert bump.main(["--bump", "pip_pins", "--no-tests"], http=_pip_http(), path=vfile) == 0
+    text = vfile.read_text(encoding="utf-8")
+    assert '  requests: "2.5.0"\n' in text and '  idna: "4.0"\n' in text and "# inner comment" in text
+    assert calls == [(["requests==2.5.0", "idna==4.0"], "3.11", None),
+                     (["requests==2.5.0", "idna==4.0"], "3.12", None)]
+
+
+def test_a_pypi_package_that_breaks_the_set_is_held_back(vfile: Path, capsys, monkeypatch) -> None:
+    monkeypatch.setattr(bump, "uv_resolve",
+                        lambda reqs, python, index: "no solution" if "idna==4.0" in reqs else None)
+    assert bump.main(["--bump", "pip_pins", "--no-tests"], http=_pip_http(), path=vfile) == 0
+    text = vfile.read_text(encoding="utf-8")
+    assert '  requests: "2.5.0"\n' in text and '  idna: "3.0"\n' in text
+    assert "held back, does not resolve with the rest: idna 4.0" in capsys.readouterr().out
+
+
+def test_a_resolve_alone_package_is_resolved_by_itself(vfile: Path, monkeypatch) -> None:
+    vfile.write_text(vfile.read_text(encoding="utf-8").replace(
+        '    python: ["3.11", "3.12"]\n', '    python: ["3.12"]\n    resolve_alone: [idna]\n    extra_index: https://example.invalid/whl\n'),
+        encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(bump, "uv_resolve", lambda reqs, python, index: calls.append((reqs, python, index)))
+    assert bump.main(["--bump", "pip_pins", "--no-tests"], http=_pip_http(), path=vfile) == 0
+    assert calls == [(["idna==4.0"], "3.12", "https://example.invalid/whl"),
+                     (["requests==2.5.0"], "3.12", "https://example.invalid/whl")]
 
 
 @pytest.mark.parametrize(

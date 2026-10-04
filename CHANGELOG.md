@@ -21,6 +21,19 @@ All notable changes to NikOS are documented here.
   pin that does not install on every Python the env may have, and `--check`
   and `--bump` skip releases that do not.
 
+- **Pull requests no longer wait forever on `check-playbook / ci`.** The
+  dry-run job became a matrix, so its legs report under other names; an
+  aggregate job reports the name the ruleset on `main` requires.
+
+### Changed
+- **`bump-versions.py --bump` moves every pin in one run, the Python packages
+  included.** They go to their newest releases as a set, checked with
+  `uv pip compile` on each Python the env may have; a package that breaks the
+  set is held back and named.
+- **Pins moved**: Ollama v0.35.1, llama.cpp b11321, Miniforge 26.7.2-0,
+  Node.js 22.23.3, nvm v0.40.8. `openai` stays at 2.54.0: 3.x does not resolve
+  with the other packages.
+
 ## [1.0.1] - 2026-10-04
 
 ### Fixed

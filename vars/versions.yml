@@ -18,19 +18,19 @@
 
 # -- Ollama (roles/ai-stack) --------------------------------------------------
 # github.com/ollama/ollama releases; sha256 from the release's sha256sum.txt.
-ollama_version: "v0.34.4"
-ollama_sha256: "c238986e61d40c0cc5f4a9b9e40b9eea104350b77efa34741fc134e105cb9533"
-ollama_rocm_sha256: "dbfcbdff6c36f69bfed177d1807aa2a23ad04ad9208f9a3f648d2fd36136ff3d"
+ollama_version: "v0.35.1"
+ollama_sha256: "9fcd79ac4575b2bd31b992eee18b1000c8ad126b451627c8f8cd091714cfbb10"
+ollama_rocm_sha256: "786e1ba2ed7877b48aa948315ab704da2ea54a4b636e0ca18c3d328c84ff22cf"
 
 # -- llama.cpp CPU build (roles/ai-stack) -------------------------------------
 # github.com/ggml-org/llama.cpp releases; no sums file, sha256 = GitHub asset digest.
-llama_cpp_version: "b10444"
-llama_cpp_sha256: "4b9023efa16a60c3b07f74a6295bc747bd3c96301b732a35ae3534435e42cf3d"
+llama_cpp_version: "b11321"
+llama_cpp_sha256: "b53d1a8fc0e31752d0309172e711c7bc8c0c11f9f1d6607766a6ac880da6badc"
 
 # -- Miniforge (roles/ai-stack) -----------------------------------------------
 # github.com/conda-forge/miniforge releases; sha256 from the asset's .sha256 file.
-miniforge_version: "26.3.2-3"
-miniforge_sha256: "848194851a98903134187fbb4ab50efe87b003e0c0f808f97644b7524a62bf2c"
+miniforge_version: "26.7.2-0"
+miniforge_sha256: "281b0ac7d550802efc81af633225a5e6116d29ae72f3ab4eae7168c3931a4c05"
 miniforge_url: "https://github.com/conda-forge/miniforge/releases/download/{{ miniforge_version }}/Miniforge3-{{ miniforge_version }}-Linux-x86_64.sh"
 
 # -- Python packages in the nikos-ai conda env (ai-stack, agent-dev, optional DB roles)
@@ -40,7 +40,8 @@ miniforge_url: "https://github.com/conda-forge/miniforge/releases/download/{{ mi
 # nikos_pin_sources, which matches nikos_python_version in vars/main.yml. An
 # env made by an earlier release keeps its Python, so a pin that needs a newer
 # one fails `nikos update` there (numpy 2.5 needs 3.12; aider-chat needs
-# <3.13). Bump them together, not one at a time. vars/local.yml
+# <3.13). `bump-versions.py --bump` moves them together and holds back any
+# that stop the set resolving. vars/local.yml
 # replaces this whole mapping: list every package in an override, or one left
 # out is installed at PyPI's newest when it is missing.
 nikos_pip_pins:
@@ -91,11 +92,11 @@ glances_version: "4.5.7"
 
 # -- Node.js, nvm and npm CLIs (roles/cloud-ai-cli, optional/openclaw) --------
 # nodejs.org; nvm checks the tarball against nodejs.org's SHASUMS256.txt.
-nikos_node_version: "22.23.2"
+nikos_node_version: "22.23.3"
 # github.com/nvm-sh/nvm tag; sha256 of install.sh at that tag, hashed by hand
 # (nvm publishes no sums file). The script clones nvm at the same tag.
-nikos_nvm_version: "v0.40.7"
-nvm_install_sha256: "066ce4eaf4d78eaa6410433bc9ba58faaba646157cbbed6109153e6c24c5f8a5"
+nikos_nvm_version: "v0.40.8"
+nvm_install_sha256: "48a0eee9a60e07422dce0eb5774754c83889570ca1ee2566c516acbe8af03a9e"
 # npm registry, exact versions; npm checks each tarball's registry integrity.
 gemini_cli_version: "0.62.0"
 # The extended-stable line: 2026.9.x needs Node >= 24.16, NikOS installs 22.
@@ -211,6 +212,9 @@ ansible_ppa_key_fingerprints:
 #   dist_tag      npm: follow this dist-tag instead of the newest release
 #   python        pypi-map: the Python minors every pin must install on
 #                 (Requires-Python); the same set nikos_python_version allows
+#   extra_index   pypi-map: a second package index used when resolving
+#   resolve_alone pypi-map: packages that pin their own dependencies exactly,
+#                 so they are resolved by themselves, not with the rest
 #   allow_prerelease  GitHub: accept releases marked pre-release (llama.cpp
 #                 marks every build so)
 #   artifacts     files hashed for the pin: asset (release asset name) or url,
@@ -251,6 +255,8 @@ nikos_pin_sources:
     type: pypi-map
     version_var: nikos_pip_pins
     python: ["3.11", "3.12"]
+    extra_index: https://download.pytorch.org/whl/cpu
+    resolve_alone: [aider-chat]
   shell_gpt:
     type: pypi
     package: shell-gpt
