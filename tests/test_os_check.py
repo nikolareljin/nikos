@@ -1,4 +1,4 @@
-"""install.sh's Ubuntu 24.04 check against the os-release shapes it meets."""
+"""install.sh's Ubuntu 22.04 / 24.04 / 26.04 check against the os-release shapes it meets."""
 import re
 import subprocess
 from pathlib import Path
@@ -26,12 +26,17 @@ def _funcs() -> str:
         ('ID=ubuntu\nVERSION_ID="24.04" \n', True),          # trailing space
         ('ID="ubuntu"\r\nVERSION_ID="24.04"\r\n', True),     # CRLF
         ('NAME=x\nID=ubuntu\nVERSION_ID="24.04"', True),     # no final newline
-        ('ID=ubuntu\nVERSION_ID="26.04"\n', False),
+        ('ID=ubuntu\nVERSION_ID="22.04"\n', True),
+        ('ID=ubuntu\nVERSION_ID="26.04"\n', True),
+        ('ID=ubuntu\nVERSION_ID="20.04"\n', False),
+        ('ID=ubuntu\nVERSION_ID="25.10"\n', False),
+        ('ID=ubuntu\nVERSION_ID="24.04.1"\n', False),
         ('ID=debian\nVERSION_ID="12"\n', False),
+        ('ID=debian\nVERSION_ID="24.04"\n', False),
         ("", False),
     ],
     ids=["plain", "single-quotes", "trailing-space", "crlf", "no-final-newline",
-         "26.04", "debian", "empty"],
+         "22.04", "26.04", "20.04", "25.10", "24.04.1", "debian", "debian-24.04", "empty"],
 )
 def test_supported_system(tmp_path, content, supported):
     osr = tmp_path / "os-release"

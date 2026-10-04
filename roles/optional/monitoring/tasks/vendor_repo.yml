@@ -1,0 +1,89 @@
+---
+- name: Create the root-only key staging directory
+  ansible.builtin.file:
+    path: "{{ nikos_key_staging_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  check_mode: false
+
+- name: Download the Netdata repository signing key
+  ansible.builtin.get_url:
+    url: https://repo.netdata.cloud/netdatabot.gpg.key
+    dest: "{{ nikos_key_staging_dir }}/netdatabot.gpg.key"
+    mode: "0644"
+    force: true
+  check_mode: false
+  become: true
+
+- name: Verify the Netdata repository signing key fingerprint
+  ansible.builtin.command:
+    argv: >-
+      {{ [playbook_dir ~ '/scripts/verify-key-fingerprint.sh',
+          nikos_key_staging_dir ~ '/netdatabot.gpg.key'] + netdata_key_fingerprints }}
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Dearmor the Netdata repository signing key
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --yes
+      - --dearmor
+      - -o
+      - "{{ nikos_key_staging_dir }}/netdata-archive-keyring.gpg"
+      - "{{ nikos_key_staging_dir }}/netdatabot.gpg.key"
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Install the Netdata repository signing key
+  ansible.builtin.copy:
+    src: "{{ nikos_key_staging_dir }}/netdata-archive-keyring.gpg"
+    remote_src: true
+    dest: /usr/share/keyrings/netdata-archive-keyring.gpg
+    mode: "0644"
+  become: true
+
+- name: Add the Netdata apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/netdata-archive-keyring.gpg]
+      https://repo.netdata.cloud/repos/stable/ubuntu/ {{ ansible_facts['distribution_release'] }}/
+    filename: netdata
+    state: present
+  become: true
+
+- name: Install Netdata
+  ansible.builtin.apt:
+    name: netdata
+    state: present
+    update_cache: true
+  become: true
+  when: not ansible_check_mode
+
+# Netdata's own package listens on every interface; Ubuntu's (22.04/24.04)
+# listens on 127.0.0.1. Bind to loopback so 26.04 behaves the same.
+- name: Keep the Netdata dashboard on loopback
+  community.general.ini_file:
+    path: /etc/netdata/netdata.conf
+    section: web
+    option: bind to
+    value: 127.0.0.1
+    mode: "0644"
+  become: true
+  register: monitoring_netdata_bind
+  when: not ansible_check_mode
+
+- name: Restart Netdata after the bind change
+  ansible.builtin.systemd:
+    name: netdata
+    state: restarted
+  become: true
+  when:
+    - not ansible_check_mode
+    - monitoring_netdata_bind is changed
