@@ -1,15 +1,23 @@
-# NikOS GRUB theme: Nord polar night background, the desktop and Plymouth colour.
-# Text only (no images or custom fonts), so it renders wherever GRUB can draw.
-title-text: "NikOS"
+# NikOS GRUB theme: Nord polar night background, the desktop and Plymouth colour,
+# with the NikOS logo (logo.png, from assets/plymouth-logo.png) above the menu.
+# GRUB's own font only; no custom fonts to install. Ubuntu hides the menu on a
+# single-OS machine, so this shows on dual boot or when Shift/Esc is held.
+title-text: ""
 title-color: "#88C0D0"
 desktop-color: "#2E3440"
 message-color: "#D8DEE9"
 
++ image {
+  file = "logo.png"
+  left = 50%-88
+  top = 7%
+}
+
 + boot_menu {
   left = 20%
-  top = 25%
+  top = 35%
   width = 60%
-  height = 50%
+  height = 40%
   item_color = "#D8DEE9"
   selected_item_color = "#88C0D0"
   item_height = 30

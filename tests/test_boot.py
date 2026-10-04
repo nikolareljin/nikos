@@ -75,6 +75,14 @@ def test_grub_theme_ships_with_nikos() -> None:
     # theme on every install. NikOS ships its own, with no download.
     theme = (REPO / "roles" / "theming" / "files" / "grub" / "theme.txt").read_text(encoding="utf-8")
     assert 'desktop-color: "#2E3440"' in theme and "+ boot_menu" in theme
+    # The logo is drawn by GRUB's image component: the file must be shipped
+    # next to theme.txt as a non-interlaced PNG (GRUB's PNG reader refuses
+    # interlaced files).
+    assert 'file = "logo.png"' in theme
+    logo = REPO / "roles" / "theming" / "files" / "grub" / "logo.png"
+    head = logo.read_bytes()[:33]
+    assert head[:8] == b"\x89PNG\r\n\x1a\n"
+    assert head[28] == 0, "logo.png must not be interlaced"
     theming = (REPO / "roles" / "theming" / "tasks" / "main.yml").read_text(encoding="utf-8")
     assert "EliverLara/Nordic.git" not in theming
     assert "not found in the cloned repo" not in theming
