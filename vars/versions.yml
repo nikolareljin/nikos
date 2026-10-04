@@ -45,11 +45,10 @@ nikos_aider_pip_pins:
 # Python the env may have: the `python` list of this pin's entry in
 # nikos_pin_sources, which matches nikos_python_version in vars/main.yml. An
 # env made by an earlier release keeps its Python, so a pin that needs a newer
-# one fails `nikos update` there (numpy 2.5 needs 3.12).
-# `bump-versions.py --bump` moves them together and holds back any that stop
-# the set resolving. vars/local.yml
-# replaces this whole mapping: list every package in an override, or one left
-# out is installed at PyPI's newest when it is missing.
+# one fails `nikos update` there (numpy 2.5 needs 3.12). `bump-versions.py
+# --bump` moves them together and holds back any that stop the set resolving.
+# vars/local.yml replaces this whole mapping: list every package in an
+# override, or one left out is installed at PyPI's newest when it is missing.
 nikos_pip_pins:
   torch: "2.14.1"
   torchvision: "0.29.1"

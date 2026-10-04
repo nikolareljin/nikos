@@ -180,6 +180,12 @@ def test_aider_is_not_installed_into_the_shared_env() -> None:
     # aider-chat pins its dependencies exactly; in nikos-ai they fought the other packages.
     assert "aider-chat" not in _versions()["nikos_pip_pins"]
     assert list(_versions()["nikos_aider_pip_pins"]) == ["aider-chat"]
+    installs = [task for _, task in _all_tasks()
+                if (_module(task, "include_role") or {}).get("tasks_from") == "pip"
+                and "aider-chat" in str(task["vars"]["pin_gate_names"])]
+    assert len(installs) == 1
+    assert "nikos_aider_conda_env" in installs[0]["vars"]["pin_gate_pip"]
+    assert "nikos_aider_pip_pins" in installs[0]["vars"]["pin_gate_pins"]
 
 
 def test_every_pin_is_defined_only_in_versions_yml() -> None:
