@@ -4,7 +4,7 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-10-03
+## [1.0.0] - 2026-10-04
 
 ### Breaking
 Existing installs change on the first `nikos update` to 1.0.0:
