@@ -219,6 +219,14 @@ def test_a_pypi_package_that_breaks_the_set_is_held_back(vfile: Path, capsys, mo
     assert "held back, does not resolve with the rest: idna 4.0" in capsys.readouterr().out
 
 
+def test_a_pypi_group_with_no_python_list_is_still_resolved(vfile: Path, monkeypatch) -> None:
+    vfile.write_text(vfile.read_text(encoding="utf-8").replace('    python: ["3.11", "3.12"]\n', ""), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(bump, "uv_resolve", lambda reqs, python, index: calls.append((reqs, python, index)))
+    assert bump.main(["--bump", "pip_pins", "--no-tests"], http=_pip_http(), path=vfile) == 0
+    assert calls == [(["requests==2.5.0", "idna==4.0"], None, None)]
+
+
 def test_a_resolve_alone_package_is_resolved_by_itself(vfile: Path, monkeypatch) -> None:
     vfile.write_text(vfile.read_text(encoding="utf-8").replace(
         '    python: ["3.11", "3.12"]\n', '    python: ["3.12"]\n    resolve_alone: [idna]\n    extra_index: https://example.invalid/whl\n'),

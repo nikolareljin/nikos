@@ -149,12 +149,14 @@ def python_allows(spec: str, minor: str) -> bool:
     return True
 
 
-def uv_resolve(requirements: list[str], python: str, extra_index: str | None) -> str | None:
+def uv_resolve(requirements: list[str], python: str | None, extra_index: str | None) -> str | None:
     """None when the requirements resolve together on that Python, else uv's error.
 
-    Raises FileNotFoundError when uv is not installed.
+    python None means the one uv finds. Raises FileNotFoundError when uv is not installed.
     """
-    cmd = ["uv", "pip", "compile", "-", "--quiet", "--no-header", "--python-version", python]
+    cmd = ["uv", "pip", "compile", "-", "--quiet", "--no-header"]
+    if python:
+        cmd += ["--python-version", python]
     if extra_index:
         cmd += ["--extra-index-url", extra_index, "--index-strategy", "unsafe-best-match"]
     done = subprocess.run(cmd, input="\n".join(requirements) + "\n", capture_output=True, text=True)
@@ -747,7 +749,7 @@ def plan_pip_map(pins: Pins, src: dict) -> tuple[dict, str]:
         if any(p not in alone for p in changed):
             sets.append([f"{p}=={version}" for p, version in target.items() if p not in alone])
         for requirements in sets:
-            for python in pythons:
+            for python in pythons or [None]:
                 error = uv_resolve(requirements, python, src.get("extra_index"))
                 if error:
                     return error
