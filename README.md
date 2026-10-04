@@ -277,6 +277,24 @@ aider / Claude Code / Continue  →  use in code
 - [Debugging](docs/debugging.md) — `nikos doctor`, common issues, logs
 - [Development](docs/development.md) — adding roles, testing, contributing
 
+## Contributing
+
+Help is welcome: bug reports from real machines, fixes, new optional bundles,
+docs, and testing on hardware the maintainer does not have (NVIDIA and AMD
+GPUs, dual boot, Secure Boot, Ubuntu 22.04 and 26.04).
+
+- **Found a problem?** [Open an issue](https://github.com/nikolareljin/nikos/issues/new/choose)
+  and paste the log digest from the end of `nikos log 60`.
+- **Want to change something?** Read [CONTRIBUTING.md](CONTRIBUTING.md), then
+  open a pull request. Issues labelled
+  [good first issue](https://github.com/nikolareljin/nikos/labels/good%20first%20issue)
+  and [help wanted](https://github.com/nikolareljin/nikos/labels/help%20wanted)
+  are a good place to start.
+- **Questions and ideas:** [Discussions](https://github.com/nikolareljin/nikos/discussions).
+- **Security:** see [SECURITY.md](SECURITY.md).
+
+Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ---
 
 ## License

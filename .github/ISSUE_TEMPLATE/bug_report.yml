@@ -1,0 +1,64 @@
+name: Bug report
+description: Something NikOS installed or configured did not work.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The log digest at the end of the install or update log
+        usually pinpoints the cause, so please include it. Security problems go through the
+        [security policy](https://github.com/nikolareljin/nikos/security/policy), not here.
+  - type: input
+    id: version
+    attributes:
+      label: NikOS version
+      description: "`nikos status`, or `cat ~/.local/share/nikos/VERSION`"
+      placeholder: "1.0.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: release
+    attributes:
+      label: Ubuntu release
+      options:
+        - Xubuntu 24.04
+        - Ubuntu 24.04
+        - Xubuntu 22.04
+        - Ubuntu 22.04
+        - Xubuntu 26.04
+        - Ubuntu 26.04
+        - Other (not supported)
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How was it run?
+      options:
+        - install.sh (fresh install)
+        - nikos update
+        - nikos add <bundle>
+        - NikOS ISO
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: digest
+    attributes:
+      label: Log digest
+      description: >-
+        The block from "=== NikOS log digest ===" to "=== end of digest ===" at the end of
+        `nikos log 60` (or the newest file in ~/.config/nikos/logs/). Remove anything private.
+      render: text
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware and setup
+      description: GPU (NVIDIA/AMD/none), dual boot, Secure Boot, VM - whatever seems relevant.
