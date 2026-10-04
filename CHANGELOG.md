@@ -14,7 +14,7 @@ All notable changes to NikOS are documented here.
 - **`nikos update` no longer stops at `numpy==2.5.3`.** numpy 2.5 needs
   Python 3.12, and an env created by an earlier release is 3.11, so the
   `ai-stack` role failed and every role after it was skipped. numpy is pinned
-  to 2.4.6, which installs on 3.11 and 3.12.
+  to 2.4.6, which installs on 3.11, 3.12 and 3.13.
 - **aider works on every install.** `aider-chat` pins each of its
   dependencies exactly, so in the shared `nikos-ai` env it and the data
   science packages overwrote each other's (12 conflicts in `pip check`), and
