@@ -27,3 +27,18 @@ jobs:
         ansible-playbook --version
         bash scripts/install-collections.sh requirements.yml
         ANSIBLE_FORCE_COLOR=1 ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education
+
+  # The ruleset on main requires a check named "check-playbook / ci". The matrix
+  # legs report as "check-playbook (ubuntu-24.04) / ci", so nothing ever reported
+  # the required name and every PR waited on it. This job reports it, and passes
+  # only when every leg passed.
+  check-playbook-result:
+    name: check-playbook / ci
+    if: always()
+    needs: check-playbook
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every release leg passed
+        env:
+          RESULT: ${{ needs.check-playbook.result }}
+        run: test "$RESULT" = success
