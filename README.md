@@ -202,7 +202,7 @@ file, [`vars/versions.yml`](vars/versions.yml); `scripts/bump-versions.py`
 checks upstream (`--check`), moves pins forward with the vendor's own checksums
 (`--bump`) and re-verifies every pin (`--verify`). `nikos update` treats a pin
 as a minimum and never downgrades. Each install and update log ends with a
-digest of failed tasks and warnings (`nikos log`).
+digest of failed tasks and warnings.
 
 ## Customization
 
@@ -283,7 +283,8 @@ Contributions are welcome: bug reports, fixes, new optional bundles, docs, and
 testing on a wide range of machines and setups.
 
 - **Found a problem?** [Open an issue](https://github.com/nikolareljin/nikos/issues/new/choose)
-  and paste the log digest from the end of `nikos log 60`.
+  and paste the log digest from the end of the install or update log
+  ([how to get it](CONTRIBUTING.md#report-a-problem)).
 - **Want to change something?** Read [CONTRIBUTING.md](CONTRIBUTING.md), then
   open a pull request. Issues labelled
   [good first issue](https://github.com/nikolareljin/nikos/labels/good%20first%20issue)

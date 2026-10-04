@@ -54,8 +54,10 @@ body:
     attributes:
       label: Log digest
       description: >-
-        The block from "=== NikOS log digest ===" to "=== end of digest ===" at the end of
-        `nikos log 60` (or the newest file in ~/.config/nikos/logs/). Remove anything private.
+        The block from "=== NikOS log digest ===" to "=== end of digest ===" at the end of the
+        log. After an install:
+        `sed -n '/=== NikOS log digest/,/=== end of digest/p' ~/.config/nikos/logs/install-latest.log`
+        After `nikos update`: the same with `playbook-latest.log`. Remove anything private.
       render: text
   - type: textarea
     id: hardware

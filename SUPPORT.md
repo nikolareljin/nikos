@@ -1,7 +1,8 @@
 # Getting help
 
 - **Something broke:** [open a bug report](https://github.com/nikolareljin/nikos/issues/new/choose)
-  with the log digest from the end of the install or update log (`nikos log 60`).
+  with the log digest from the end of the install or update log
+  ([how to get it](CONTRIBUTING.md#report-a-problem)).
   The [debugging guide](docs/debugging.md) covers the common problems first.
 - **A question or an idea:** [Discussions](https://github.com/nikolareljin/nikos/discussions).
 - **A security problem:** follow the [security policy](SECURITY.md); please do not

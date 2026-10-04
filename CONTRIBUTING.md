@@ -14,9 +14,15 @@ pick **Bug report**. The form asks for what helps most:
 - Ubuntu or Xubuntu release (22.04, 24.04 or 26.04) and how you installed
 - what you ran, what you expected, what happened
 - the **log digest**: the block at the end of the install or update log, from
-  `=== NikOS log digest ===` to `=== end of digest ===`. Get it with
-  `nikos log 60`, or from `~/.config/nikos/logs/`. It lists every failed task
-  with its message, so it is usually enough to find the cause.
+  `=== NikOS log digest ===` to `=== end of digest ===`. It lists every failed
+  task with its message, so it is usually enough to find the cause:
+
+  ```bash
+  # after an install
+  sed -n '/=== NikOS log digest/,/=== end of digest/p' ~/.config/nikos/logs/install-latest.log
+  # after nikos update
+  sed -n '/=== NikOS log digest/,/=== end of digest/p' ~/.config/nikos/logs/playbook-latest.log
+  ```
 
 Check the [debugging guide](docs/debugging.md) and the
 [open issues](https://github.com/nikolareljin/nikos/issues) first; a comment
@@ -46,7 +52,7 @@ today instead. Questions and ideas that are not yet a request fit
    shellcheck install.sh scripts/nikos scripts/nikos-progress.sh scripts/nikos-tools.sh \
      scripts/distrodeck-version.sh scripts/repo-sync.sh scripts/install-collections.sh \
      scripts/verify-key-fingerprint.sh roles/theming/files/nikos-apply-wallpaper.sh
-   ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education
+   ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education --ask-become-pass
    ```
 
    CI also runs the `--check` playbook on Ubuntu 22.04, 24.04 and 26.04.
@@ -66,8 +72,9 @@ today instead. Questions and ideas that are not yet a request fit
   `tests/test_pinned_sources.py` enforces this.
 - **Never downgrade.** On `nikos update` a pin is a minimum: a newer version the
   user installed is left alone (`roles/pin-gate`).
-- **Idempotent.** A second run changes nothing; `nikos update` re-runs the whole
-  playbook on every machine.
+- **Safe to re-run.** `nikos update` re-runs the whole playbook on every
+  machine, so a task must converge: running it again must not break or
+  duplicate anything.
 - **Works on 22.04, 24.04 and 26.04.** Package names that differ per release go
   in `nikos_ubuntu_releases` in `vars/main.yml`; a release that lacks something
   skips it with a clear message.
