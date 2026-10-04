@@ -71,7 +71,7 @@ At the end, you should end up with something like:
 | Icon theme | Papirus-Dark |
 | Login screen | LightDM + Nordic greeter |
 | Boot splash | Plymouth — NikOS logo on Nord dark |
-| GRUB theme | NikOS (Nord colours, text only) |
+| GRUB theme | NikOS logo on Nord dark |
 | Browsers | Dark Firefox, Chromium and Google Chrome in the desktop colour |
 | Wallpaper | NikOS logo on Nord dark |
 | Terminal font | JetBrains Mono |
