@@ -2,7 +2,7 @@
 
 All notable changes to NikOS are documented here.
 
-## [Unreleased]
+## [1.0.2] - 2026-10-04
 
 ### Added
 - **Community files**: a code of conduct, contributing guide, security policy
