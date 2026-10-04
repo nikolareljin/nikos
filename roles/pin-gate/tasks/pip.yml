@@ -5,13 +5,21 @@
 # never downgrades. A name with no pin (added in vars/local.yml) is installed
 # when missing and otherwise left alone.
 #
+# PYTHONNOUSERSITE: without it pip counts what is in ~/.local/lib/pythonX.Y as
+# installed, so the env is left without packages it needs (aider's env came
+# out with no httpx on a machine that had one there).
+#
 # Inputs:
 #   pin_gate_pip      the pip to run
 #   pin_gate_names    package names
 #   pin_gate_pip_args extra pip arguments (optional list)
+#   pin_gate_pins     the pins to use instead of nikos_pip_pins (optional
+#                     mapping), for an env with its own pins
 - name: Read the installed Python packages
   ansible.builtin.command:
     argv: ["{{ pin_gate_pip }}", list, --format=json, --disable-pip-version-check]
+  environment:
+    PYTHONNOUSERSITE: "1"
   register: pin_gate_pip_list
   changed_when: false
   failed_when: false
@@ -29,7 +37,7 @@
       {%- for name in pin_gate_names -%}
       {%-   set key = name | lower | replace('_', '-') -%}
       {%-   set have = pin_gate_installed.get(key, '') -%}
-      {%-   set pin = nikos_pip_pins.get(name, '') -%}
+      {%-   set pin = (pin_gate_pins | default(nikos_pip_pins)).get(name, '') -%}
       {%-   if have == '' -%}
       {%-     set _ = out.append(name ~ (('==' ~ pin) if pin else '')) -%}
       {%-   elif pin and pin is version(have, '>') -%}
@@ -41,6 +49,8 @@
 - name: Install the Python packages that are missing or older than their pins
   ansible.builtin.command:
     argv: "{{ [pin_gate_pip, 'install'] + (pin_gate_pip_args | default([])) + pin_gate_pip_wanted }}"
+  environment:
+    PYTHONNOUSERSITE: "1"
   changed_when: true
   when:
     - not ansible_check_mode

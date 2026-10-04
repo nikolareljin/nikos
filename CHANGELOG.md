@@ -15,8 +15,15 @@ All notable changes to NikOS are documented here.
   Python 3.12, and an env created by an earlier release is 3.11, so the
   `ai-stack` role failed and every role after it was skipped. numpy is pinned
   to 2.4.6, which installs on 3.11 and 3.12.
-- **New envs get Python 3.11-3.12, not 3.13**: `aider-chat` 0.86.2 needs
-  Python <3.13, so `nikos_python_version` is now `>=3.11,<3.13`.
+- **aider works on every install.** `aider-chat` pins each of its
+  dependencies exactly, so in the shared `nikos-ai` env it and the data
+  science packages overwrote each other's (12 conflicts in `pip check`), and
+  it could not be installed at all into a Python 3.13 env. It now has its
+  own `nikos-aider` env, with an `aider` launcher in `~/.local/bin`; the next
+  `nikos update` creates it and removes aider from `nikos-ai`.
+- **pip installs into a conda env ignore `~/.local`.** A package present in
+  `~/.local/lib/pythonX.Y` counted as installed, so the env was left without
+  it. `roles/pin-gate` now runs pip with `PYTHONNOUSERSITE=1`.
 - **`bump-versions.py` checks Requires-Python**: `--verify` fails on a pip
   pin that does not install on every Python the env may have, and `--check`
   and `--bump` skip releases that do not.

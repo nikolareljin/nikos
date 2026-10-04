@@ -237,17 +237,6 @@ def test_a_pypi_group_with_no_python_list_is_still_resolved(vfile: Path, monkeyp
     assert calls == [(["requests==2.5.0", "idna==4.0"], None, None)]
 
 
-def test_a_resolve_alone_package_is_resolved_by_itself(vfile: Path, monkeypatch) -> None:
-    vfile.write_text(vfile.read_text(encoding="utf-8").replace(
-        '    python: ["3.11", "3.12"]\n', '    python: ["3.12"]\n    resolve_alone: [idna]\n    extra_index: https://example.invalid/whl\n'),
-        encoding="utf-8")
-    calls = []
-    monkeypatch.setattr(bump, "uv_resolve", lambda reqs, python, index: calls.append((reqs, python, index)))
-    assert bump.main(["--bump", "pip_pins", "--no-tests"], http=_pip_http(), path=vfile) == 0
-    assert calls == [(["idna==4.0"], "3.12", "https://example.invalid/whl"),
-                     (["requests==2.5.0"], "3.12", "https://example.invalid/whl")]
-
-
 @pytest.mark.parametrize(
     "spec,minor,ok",
     [

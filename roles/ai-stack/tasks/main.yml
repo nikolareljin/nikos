@@ -588,10 +588,65 @@
     pin_gate_pip: "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip"
     pin_gate_names: [transformers, jupyter, jupyterlab, pandas, numpy, scikit-learn, matplotlib]
 
-- name: Install aider and uv in nikos-ai env
+- name: Install uv in nikos-ai env
   ansible.builtin.include_role:
     name: pin-gate
     tasks_from: pip
   vars:
     pin_gate_pip: "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip"
-    pin_gate_names: [aider-chat, uv]
+    pin_gate_names: [uv]
+
+# aider-chat pins each of its dependencies to an exact version (numpy 1.26.4,
+# openai 2.20.0, ...). In the shared env it and the other packages overwrote
+# each other's, and it does not install on Python 3.13 at all. It gets an env
+# of its own; only an `aider` launcher goes on PATH.
+- name: Create the aider conda environment
+  ansible.builtin.command: >
+    {{ nikos_home }}/miniforge3/bin/conda create -n {{ nikos_aider_conda_env }}
+    python{{ nikos_aider_python_version }} -y
+  args:
+    creates: "{{ nikos_home }}/miniforge3/envs/{{ nikos_aider_conda_env }}"
+
+- name: Install aider in its own env
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: pip
+  vars:
+    pin_gate_pip: "{{ nikos_home }}/miniforge3/envs/{{ nikos_aider_conda_env }}/bin/pip"
+    pin_gate_names: [aider-chat]
+    pin_gate_pins: "{{ nikos_aider_pip_pins }}"
+
+- name: Check the aider command
+  ansible.builtin.stat:
+    path: "{{ nikos_home }}/miniforge3/envs/{{ nikos_aider_conda_env }}/bin/aider"
+  register: ai_stack_aider_bin
+
+# A launcher, not a symlink: python -s keeps ~/.local/lib/pythonX.Y out of
+# sys.path, where it would come before the env and replace aider's pinned
+# dependencies with whatever the user installed there.
+- name: Install the aider launcher into the local bin directory
+  ansible.builtin.copy:
+    dest: "{{ nikos_home }}/.local/bin/aider"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Managed by NikOS (roles/ai-stack). aider runs from its own conda env.
+      env="{{ nikos_home }}/miniforge3/envs/{{ nikos_aider_conda_env }}"
+      exec "$env/bin/python" -s "$env/bin/aider" "$@"
+  when: ai_stack_aider_bin.stat.exists
+
+# An install from before aider had its own env has it in nikos-ai, where its
+# `aider` would shadow the launcher above whenever that env is active. Removed
+# only once the new one is in place. pip exits 0 when it is not installed.
+- name: Remove aider from the nikos-ai env
+  ansible.builtin.command:
+    argv:
+      - "{{ nikos_home }}/miniforge3/envs/{{ nikos_conda_env }}/bin/pip"
+      - uninstall
+      - -y
+      - aider-chat
+  register: ai_stack_aider_old
+  changed_when: "'Successfully uninstalled' in ai_stack_aider_old.stdout"
+  when:
+    - not ansible_check_mode
+    - ai_stack_aider_bin.stat.exists

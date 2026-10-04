@@ -162,17 +162,24 @@ def test_no_hash_or_version_literal_outside_versions_yml() -> None:
 
 PIN_SUFFIX = re.compile(r"_(version|sha256|commit|digest|fingerprints?|series)$")
 # Not pins: a minimum the CLIs need, a conda range, and NikOS's own version.
-NOT_PINS = {"nikos_node_min_version", "nikos_python_version", "nikos_version"}
+NOT_PINS = {"nikos_node_min_version", "nikos_python_version", "nikos_aider_python_version", "nikos_version"}
 
 
 def test_pip_pins_are_checked_against_every_python_the_env_may_have() -> None:
     spec = importlib.util.spec_from_file_location("bump_versions", REPO / "scripts" / "bump-versions.py")
     bump = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(bump)
-    conda = yaml.safe_load((REPO / "vars" / "main.yml").read_text(encoding="utf-8"))["nikos_python_version"]
-    allowed = [f"3.{n}" for n in range(8, 30) if bump.python_allows(conda, f"3.{n}")]
-    assert allowed, conda
-    assert _versions()["nikos_pin_sources"]["nikos_pip_pins"]["python"] == allowed
+    main = yaml.safe_load((REPO / "vars" / "main.yml").read_text(encoding="utf-8"))
+    for pins, var in (("nikos_pip_pins", "nikos_python_version"), ("nikos_aider_pip_pins", "nikos_aider_python_version")):
+        allowed = [f"3.{n}" for n in range(8, 30) if bump.python_allows(main[var], f"3.{n}")]
+        assert allowed, var
+        assert _versions()["nikos_pin_sources"][pins]["python"] == allowed, pins
+
+
+def test_aider_is_not_installed_into_the_shared_env() -> None:
+    # aider-chat pins its dependencies exactly; in nikos-ai they fought the other packages.
+    assert "aider-chat" not in _versions()["nikos_pip_pins"]
+    assert list(_versions()["nikos_aider_pip_pins"]) == ["aider-chat"]
 
 
 def test_every_pin_is_defined_only_in_versions_yml() -> None:
@@ -361,7 +368,8 @@ def test_pip_gate_installs_pins_and_never_downgrades(tmp_path: Path, installed, 
     pip.write_text(
         "#!/bin/sh\n"
         f"if [ \"$1\" = list ]; then printf '%s\\n' '{listing}'; exit 0; fi\n"
-        f"echo \"$@\" > {tmp_path}/calls\n",
+        f"echo \"$@\" > {tmp_path}/calls\n"
+        f"echo \"$PYTHONNOUSERSITE\" > {tmp_path}/nousersite\n",
         encoding="utf-8",
     )
     pip.chmod(0o755)
@@ -370,8 +378,19 @@ def test_pip_gate_installs_pins_and_never_downgrades(tmp_path: Path, installed, 
     result = _gate_play(tmp_path, [task], {"nikos_pip_pins": {"torch": "2.14.1", "numpy": "2.5.3"}})
     assert result.returncode == 0, result.stdout + result.stderr
     calls = tmp_path / "calls"
+    if not installed:
+        # An env with its own pins: pin_gate_pins replaces nikos_pip_pins.
+        task["vars"]["pin_gate_pins"] = {"torch": "1.0.0"}
+        own = _gate_play(tmp_path, [task], {"nikos_pip_pins": {"torch": "2.14.1", "numpy": "2.5.3"}})
+        assert own.returncode == 0, own.stdout + own.stderr
+        assert calls.read_text(encoding="utf-8").split() == ["install", "torch==1.0.0", "numpy", "extra"]
+        calls.unlink()
+        del task["vars"]["pin_gate_pins"]
+        result = _gate_play(tmp_path, [task], {"nikos_pip_pins": {"torch": "2.14.1", "numpy": "2.5.3"}})
     if expected:
         assert calls.read_text(encoding="utf-8").split() == ["install"] + expected
+        # pip must not count ~/.local/lib/pythonX.Y as part of the env.
+        assert (tmp_path / "nousersite").read_text(encoding="utf-8").strip() == "1"
     else:
         assert not calls.exists(), calls.read_text(encoding="utf-8")
 

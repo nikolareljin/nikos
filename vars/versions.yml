@@ -33,15 +33,21 @@ miniforge_version: "26.7.2-0"
 miniforge_sha256: "281b0ac7d550802efc81af633225a5e6116d29ae72f3ab4eae7168c3931a4c05"
 miniforge_url: "https://github.com/conda-forge/miniforge/releases/download/{{ miniforge_version }}/Miniforge3-{{ miniforge_version }}-Linux-x86_64.sh"
 
+# -- aider, in the nikos-aider conda env (roles/ai-stack) ----------------------
+# PyPI. aider-chat pins every dependency exactly, so it has an env to itself;
+# its Python is nikos_aider_python_version in vars/main.yml.
+nikos_aider_pip_pins:
+  aider-chat: "0.86.2"
+
 # -- Python packages in the nikos-ai conda env (ai-stack, agent-dev, optional DB roles)
 # PyPI (torch, torchvision, torchaudio from download.pytorch.org/whl/cpu).
 # Exact versions, resolved per install group with `uv pip compile` for every
 # Python the env may have: the `python` list of this pin's entry in
 # nikos_pin_sources, which matches nikos_python_version in vars/main.yml. An
 # env made by an earlier release keeps its Python, so a pin that needs a newer
-# one fails `nikos update` there (numpy 2.5 needs 3.12; aider-chat needs
-# <3.13). `bump-versions.py --bump` moves them together and holds back any
-# that stop the set resolving. vars/local.yml
+# one fails `nikos update` there (numpy 2.5 needs 3.12).
+# `bump-versions.py --bump` moves them together and holds back any that stop
+# the set resolving. vars/local.yml
 # replaces this whole mapping: list every package in an override, or one left
 # out is installed at PyPI's newest when it is missing.
 nikos_pip_pins:
@@ -55,7 +61,6 @@ nikos_pip_pins:
   numpy: "2.4.6"
   scikit-learn: "1.9.1"
   matplotlib: "3.11.2"
-  aider-chat: "0.86.2"
   uv: "0.12.22"
   langchain: "1.4.3"
   langchain-community: "0.4.2"
@@ -213,8 +218,6 @@ ansible_ppa_key_fingerprints:
 #   python        pypi-map: the Python minors every pin must install on
 #                 (Requires-Python); the same set nikos_python_version allows
 #   extra_index   pypi-map: a second package index used when resolving
-#   resolve_alone pypi-map: packages that pin their own dependencies exactly,
-#                 so they are resolved by themselves, not with the rest
 #   allow_prerelease  GitHub: accept releases marked pre-release (llama.cpp
 #                 marks every build so)
 #   artifacts     files hashed for the pin: asset (release asset name) or url,
@@ -254,9 +257,12 @@ nikos_pin_sources:
   nikos_pip_pins:
     type: pypi-map
     version_var: nikos_pip_pins
-    python: ["3.11", "3.12"]
+    python: ["3.11", "3.12", "3.13"]
     extra_index: https://download.pytorch.org/whl/cpu
-    resolve_alone: [aider-chat]
+  nikos_aider_pip_pins:
+    type: pypi-map
+    version_var: nikos_aider_pip_pins
+    python: ["3.11", "3.12"]
   shell_gpt:
     type: pypi
     package: shell-gpt

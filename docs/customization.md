@@ -40,6 +40,7 @@ ollama_optional_models:
 # versions" below before overriding one.
 nikos_conda_env: "nikos-ai"
 nikos_python_version: "=3.12"            # a conda spec, operator included
+nikos_aider_conda_env: "nikos-aider"     # aider has its own env; the `aider` launcher is in ~/.local/bin
 
 # ── VS Code extensions ────────────────────────────────
 nikos_vscode_extensions:

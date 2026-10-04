@@ -735,8 +735,7 @@ def plan_pip_map(pins: Pins, src: dict) -> tuple[dict, str]:
 
     The packages share one env. All the newest are tried at once; when that
     does not resolve, they are applied one at a time and the ones that break
-    the set are held back. A package in resolve_alone pins its own
-    dependencies exactly (aider-chat), so it is resolved by itself.
+    the set are held back.
     """
     var, pythons = src["version_var"], src.get("python", [])
     current = {package: str(version) for package, version in pins.v[var].items()}
@@ -747,28 +746,24 @@ def plan_pip_map(pins: Pins, src: dict) -> tuple[dict, str]:
             newer[package] = newest
     if not newer:
         return {}, "all current"
-    alone = set(src.get("resolve_alone", []))
 
-    def problem(target: dict, changed) -> str | None:
-        sets = [[f"{p}=={target[p]}"] for p in changed if p in alone]
-        if any(p not in alone for p in changed):
-            sets.append([f"{p}=={version}" for p, version in target.items() if p not in alone])
-        for requirements in sets:
-            for python in pythons or [None]:
-                error = uv_resolve(requirements, python, src.get("extra_index"))
-                if error:
-                    return error
+    def problem(target: dict) -> str | None:
+        requirements = [f"{p}=={version}" for p, version in target.items()]
+        for python in pythons or [None]:
+            error = uv_resolve(requirements, python, src.get("extra_index"))
+            if error:
+                return error
         return None
 
     try:
         target, held = {**current, **newer}, {}
-        if problem(target, newer):
-            broken = problem(current, newer)
+        if problem(target):
+            broken = problem(current)
             if broken:
                 return {}, "the current pins do not resolve together, fix that first: " + broken.splitlines()[0]
             target = dict(current)
             for package, newest in newer.items():
-                if problem({**target, package: newest}, [package]):
+                if problem({**target, package: newest}):
                     held[package] = newest
                 else:
                     target[package] = newest
