@@ -8,8 +8,6 @@ All notable changes to NikOS are documented here.
 
 ### Breaking
 Existing installs change on the first `nikos update` to 1.0.0:
-- NikOS-managed tool checkouts move from `~/Projects` to
-  `~/.local/share/nikos-tools` (old copies are left alone).
 - Ollama is installed from its release archive with a NikOS-written
   `ollama.service`, so it restarts once.
 - Netdata comes from Ubuntu's `netdata` package (Netdata's repository on 26.04),
