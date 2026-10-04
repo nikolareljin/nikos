@@ -15,10 +15,10 @@ whose artifacts have no vendor checksum, and apt key fingerprints, are never
 changed automatically: they are reported for a person to update by hand (and
 then proven with --verify). The Python packages move together: each goes to
 its newest release only if the whole set still resolves (`uv pip compile`) for
-every Python the env may have; one that does not is held back and named. Only the changed values are rewritten, comments
-and layout are kept, and the file is replaced atomically. The changed pins
-are then verified again from upstream and `python3 -m pytest tests -q` runs,
-unless --no-tests.
+every Python the env may have; one that does not is held back and named.
+Only the changed values are rewritten, comments and layout are kept, and the
+file is replaced atomically. The changed pins are then verified again from
+upstream and `python3 -m pytest tests -q` runs, unless --no-tests.
 
 Needs Python 3.8+ and PyYAML (already required by Ansible and the tests) to
 read the file; everything else is the standard library. GITHUB_TOKEN, when
@@ -133,17 +133,20 @@ def is_prerelease(version: str) -> bool:
 def python_allows(spec: str, minor: str) -> bool:
     """Whether a Requires-Python or conda spec admits a Python minor: (">=3.12", "3.11") is False.
 
-    The minor is tested at a high patch level, the way conda installs it.
+    The minor is tested at a high patch level, the way conda installs it, so
+    "<=3.12" and "==3.12" (3.12.0 only) refuse 3.12 as pip would on 3.12.5.
+    conda's "=3.12" and "==3.12.*" match any patch.
     """
     have = tuple(int(n) for n in minor.split(".")) + (99,)
     for clause in filter(None, (c.strip() for c in spec.split(","))):
-        m = re.fullmatch(r"(~=|==|!=|<=|>=|<|>|=)\s*(\d+(?:\.\d+)*)(?:\.\*)?", clause)
+        m = re.fullmatch(r"(~=|==|!=|<=|>=|<|>|=)\s*(\d+(?:\.\d+)*)(\.\*)?", clause)
         if not m:
             raise ValueError(f"cannot read the Python spec {spec!r}")
         op, want = m.group(1), tuple(int(n) for n in m.group(2).split("."))
         same = have[:len(want)] == want
-        if not {"=": same, "==": same, "!=": not same, ">=": have >= want, ">": have > want and not same,
-                "<": have < want, "<=": have <= want or same,
+        every_patch = same and bool(m.group(3))
+        if not {"=": same, "==": every_patch, "!=": not every_patch, ">=": have >= want, ">": have > want,
+                "<": have < want, "<=": have <= want,
                 "~=": have >= want and have[:len(want) - 1] == want[:-1]}[op]:
             return False
     return True
@@ -152,9 +155,11 @@ def python_allows(spec: str, minor: str) -> bool:
 def uv_resolve(requirements: list[str], python: str | None, extra_index: str | None) -> str | None:
     """None when the requirements resolve together on that Python, else uv's error.
 
-    python None means the one uv finds. Raises FileNotFoundError when uv is not installed.
+    python None means the one uv finds. Resolved for x86_64 Linux, which is
+    what NikOS installs on, whatever machine runs the bump. Raises
+    FileNotFoundError when uv is not installed.
     """
-    cmd = ["uv", "pip", "compile", "-", "--quiet", "--no-header"]
+    cmd = ["uv", "pip", "compile", "-", "--quiet", "--no-header", "--python-platform", "x86_64-unknown-linux-gnu"]
     if python:
         cmd += ["--python-version", python]
     if extra_index:
@@ -758,6 +763,9 @@ def plan_pip_map(pins: Pins, src: dict) -> tuple[dict, str]:
     try:
         target, held = {**current, **newer}, {}
         if problem(target, newer):
+            broken = problem(current, newer)
+            if broken:
+                return {}, "the current pins do not resolve together, fix that first: " + broken.splitlines()[0]
             target = dict(current)
             for package, newest in newer.items():
                 if problem({**target, package: newest}, [package]):

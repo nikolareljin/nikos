@@ -219,6 +219,16 @@ def test_a_pypi_package_that_breaks_the_set_is_held_back(vfile: Path, capsys, mo
     assert "held back, does not resolve with the rest: idna 4.0" in capsys.readouterr().out
 
 
+def test_a_pypi_group_whose_current_pins_do_not_resolve_is_left_alone(vfile: Path, capsys, monkeypatch) -> None:
+    monkeypatch.setattr(bump, "uv_resolve", lambda reqs, python, index: "no solution\nmore detail")
+    before = vfile.read_text(encoding="utf-8")
+    assert bump.main(["--bump", "pip_pins", "--no-tests"], http=_pip_http(), path=vfile) == 0
+    assert vfile.read_text(encoding="utf-8") == before
+    out = capsys.readouterr().out
+    assert "the current pins do not resolve together, fix that first: no solution" in out
+    assert "held back" not in out
+
+
 def test_a_pypi_group_with_no_python_list_is_still_resolved(vfile: Path, monkeypatch) -> None:
     vfile.write_text(vfile.read_text(encoding="utf-8").replace('    python: ["3.11", "3.12"]\n', ""), encoding="utf-8")
     calls = []
@@ -245,7 +255,9 @@ def test_a_resolve_alone_package_is_resolved_by_itself(vfile: Path, monkeypatch)
         ("<3.13,>=3.10", "3.12", True), ("<3.13,>=3.10", "3.13", False), ("<4", "3.13", True),
         (">=3.9.1", "3.9", True), ("!=3.11.*,>=3.8", "3.11", False), ("~=3.9", "3.12", True),
         ("~=3.9", "4.0", False), ("=3.12", "3.12", True), ("=3.12", "3.11", False),
-        ("==3.12.*", "3.12", True), (">3.11", "3.11", False), ("<=3.12", "3.12", True), ("", "3.11", True),
+        ("==3.12.*", "3.12", True), ("==3.12", "3.12", False), ("!=3.12", "3.12", True),
+        (">3.11", "3.11", True), (">3.11", "3.10", False), ("<=3.12", "3.12", False), ("<=3.12", "3.11", True),
+        ("", "3.11", True),
     ],
 )
 def test_python_allows(spec: str, minor: str, ok: bool) -> None:

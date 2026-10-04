@@ -20,7 +20,6 @@ All notable changes to NikOS are documented here.
 - **`bump-versions.py` checks Requires-Python**: `--verify` fails on a pip
   pin that does not install on every Python the env may have, and `--check`
   and `--bump` skip releases that do not.
-
 - **Pull requests no longer wait forever on `check-playbook / ci`.** The
   dry-run job became a matrix, so its legs report under other names; an
   aggregate job reports the name the ruleset on `main` requires.
