@@ -4,12 +4,18 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-04
+
 ### Fixed
 - **The GRUB theme shows the NikOS logo.** It was text only, so no logo
   appeared. `logo.png` (from the Plymouth logo) is drawn above the menu;
   checked by booting the theme in QEMU at 1024x768 and 1920x1080. Ubuntu
   still hides the menu on a single-OS machine (hold Shift or Esc at boot to
   see it).
+- **The docs and the GitHub Pages site describe 1.0.0**: verified installs
+  and `vars/versions.yml`, apt key fingerprints, dark browsers, the log
+  digest, the NVIDIA driver step and the private download/key directories.
+  Stale GRUB theme paths (`themes/Nordic`) are corrected.
 
 ## [1.0.0] - 2026-10-04
 
