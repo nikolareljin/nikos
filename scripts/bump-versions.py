@@ -577,9 +577,16 @@ class Pins:
         return next((f["requires_python"] for f in files if f.get("requires_python")), "")
 
     def python_gaps(self, files: list[dict], pythons: list[str] | tuple) -> list[str]:
-        """The Python minors in pythons that a release's Requires-Python excludes."""
+        """The Python minors in pythons that a release's Requires-Python excludes.
+
+        A spec that cannot be read excludes them all: old releases carry
+        malformed ones, and a pin is not proven by a spec nobody parsed.
+        """
         spec = self.requires_python(files)
-        return [p for p in pythons if spec and not python_allows(spec, p)]
+        try:
+            return [p for p in pythons if spec and not python_allows(spec, p)]
+        except ValueError:
+            return list(pythons)
 
     def key_url(self, src: dict) -> str:
         return fill(src["url"], **{k: str(val) for k, val in self.v.items() if isinstance(val, str)})

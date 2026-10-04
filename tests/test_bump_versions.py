@@ -214,6 +214,7 @@ def test_a_pip_pin_must_install_on_every_python_of_the_env(vfile: Path, capsys) 
                 "2.0.0": [{"upload_time_iso_8601": ago(400), "requires_python": requests_200}],
                 "2.4.0": [{"upload_time_iso_8601": ago(20), "requires_python": "<3.13,>=3.10"}],
                 "2.5.0": [{"upload_time_iso_8601": ago(10), "requires_python": ">=3.12"}],
+                "2.6.0": [{"upload_time_iso_8601": ago(10), "requires_python": ">=3.6.0rc1"}],  # unreadable: skipped
             }},
             "https://pypi.org/pypi/idna/json": {"releases": {"3.0": [{"upload_time_iso_8601": ago(400)}]}},
         })
@@ -222,6 +223,7 @@ def test_a_pip_pin_must_install_on_every_python_of_the_env(vfile: Path, capsys) 
     assert bump.main(["--verify", "pip_pins"], http=http(">=3.12"), path=vfile) == 1
     assert "requests==2.0.0 does not install on Python 3.11 (Requires-Python >=3.12)" in capsys.readouterr().out
     assert bump.main(["--verify", "pip_pins.requests"], http=http(">=3.12"), path=vfile) == 1
+    assert bump.main(["--verify", "pip_pins"], http=http("3.8+"), path=vfile) == 1
     # 2.5.0 is the newest, but needs 3.12: the bump stops at 2.4.0.
     assert bump.main(["--bump", "pip_pins.requests", "--no-tests"], http=http(">=3.8"), path=vfile) == 0
     assert '  requests: "2.4.0"\n' in vfile.read_text(encoding="utf-8")
