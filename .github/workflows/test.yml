@@ -7,11 +7,23 @@ on:
 
 jobs:
   check-playbook:
+    # One leg per supported release (nikos_ubuntu_releases in vars/main.yml).
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-24.04, ubuntu-26.04]
     uses: nikolareljin/ci-helpers/.github/workflows/ci.yml@production
     with:
-      runner: ubuntu-24.04
+      runner: ${{ matrix.runner }}
       test_command: |
         sudo apt-get update
         sudo apt-get install -y ansible
+        # 22.04's ansible is 2.10, older than install.sh's minimum: upgrade it
+        # the way install.sh does (fingerprint-checked PPA key).
+        eval "$(sed -n '/^MIN_ANSIBLE_VERSION=/p;/^ANSIBLE_PPA_KEY_FINGERPRINT=/p;/^_ansible_playbook_version() {/,/^}/p;/^_version_at_least() {/,/^}/p;/^_upgrade_ansible() {/,/^}/p' install.sh)"
+        if ! _version_at_least "$(_ansible_playbook_version)" "${MIN_ANSIBLE_VERSION}"; then
+          _upgrade_ansible
+        fi
+        ansible-playbook --version
         bash scripts/install-collections.sh requirements.yml
         ANSIBLE_FORCE_COLOR=1 ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education

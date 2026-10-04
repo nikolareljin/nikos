@@ -223,7 +223,12 @@ _is_supported_ubuntu_system() {
   os_id="$(_os_release_value ID || true)"
   version_id="$(_os_release_value VERSION_ID || true)"
 
-  [[ "${os_id}" == "ubuntu" && "${version_id}" == "24.04" ]]
+  # Keep in step with nikos_ubuntu_releases in vars/main.yml.
+  [[ "${os_id}" == "ubuntu" ]] || return 1
+  case "${version_id}" in
+    22.04|24.04|26.04) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 _ansible_playbook_version() {
@@ -307,6 +312,12 @@ _upgrade_ansible() {
   printf 'deb [signed-by=/etc/apt/keyrings/ansible-ppa.gpg] https://ppa.launchpadcontent.net/ansible/ansible/ubuntu %s main\n' \
     "${codename}" | sudo tee /etc/apt/sources.list.d/ansible-ppa.list >/dev/null || return 1
   sudo apt-get update -qq || return 1
+  # Ubuntu 22.04's ansible 2.10 ships /usr/bin/ansible, which the PPA's
+  # ansible-core also ships without Replaces, so dpkg refuses to unpack it over
+  # the old package. It is too old to keep, so remove it first.
+  if dpkg-query -W -f='${Status}' ansible 2>/dev/null | grep -q 'install ok installed'; then
+    sudo apt-get remove -y ansible || return 1
+  fi
   sudo apt-get install -y ansible
 }
 
@@ -649,9 +660,9 @@ if ! _is_supported_ubuntu_system || ! command -v apt-get &>/dev/null; then
   command -v apt-get &>/dev/null || _found_os="${_found_os}, no apt-get"
   if _can_use_dialog; then
     dialog --title "Error" \
-      --msgbox "NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS.\n\nFound: ${_found_os}" 9 64 0</dev/tty
+      --msgbox "NikOS requires Ubuntu or Xubuntu 22.04, 24.04 or 26.04 LTS.\n\nFound: ${_found_os}" 9 64 0</dev/tty
   fi
-  echo "ERROR: NikOS requires Xubuntu 24.04 LTS or Ubuntu 24.04 LTS (found: ${_found_os})." >&2
+  echo "ERROR: NikOS requires Ubuntu or Xubuntu 22.04, 24.04 or 26.04 LTS (found: ${_found_os})." >&2
   exit 1
 fi
 
@@ -1214,6 +1225,19 @@ fi
 _ensure_ansible_collections
 
 # Bundle selection ─────────────────────────────────────────────────
+# _release_note <bundle> - " (...)" when part or all of a bundle is missing on
+# the running Ubuntu release, so the menu says so before it is picked; empty
+# otherwise. Keep in step with nikos_ubuntu_releases and mongodb_repo_codenames
+# in vars/main.yml (tests/test_ubuntu_releases.py checks it).
+_release_note() {
+  local version
+  version="$(_os_release_value VERSION_ID || true)"
+  case "${version}:$1" in
+    22.04:postgres) printf ' (no pgvector on 22.04)' ;;
+    26.04:mongodb) printf ' (not available on 26.04)' ;;
+  esac
+}
+
 _select_bundles_dialog() {
   dialog_init
   local result dialog_status
@@ -1224,15 +1248,15 @@ _select_bundles_dialog() {
       "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 20 \
       "network"       "Network tools (nmap, wireshark, OpenVPN)"     off \
       "music"         "Music tools (LMMS, Ardour, Audacity)"         off \
-      "education"     "Education tools (LibreOffice, draw.io, Anki)" off \
+      "education"     "Education tools (LibreOffice, draw.io, Anki)$(_release_note education)" off \
       "neovim"        "Neovim with lazy.nvim starter config"         off \
       "zsh"           "Zsh with Starship prompt"                     off \
       "java"          "OpenJDK 21"                                   off \
       "bun"           "Bun JavaScript runtime"                       off \
       "openclaw"      "OpenClaw LLM gateway CLI"                     off \
       "ollama-models" "Every optional Ollama model, about 75 GB"      off \
-      "postgres"      "PostgreSQL with pgvector"                     off \
-      "mongodb"       "MongoDB Community, mongosh and Atlas CLI"     off \
+      "postgres"      "PostgreSQL with pgvector$(_release_note postgres)" off \
+      "mongodb"       "MongoDB Community, mongosh and Atlas CLI$(_release_note mongodb)" off \
       "redis"         "Redis server and Python client"               off \
       "qdrant"        "Qdrant vector database container"             off \
       "k8s-tools"     "kubectl and Helm"                             off \
@@ -1241,7 +1265,7 @@ _select_bundles_dialog() {
       "fabric"        "Fabric AI pattern CLI"                        off \
       "bitnet"        "BitNet.cpp 1-bit LLM inference"               off \
       "mistral-rs"    "mistral.rs Rust LLM server"                   off \
-      "monitoring"    "Netdata monitoring dashboard"                 off 0</dev/tty
+      "monitoring"    "Netdata monitoring dashboard$(_release_note monitoring)" off 0</dev/tty
   ); then
     echo "${result}"
     return 0
@@ -1343,7 +1367,7 @@ _select_bundles_plain() {
   _say_tty "Optional app bundles (press Enter to skip each):"
   _ask_tty opt_network "  Install network tools? (nmap, wireshark, OpenVPN) [y/N] "
   _ask_tty opt_music "  Install music tools? (LMMS, Ardour, Audacity) [y/N] "
-  _ask_tty opt_education "  Install education tools? (LibreOffice, draw.io, Anki) [y/N] "
+  _ask_tty opt_education "  Install education tools? (LibreOffice, draw.io, Anki)$(_release_note education) [y/N] "
   _say_tty ""
   _say_tty "Dev environment:"
   _ask_tty opt_neovim "  Install Neovim? [y/N] "
@@ -1358,8 +1382,8 @@ _select_bundles_plain() {
   _ask_tty opt_mistral_rs "  Install mistral.rs? [y/N] "
   _say_tty ""
   _say_tty "Databases:"
-  _ask_tty opt_postgres "  Install PostgreSQL + pgvector? [y/N] "
-  _ask_tty opt_mongodb "  Install MongoDB + mongosh + Atlas CLI? [y/N] "
+  _ask_tty opt_postgres "  Install PostgreSQL + pgvector$(_release_note postgres)? [y/N] "
+  _ask_tty opt_mongodb "  Install MongoDB + mongosh + Atlas CLI$(_release_note mongodb)? [y/N] "
   _ask_tty opt_redis "  Install Redis? [y/N] "
   _ask_tty opt_qdrant "  Install Qdrant? [y/N] "
   _say_tty ""
@@ -1369,7 +1393,7 @@ _select_bundles_plain() {
   _ask_tty opt_act "  Install act? [y/N] "
   _say_tty ""
   _say_tty "Monitoring:"
-  _ask_tty opt_monitoring "  Install Netdata? [y/N] "
+  _ask_tty opt_monitoring "  Install Netdata$(_release_note monitoring)? [y/N] "
   _ask_tty opt_fabric "  Install Fabric AI pattern CLI? [y/N] "
   [[ "${opt_network,,}"   == "y" ]] && SELECTED_BUNDLES+=("network")
   [[ "${opt_music,,}"     == "y" ]] && SELECTED_BUNDLES+=("music")

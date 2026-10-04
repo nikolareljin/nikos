@@ -47,6 +47,19 @@
         quiet: true
       tags: [always]
 
+    # `nikos update` runs this play without install.sh's release check, and
+    # every per-release package name comes from nikos_ubuntu_releases.
+    - name: Check this is a supported Ubuntu release
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == 'Ubuntu'
+          - ansible_facts['distribution_version'] in nikos_ubuntu_releases
+        fail_msg: >-
+          NikOS supports Ubuntu and Xubuntu {{ nikos_ubuntu_releases | join(', ') }} LTS;
+          this is {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
+        quiet: true
+      tags: [always]
+
     # An ISO build runs this play in a chroot with /etc/skel as the home. Boot
     # loader and kernel changes there would act on the build host's view of
     # /boot, not on the machine the image is installed onto.

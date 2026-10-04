@@ -1,0 +1,94 @@
+---
+# Version recorded beside the install: the Anki binary starts the GUI, so it
+# is not asked for its version. Installs when missing or older than the pin.
+- name: Read the installed Anki release version
+  ansible.builtin.slurp:
+    src: /usr/local/share/anki/.nikos-version
+  register: education_anki_installed
+  failed_when: false
+  become: true
+
+- name: Decide whether Anki needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: Anki
+    pin_gate_want: "{{ anki_version }}"
+    pin_gate_path: /usr/local/bin/anki
+    pin_gate_output: "{{ (education_anki_installed.content | default('')) | b64decode }}"
+
+- name: Install Anki {{ anki_version }}
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
+  become: true
+  block:
+    - name: Create the root-only download directory
+      ansible.builtin.file:
+        path: "{{ nikos_root_download_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Download the Anki release tarball
+      ansible.builtin.get_url:
+        url: "https://github.com/ankitects/anki/releases/download/{{ anki_version }}/anki-{{ anki_version }}-linux-x86_64.tar.zst"
+        dest: "{{ nikos_root_download_dir }}/anki-{{ anki_version }}-linux-x86_64.tar.zst"
+        checksum: "sha256:{{ anki_sha256 }}"
+        mode: "0644"
+
+    - name: Install zstd for the Anki tarball
+      ansible.builtin.apt:
+        name: zstd
+        state: present
+
+    - name: Remove an earlier unpacked Anki tree
+      ansible.builtin.file:
+        path: "{{ nikos_root_download_dir }}/anki-unpacked"
+        state: absent
+
+    - name: Create the Anki unpack directory
+      ansible.builtin.file:
+        path: "{{ nikos_root_download_dir }}/anki-unpacked"
+        state: directory
+        mode: "0700"
+
+    - name: Unpack the Anki tarball
+      ansible.builtin.command:
+        argv:
+          - tar
+          - --zstd
+          - -xf
+          - "{{ nikos_root_download_dir }}/anki-{{ anki_version }}-linux-x86_64.tar.zst"
+          - -C
+          - "{{ nikos_root_download_dir }}/anki-unpacked"
+      changed_when: true
+
+    - name: Find the unpacked Anki folder
+      ansible.builtin.find:
+        paths: "{{ nikos_root_download_dir }}/anki-unpacked"
+        file_type: directory
+        patterns: "anki-*"
+      register: education_anki_dir
+
+    # install.sh comes from the sha256-checked tarball; it installs the runtime
+    # libraries with apt and copies Anki to /usr/local/share/anki with a
+    # /usr/local/bin/anki link. It must run from its own folder.
+    - name: Run the installer shipped in the Anki tarball
+      ansible.builtin.command:
+        argv: [bash, ./install.sh]
+        chdir: "{{ education_anki_dir.files[0].path }}"
+      changed_when: true
+
+    - name: Record the installed Anki release
+      ansible.builtin.copy:
+        dest: /usr/local/share/anki/.nikos-version
+        content: "{{ anki_version }}\n"
+        mode: "0644"
+
+    - name: Remove the unpacked Anki tree
+      ansible.builtin.file:
+        path: "{{ nikos_root_download_dir }}/anki-unpacked"
+        state: absent

@@ -330,8 +330,9 @@ def test_every_version_checked_tool_goes_through_the_gate() -> None:
         assert f"roles/{role}/tasks/main.yml" in gated["version"], role
     for role in ("dev-tools", "optional/bitnet"):
         assert f"roles/{role}/tasks/main.yml" in gated["git"], role
-    for role in ("ai-stack", "agent-dev", "optional/postgres", "optional/mongodb", "optional/redis"):
+    for role in ("ai-stack", "agent-dev", "optional/postgres", "optional/redis"):
         assert f"roles/{role}/tasks/main.yml" in gated["pip"], role
+    assert "roles/optional/mongodb/tasks/install.yml" in gated["pip"]
 
 
 @pytest.mark.parametrize(
