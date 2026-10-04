@@ -48,7 +48,7 @@ Roles marked *desktop* run only on the `desktop` profile; see
 | `desktop` (*desktop*) | Xubuntu desktop, LightDM, xfce4-terminal, display manager and default session handover |
 | `theming` (*desktop*) | Nordic GTK theme, Papirus-Dark icons, GRUB theme, LightDM greeter, wallpaper |
 | `github-setup` | gh CLI, first-login wizard (SSH key, git identity) |
-| `ai-stack` | Ollama on 127.0.0.1:11434 + qwen3.5:4b, llama.cpp, Miniforge, nikos-ai conda env, aider, uv |
+| `ai-stack` | Ollama on 127.0.0.1:11434 + qwen3.5:4b, llama.cpp, Miniforge, nikos-ai conda env, uv, aider in its own nikos-aider env |
 | `editors` (*desktop*) | VS Code + AI extensions + Nord theme + JetBrains Mono |
 | `cloud-ai-cli` | Node (system or nvm-pinned), Gemini CLI, shell-gpt, glances |
 | `agent-dev` | LangChain, LlamaIndex, ML/data libraries, Claude Code |

@@ -71,6 +71,7 @@ nikos_pin_sources:
   pip_pins:
     type: pypi-map
     version_var: pip_pins
+    python: ["3.11", "3.12"]
   repo_key:
     type: apt-key
     url: https://example.invalid/key.asc
@@ -170,7 +171,10 @@ def test_a_changed_apt_key_is_reported_not_written(vfile: Path, monkeypatch, cap
     assert bump.main(["--verify", "repo_key"], http=FakeHttp({}), path=vfile) == 1
 
 
-def test_a_pypi_group_is_reported_not_bumped_in_bulk(vfile: Path, capsys) -> None:
+def test_a_pypi_group_is_reported_not_bumped_without_uv(vfile: Path, capsys, monkeypatch) -> None:
+    def no_uv(requirements, python, extra_index):
+        raise FileNotFoundError("uv")
+    monkeypatch.setattr(bump, "uv_resolve", no_uv)
     http = FakeHttp({
         "https://pypi.org/pypi/requests/json": {"releases": {
             "2.0.0": [{"upload_time_iso_8601": ago(400)}],
@@ -185,6 +189,95 @@ def test_a_pypi_group_is_reported_not_bumped_in_bulk(vfile: Path, capsys) -> Non
     assert "requests 2.0.0 -> 2.5.0" in capsys.readouterr().out
     assert bump.main(["--bump", "pip_pins.requests", "--no-tests"], http=http, path=vfile) == 0
     assert '  requests: "2.5.0"\n' in vfile.read_text(encoding="utf-8")
+
+
+def _pip_http() -> FakeHttp:
+    return FakeHttp({
+        "https://pypi.org/pypi/requests/json": {"releases": {
+            "2.0.0": [{"upload_time_iso_8601": ago(400)}], "2.5.0": [{"upload_time_iso_8601": ago(10)}]}},
+        "https://pypi.org/pypi/idna/json": {"releases": {
+            "3.0": [{"upload_time_iso_8601": ago(400)}], "4.0": [{"upload_time_iso_8601": ago(10)}]}},
+    })
+
+
+def test_a_pypi_group_moves_together_when_it_resolves(vfile: Path, capsys, monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(bump, "uv_resolve", lambda reqs, python, index: calls.append((reqs, python, index)))
+    assert bump.main(["--bump", "pip_pins", "--no-tests"], http=_pip_http(), path=vfile) == 0
+    text = vfile.read_text(encoding="utf-8")
+    assert '  requests: "2.5.0"\n' in text and '  idna: "4.0"\n' in text and "# inner comment" in text
+    assert calls == [(["requests==2.5.0", "idna==4.0"], "3.11", None),
+                     (["requests==2.5.0", "idna==4.0"], "3.12", None)]
+
+
+def test_a_pypi_package_that_breaks_the_set_is_held_back(vfile: Path, capsys, monkeypatch) -> None:
+    monkeypatch.setattr(bump, "uv_resolve",
+                        lambda reqs, python, index: "no solution" if "idna==4.0" in reqs else None)
+    assert bump.main(["--bump", "pip_pins", "--no-tests"], http=_pip_http(), path=vfile) == 0
+    text = vfile.read_text(encoding="utf-8")
+    assert '  requests: "2.5.0"\n' in text and '  idna: "3.0"\n' in text
+    assert "held back, does not resolve with the rest: idna 4.0" in capsys.readouterr().out
+
+
+def test_a_pypi_group_whose_current_pins_do_not_resolve_is_left_alone(vfile: Path, capsys, monkeypatch) -> None:
+    monkeypatch.setattr(bump, "uv_resolve", lambda reqs, python, index: "no solution\nmore detail")
+    before = vfile.read_text(encoding="utf-8")
+    assert bump.main(["--bump", "pip_pins", "--no-tests"], http=_pip_http(), path=vfile) == 0
+    assert vfile.read_text(encoding="utf-8") == before
+    out = capsys.readouterr().out
+    assert "the current pins do not resolve together, fix that first: no solution" in out
+    assert "held back" not in out
+
+
+def test_a_pypi_group_with_no_python_list_is_still_resolved(vfile: Path, monkeypatch) -> None:
+    vfile.write_text(vfile.read_text(encoding="utf-8").replace('    python: ["3.11", "3.12"]\n', ""), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(bump, "uv_resolve", lambda reqs, python, index: calls.append((reqs, python, index)))
+    assert bump.main(["--bump", "pip_pins", "--no-tests"], http=_pip_http(), path=vfile) == 0
+    assert calls == [(["requests==2.5.0", "idna==4.0"], None, None)]
+
+
+@pytest.mark.parametrize(
+    "spec,minor,ok",
+    [
+        (">=3.12", "3.11", False), (">=3.12", "3.12", True), (">=3.11", "3.11", True),
+        ("<3.13,>=3.10", "3.12", True), ("<3.13,>=3.10", "3.13", False), ("<4", "3.13", True),
+        (">=3.9.1", "3.9", True), ("!=3.11.*,>=3.8", "3.11", False), ("~=3.9", "3.12", True),
+        ("~=3.9", "4.0", False), ("=3.12", "3.12", True), ("=3.12", "3.11", False),
+        ("==3.12.*", "3.12", True), ("==3.12", "3.12", False), ("!=3.12", "3.12", True),
+        (">3.11", "3.11", True), (">3.11", "3.10", False), ("<=3.12", "3.12", False), ("<=3.12", "3.11", True),
+        ("", "3.11", True),
+    ],
+)
+def test_python_allows(spec: str, minor: str, ok: bool) -> None:
+    assert bump.python_allows(spec, minor) is ok
+
+
+def test_python_allows_refuses_a_spec_it_cannot_read() -> None:
+    with pytest.raises(ValueError):
+        bump.python_allows("3.12", "3.12")
+
+
+def test_a_pip_pin_must_install_on_every_python_of_the_env(vfile: Path, capsys) -> None:
+    def http(requests_200: str) -> FakeHttp:
+        return FakeHttp({
+            "https://pypi.org/pypi/requests/json": {"releases": {
+                "2.0.0": [{"upload_time_iso_8601": ago(400), "requires_python": requests_200}],
+                "2.4.0": [{"upload_time_iso_8601": ago(20), "requires_python": "<3.13,>=3.10"}],
+                "2.5.0": [{"upload_time_iso_8601": ago(10), "requires_python": ">=3.12"}],
+                "2.6.0": [{"upload_time_iso_8601": ago(10), "requires_python": ">=3.6.0rc1"}],  # unreadable: skipped
+            }},
+            "https://pypi.org/pypi/idna/json": {"releases": {"3.0": [{"upload_time_iso_8601": ago(400)}]}},
+        })
+    assert bump.main(["--verify", "pip_pins"], http=http(">=3.8"), path=vfile) == 0
+    capsys.readouterr()
+    assert bump.main(["--verify", "pip_pins"], http=http(">=3.12"), path=vfile) == 1
+    assert "requests==2.0.0 does not install on Python 3.11 (Requires-Python >=3.12)" in capsys.readouterr().out
+    assert bump.main(["--verify", "pip_pins.requests"], http=http(">=3.12"), path=vfile) == 1
+    assert bump.main(["--verify", "pip_pins"], http=http("3.8+"), path=vfile) == 1
+    # 2.5.0 is the newest, but needs 3.12: the bump stops at 2.4.0.
+    assert bump.main(["--bump", "pip_pins.requests", "--no-tests"], http=http(">=3.8"), path=vfile) == 0
+    assert '  requests: "2.4.0"\n' in vfile.read_text(encoding="utf-8")
 
 
 def test_verify_passes_on_the_recorded_pin_and_catches_a_wrong_hash(vfile: Path, capsys) -> None:

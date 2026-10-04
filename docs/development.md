@@ -77,16 +77,22 @@ older (`roles/pin-gate`): for an existing install the pin is a minimum.
 ```bash
 export GITHUB_TOKEN=$(gh auth token)         # optional, lifts the GitHub API limit
 python3 scripts/bump-versions.py             # --check: current, newest eligible, status
-python3 scripts/bump-versions.py --bump act  # new version + sha256, cross-checked, then tests
+python3 scripts/bump-versions.py --bump      # every pin: new version + sha256, cross-checked, then tests
+python3 scripts/bump-versions.py --bump act  # one pin
 python3 scripts/bump-versions.py --verify    # re-download every pin and compare (slow: ~3 GB)
 ```
 
 Eligible means not a draft or pre-release and at least `--min-age-days` (3)
-old. `--bump` never changes an apt key fingerprint, a pin whose artifact has
-no vendor checksum (mkcert, Nordic, the nvm script), or the Python packages as
-a group: it says what is newer, and a person updates those by hand and proves
-them with `--verify`. Python packages share one env; resolve them together
-(`uv pip compile`) and bump one with `--bump nikos_pip_pins.<package>`.
+old. `--bump` never changes an apt key fingerprint or a pin whose artifact has
+no vendor checksum (mkcert, Nordic, the nvm script): it says what is newer, and
+a person updates those by hand and proves them with `--verify`.
+
+The Python packages share one env, so `--bump` moves them as a set (needs
+[uv](https://docs.astral.sh/uv/)): every package goes to its newest release
+that installs on each Python in `python:` of the `nikos_pip_pins` source, and
+the set must still resolve with `uv pip compile` on each of them. A package
+whose newest release breaks the set is held back and named in the output.
+`--bump nikos_pip_pins.<package>` moves one without that check.
 
 ## Writing a new role
 

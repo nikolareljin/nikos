@@ -13,10 +13,12 @@ is given). Eligible means: not a draft or pre-release, and published at least
 the vendor's checksum file when there is one; a mismatch skips that pin. Pins
 whose artifacts have no vendor checksum, and apt key fingerprints, are never
 changed automatically: they are reported for a person to update by hand (and
-then proven with --verify). Only the changed values are rewritten, comments
-and layout are kept, and the file is replaced atomically. The changed pins
-are then verified again from upstream and `python3 -m pytest tests -q` runs,
-unless --no-tests.
+then proven with --verify). The Python packages move together: each goes to
+its newest release only if the whole set still resolves (`uv pip compile`) for
+every Python the env may have; one that does not is held back and named.
+Only the changed values are rewritten, comments and layout are kept, and the
+file is replaced atomically. The changed pins are then verified again from
+upstream and `python3 -m pytest tests -q` runs, unless --no-tests.
 
 Needs Python 3.8+ and PyYAML (already required by Ansible and the tests) to
 read the file; everything else is the standard library. GITHUB_TOKEN, when
@@ -126,6 +128,44 @@ def is_prerelease(version: str) -> bool:
     """
     core = (version[1:] if version.startswith("v") else version).split("+")[0]
     return bool(re.search(r"[A-Za-z-]", core))
+
+
+def python_allows(spec: str, minor: str) -> bool:
+    """Whether a Requires-Python or conda spec admits a Python minor: (">=3.12", "3.11") is False.
+
+    The minor is tested at a high patch level, the way conda installs it, so
+    "<=3.12" and "==3.12" (3.12.0 only) refuse 3.12 as pip would on 3.12.5.
+    conda's "=3.12" and "==3.12.*" match any patch.
+    """
+    have = tuple(int(n) for n in minor.split(".")) + (99,)
+    for clause in filter(None, (c.strip() for c in spec.split(","))):
+        m = re.fullmatch(r"(~=|==|!=|<=|>=|<|>|=)\s*(\d+(?:\.\d+)*)(\.\*)?", clause)
+        if not m:
+            raise ValueError(f"cannot read the Python spec {spec!r}")
+        op, want = m.group(1), tuple(int(n) for n in m.group(2).split("."))
+        same = have[:len(want)] == want
+        every_patch = same and bool(m.group(3))
+        if not {"=": same, "==": every_patch, "!=": not every_patch, ">=": have >= want, ">": have > want,
+                "<": have < want, "<=": have <= want,
+                "~=": have >= want and have[:len(want) - 1] == want[:-1]}[op]:
+            return False
+    return True
+
+
+def uv_resolve(requirements: list[str], python: str | None, extra_index: str | None) -> str | None:
+    """None when the requirements resolve together on that Python, else uv's error.
+
+    python None means the one uv finds. Resolved for x86_64 Linux, which is
+    what NikOS installs on, whatever machine runs the bump. Raises
+    FileNotFoundError when uv is not installed.
+    """
+    cmd = ["uv", "pip", "compile", "-", "--quiet", "--no-header", "--python-platform", "x86_64-unknown-linux-gnu"]
+    if python:
+        cmd += ["--python-version", python]
+    if extra_index:
+        cmd += ["--extra-index-url", extra_index, "--index-strategy", "unsafe-best-match"]
+    done = subprocess.run(cmd, input="\n".join(requirements) + "\n", capture_output=True, text=True)
+    return None if done.returncode == 0 else (done.stderr.strip() or "uv pip compile failed")
 
 
 def fill(template: str, **values: str) -> str:
@@ -389,7 +429,7 @@ class Pins:
         if kind == "npm":
             return Result(self.newest_npm(src))
         if kind == "pypi":
-            return Result(self.newest_pypi(src["package"]))
+            return Result(self.newest_pypi(src["package"], src.get("python", [])))
         if kind == "go-module":
             return Result(self.newest_go(src["module"]))
         if kind == "nodejs":
@@ -433,11 +473,14 @@ class Pins:
                 best = version
         return best
 
-    def newest_pypi(self, package: str) -> str | None:
+    def newest_pypi(self, package: str, pythons: list[str] | tuple = ()) -> str | None:
+        """The newest eligible release that installs on every Python in pythons."""
         meta = self.http.json(f"https://pypi.org/pypi/{package}/json")
         best = None
         for version, files in meta.get("releases", {}).items():
             if not files or is_prerelease(version) or all(f.get("yanked") for f in files):
+                continue
+            if self.python_gaps(files, pythons):
                 continue
             uploaded = min(parse_time(f["upload_time_iso_8601"]) for f in files)
             if uploaded > self.cutoff:
@@ -514,10 +557,10 @@ class Pins:
             if current not in meta.get("versions", {}):
                 problems.append(f"{src['package']}@{current} is not in the npm registry")
         if kind == "pypi":
-            problems += self.verify_pypi(src["package"], current)
+            problems += self.verify_pypi(src["package"], current, src.get("python", []))
         if kind == "pypi-map":
             for package, version in v[src["version_var"]].items():
-                problems += self.verify_pypi(package, version)
+                problems += self.verify_pypi(package, version, src.get("python", []))
         if kind == "go-module":
             base = f"https://proxy.golang.org/{self.go_escape(src['module'])}/@v"
             self.http.json(f"{base}/{current}.info")
@@ -538,13 +581,33 @@ class Pins:
                 problems.append(f"key at {self.key_url(src)} is {have}, pinned {want}")
         return problems
 
-    def verify_pypi(self, package: str, version: str) -> list[str]:
+    def verify_pypi(self, package: str, version: str, pythons: list[str] | tuple = ()) -> list[str]:
         files = self.http.json(f"https://pypi.org/pypi/{package}/json").get("releases", {}).get(version)
         if not files:
             return [f"{package}=={version} is not on PyPI"]
         if all(f.get("yanked") for f in files):
             return [f"{package}=={version} is yanked"]
+        gaps = self.python_gaps(files, pythons)
+        if gaps:
+            return [f"{package}=={version} does not install on Python {', '.join(gaps)} "
+                    f"(Requires-Python {self.requires_python(files)})"]
         return []
+
+    @staticmethod
+    def requires_python(files: list[dict]) -> str:
+        return next((f["requires_python"] for f in files if f.get("requires_python")), "")
+
+    def python_gaps(self, files: list[dict], pythons: list[str] | tuple) -> list[str]:
+        """The Python minors in pythons that a release's Requires-Python excludes.
+
+        A spec that cannot be read excludes them all: old releases carry
+        malformed ones, and a pin is not proven by a spec nobody parsed.
+        """
+        spec = self.requires_python(files)
+        try:
+            return [p for p in pythons if spec and not python_allows(spec, p)]
+        except ValueError:
+            return list(pythons)
 
     def key_url(self, src: dict) -> str:
         return fill(src["url"], **{k: str(val) for k, val in self.v.items() if isinstance(val, str)})
@@ -581,7 +644,8 @@ def select(sources: dict, names: list[str], versions: dict | None = None) -> dic
             chosen[name] = sources[name]
         elif child and sources.get(parent, {}).get("type") == "pypi-map" and child in (
                 (versions or {}).get(sources[parent]["version_var"]) or {}):
-            chosen[name] = {"type": "pypi", "package": child, "version_var": f"{sources[parent]['version_var']}.{child}"}
+            chosen[name] = {"type": "pypi", "package": child, "python": sources[parent].get("python", []),
+                            "version_var": f"{sources[parent]['version_var']}.{child}"}
         else:
             unknown.append(name)
     if unknown:
@@ -600,7 +664,7 @@ def cmd_check(pins: Pins, sources: dict) -> int:
             continue
         if src["type"] == "pypi-map":
             for package, version in pins.v[src["version_var"]].items():
-                newest = pins.newest_pypi(package)
+                newest = pins.newest_pypi(package, src.get("python", []))
                 rows.append((f"{name}.{package}", version, newest or "-", status(version, newest)))
             continue
         current = current_of(pins.v, src)
@@ -646,17 +710,7 @@ def plan_bump(pins: Pins, name: str, src: dict) -> tuple[dict, str]:
         want = sorted(f.upper() for f in v[src["fingerprints_var"]])
         return {}, "fingerprint matches" if have == want else f"CHANGED - needs a person (now {have})"
     if kind == "pypi-map":
-        # These share one environment and have to resolve together, which a
-        # per-package bump cannot check. Report; bump one at a time by name.
-        newer = []
-        for package, version in v[src["version_var"]].items():
-            newest = pins.newest_pypi(package)
-            if newest and vkey(newest) > vkey(version):
-                newer.append(f"{package} {version} -> {newest}")
-        if not newer:
-            return {}, "all current"
-        return {}, ("needs a person: resolve these together (uv pip compile), then "
-                    f"--bump {src['version_var']}.<package>: " + "; ".join(newer))
+        return plan_pip_map(pins, src)
     current = current_of(v, src)
     newest = pins.newest(name, src)
     if not newest.version or newest.version == current:
@@ -674,6 +728,54 @@ def plan_bump(pins: Pins, name: str, src: dict) -> tuple[dict, str]:
             return {}, f"{newest.version} available; {hashed.manual}"
         values.update(hashed.values)
     return values, f"{current} -> {newest.version}"
+
+
+def plan_pip_map(pins: Pins, src: dict) -> tuple[dict, str]:
+    """Move every package of a pypi-map to its newest release that still resolves.
+
+    The packages share one env. All the newest are tried at once; when that
+    does not resolve, they are applied one at a time and the ones that break
+    the set are held back.
+    """
+    var, pythons = src["version_var"], src.get("python", [])
+    current = {package: str(version) for package, version in pins.v[var].items()}
+    newer = {}
+    for package, version in current.items():
+        newest = pins.newest_pypi(package, pythons)
+        if newest and vkey(newest) > vkey(version):
+            newer[package] = newest
+    if not newer:
+        return {}, "all current"
+
+    def problem(target: dict) -> str | None:
+        requirements = [f"{p}=={version}" for p, version in target.items()]
+        for python in pythons or [None]:
+            error = uv_resolve(requirements, python, src.get("extra_index"))
+            if error:
+                return error
+        return None
+
+    try:
+        target, held = {**current, **newer}, {}
+        if problem(target):
+            broken = problem(current)
+            if broken:
+                return {}, "the current pins do not resolve together, fix that first: " + broken.splitlines()[0]
+            target = dict(current)
+            for package, newest in newer.items():
+                if problem({**target, package: newest}):
+                    held[package] = newest
+                else:
+                    target[package] = newest
+    except FileNotFoundError:
+        return {}, ("needs uv to resolve these together (https://docs.astral.sh/uv/), or bump one with "
+                    f"--bump {var}.<package>: " + "; ".join(f"{p} {current[p]} -> {n}" for p, n in newer.items()))
+    moved = [p for p in newer if p not in held]
+    parts = [f"{p} {current[p]} -> {newer[p]}" for p in moved]
+    if held:
+        parts.append("held back, does not resolve with the rest: "
+                     + ", ".join(f"{p} {n}" for p, n in held.items()))
+    return {f"{var}.{p}": newer[p] for p in moved}, "; ".join(parts)
 
 
 def cmd_bump(pins: Pins, sources: dict, run_tests: bool, path: Path = VERSIONS) -> int:

@@ -10,6 +10,39 @@ All notable changes to NikOS are documented here.
   forms, and a pull request template; the README and the site's help page ask
   for bug reports and contributions.
 
+### Fixed
+- **`nikos update` no longer stops at `numpy==2.5.3`.** numpy 2.5 needs
+  Python 3.12, and an env created by an earlier release is 3.11, so the
+  `ai-stack` role failed and every role after it was skipped. numpy is pinned
+  to 2.4.6, which installs on 3.11, 3.12 and 3.13.
+- **aider works on every install.** `aider-chat` pins each of its
+  dependencies exactly, so in the shared `nikos-ai` env it and the data
+  science packages overwrote each other's (12 conflicts in `pip check`), and
+  it could not be installed at all into a Python 3.13 env. It now has its
+  own `nikos-aider` env, with an `aider` launcher in `~/.local/bin`; the next
+  `nikos update` creates it and removes aider from `nikos-ai`.
+- **pip installs into a conda env ignore `~/.local`.** A package present in
+  `~/.local/lib/pythonX.Y` counted as installed, so the env was left without
+  it. `roles/pin-gate` now runs pip with `PYTHONNOUSERSITE=1`.
+- **`bump-versions.py` checks Requires-Python**: `--verify` fails on a pip
+  pin that does not install on every Python the env may have, and `--check`
+  and `--bump` skip releases that do not.
+- **Pull requests no longer wait forever on `check-playbook / ci`.** The
+  dry-run job became a matrix, so its legs report under other names; an
+  aggregate job reports the name the ruleset on `main` requires.
+- **The lint, dry-run and release tag gate workflows run with a read-only
+  token** (`permissions: contents: read`); they had no `permissions:` block,
+  which code scanning flagged.
+
+### Changed
+- **`bump-versions.py --bump` moves every pin in one run, the Python packages
+  included.** They go to their newest releases as a set, checked with
+  `uv pip compile` on each Python the env may have; a package that breaks the
+  set is held back and named.
+- **Pins moved**: Ollama v0.35.1, llama.cpp b11321, Miniforge 26.7.2-0,
+  Node.js 22.23.3, nvm v0.40.8. `openai` stays at 2.54.0: 3.x does not resolve
+  with the other packages.
+
 ## [1.0.1] - 2026-10-04
 
 ### Fixed

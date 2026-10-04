@@ -80,7 +80,7 @@ At the end, you should end up with something like:
 | Tool | Purpose |
 |---|---|
 | [Ollama](https://ollama.com) | Local LLM runtime, `qwen3.5:4b` pre-pulled |
-| [aider](https://aider.chat) | AI pair programmer in the terminal |
+| [aider](https://aider.chat) | AI pair programmer in the terminal, in its own `nikos-aider` env; run `aider` |
 | [Miniforge](https://github.com/conda-forge/miniforge) | Python distribution (conda) |
 | `nikos-ai` conda env | Python 3.11-3.13 + PyTorch CPU + Jupyter + transformers + pandas |
 | [llama.cpp](https://github.com/ggml-org/llama.cpp) | Prebuilt binaries — `llama-server`, `llama-cli` |

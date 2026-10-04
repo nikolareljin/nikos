@@ -164,13 +164,18 @@ code --list-extensions
 code --install-extension Continue.continue --force
 ```
 
-### conda / nikos-ai env missing
+### conda / nikos-ai or nikos-aider env missing or broken
+
+`nikos update` creates a missing env and installs its packages at the pins in
+`vars/versions.yml`. To rebuild one, remove it and update:
 
 ```bash
 ~/miniforge3/bin/conda env list
-~/miniforge3/bin/conda create -n nikos-ai python=3.11 -y
-~/miniforge3/bin/conda run -n nikos-ai pip install torch transformers jupyter
+~/miniforge3/bin/conda env remove -n nikos-aider -y   # or nikos-ai
+nikos update
 ```
+
+`aider` is a launcher in `~/.local/bin` that runs from the `nikos-aider` env.
 
 ### image-view not found
 

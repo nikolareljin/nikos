@@ -34,12 +34,13 @@ ollama_optional_models:
   - "qwen2.5-coder:7b"
   - "deepseek-r1:8b"
 # Other good choices: qwen3.5, devstral, ministral-3, granite4
-llama_cpp_version: "b9151"
 
 # ── Python ────────────────────────────────────────────
-miniforge_version: "24.11.3-0"
+# Versions (Miniforge, llama.cpp, the pip packages) are pins: see "Pinned
+# versions" below before overriding one.
 nikos_conda_env: "nikos-ai"
-nikos_python_version: "3.11"
+nikos_python_version: "=3.12"            # a conda spec, operator included
+nikos_aider_conda_env: "nikos-aider"     # aider has its own env; the `aider` launcher is in ~/.local/bin
 
 # ── VS Code extensions ────────────────────────────────
 nikos_vscode_extensions:

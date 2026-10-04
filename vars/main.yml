@@ -317,8 +317,14 @@ nikos_conda_env: "nikos-ai"
 # A conda version spec, operator included, not a bare version. A range lets
 # conda pick whichever 3.1x actually solves against the AI stack; pinning an
 # exact minor is what makes the environment unsolvable the moment one
-# dependency drops support for it. Set it to "=3.12" to pin hard.
+# dependency drops support for it. Set it to "=3.12" to pin hard. The pip pins
+# in vars/versions.yml are checked against every minor in this range
+# (`python` under nikos_pin_sources.nikos_pip_pins): change both together.
 nikos_python_version: ">=3.11,<3.14"
+# aider lives in its own env (roles/ai-stack says why). Same kind of spec;
+# aider-chat needs Python <3.13. Checked against nikos_aider_pip_pins.
+nikos_aider_conda_env: "nikos-aider"
+nikos_aider_python_version: ">=3.11,<3.13"
 
 # VS Code extensions
 nikos_vscode_extensions:
