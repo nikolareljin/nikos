@@ -4,6 +4,13 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **The GRUB theme shows the NikOS logo.** It was text only, so no logo
+  appeared. `logo.png` (from the Plymouth logo) is drawn above the menu;
+  checked by booting the theme in QEMU at 1024x768 and 1920x1080. Ubuntu
+  still hides the menu on a single-OS machine (hold Shift or Esc at boot to
+  see it).
+
 ## [1.0.0] - 2026-10-04
 
 ### Breaking
