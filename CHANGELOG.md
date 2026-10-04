@@ -4,6 +4,12 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+### Added
+- **Community files**: a code of conduct, contributing guide, security policy
+  (private vulnerability reporting), support page, bug and feature issue
+  forms, and a pull request template; the README and the site's help page ask
+  for bug reports and contributions.
+
 ## [1.0.1] - 2026-10-04
 
 ### Fixed

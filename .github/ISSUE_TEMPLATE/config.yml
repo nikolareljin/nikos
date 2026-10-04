@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/nikolareljin/nikos/discussions
+    about: Ask and discuss in GitHub Discussions.
+  - name: Security problem
+    url: https://github.com/nikolareljin/nikos/security/advisories/new
+    about: Report privately; please do not open a public issue.
+  - name: Documentation and troubleshooting
+    url: https://nikolareljin.github.io/nikos/
+    about: Install guide, what NikOS installs, and common problems.

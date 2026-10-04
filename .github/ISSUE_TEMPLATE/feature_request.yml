@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest a tool, bundle, setting or improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: What you would like
+      description: The tool, bundle or change, and where it would fit (core role, optional bundle, setting).
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: The problem it solves, and what you do today instead.
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Verified source
+      description: >-
+        NikOS only installs from verified sources (pinned version with a sha256, a vendor apt
+        repository with a known key fingerprint, or a distro package). Where would this come from?
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to open a pull request for this.
