@@ -224,6 +224,26 @@ ollama pull granite4:micro
 ollama list
 ```
 
+## Pinned versions
+
+Every external version NikOS installs (release archives, apt key
+fingerprints, npm/pip/go packages, git checkouts) is pinned in
+`vars/versions.yml`, with its sha256 or fingerprint next to it. Override a pin
+in `vars/local.yml` only together with its hash. On `nikos update` a pin is a
+minimum: something newer you installed yourself is left alone. To move the
+pins forward, use `scripts/bump-versions.py` (docs/development.md).
+
+## GPU drivers
+
+On an NVIDIA GPU with no driver loaded, the `ai-stack` role runs Ubuntu's
+`ubuntu-drivers install`, which picks Canonical's recommended driver from the
+signed archive; reboot afterwards. Image builds skip it. To leave GPU drivers
+alone:
+
+```yaml
+nikos_nvidia_drivers: false
+```
+
 ## Adding VS Code extensions
 
 Add extension IDs (from the VS Code Marketplace URL) to `nikos_vscode_extensions` in `vars/local.yml`, then run `nikos update`.

@@ -147,7 +147,10 @@ nikos log 100</code></pre>
 <span class="p">nikos_desktop_flavor:</span> "xubuntu-full"
 <span class="p">nikos_remove_gnome:</span> true
 <span class="p">ollama_default_model:</span> "qwen3:8b"
-<span class="p">nikos_tesseract_languages:</span> [eng, srp, deu]</code></pre>
+<span class="p">nikos_tesseract_languages:</span> [eng, srp, deu]
+<span class="p">nikos_nvidia_drivers:</span> false    <span class="c"># leave GPU drivers alone</span>
+<span class="p">nikos_firefox_dark:</span> false      <span class="c"># leave Firefox's theme alone</span>
+<span class="p">nikos_chromium_dark:</span> false     <span class="c"># leave Chromium / Chrome alone</span></code></pre>
 
   <p>The full set of variables is documented in
   <a href="https://github.com/nikolareljin/nikos/blob/main/docs/customization.md">docs/customization.md</a>.</p>
@@ -170,7 +173,16 @@ nikos log 100</code></pre>
       </tr>
       <tr>
         <td>A role failed mid-run</td>
-        <td><code>nikos log 200</code>, then re-run — roles are idempotent, so completed work is skipped.</td>
+        <td><code>nikos log 200</code>, then re-run — roles are idempotent, so completed work is skipped.
+        Every install and update log ends with a digest: the NikOS version, OS, Ansible and Python versions,
+        free disk, each failed task with its message, and each distinct warning, so the end of the log says
+        what went wrong. A failed task also names its file and line.</td>
+      </tr>
+      <tr>
+        <td>A download or key check fails</td>
+        <td>NikOS refuses a download whose sha256 differs from the pin in <code>vars/versions.yml</code>, and an
+        apt key whose fingerprint differs. That is the check working: a moved upstream release or a changed key
+        needs a person. <code>scripts/bump-versions.py --check</code> shows what upstream has now.</td>
       </tr>
       <tr>
         <td>Want to check which version is installed</td>

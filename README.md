@@ -71,7 +71,8 @@ At the end, you should end up with something like:
 | Icon theme | Papirus-Dark |
 | Login screen | LightDM + Nordic greeter |
 | Boot splash | Plymouth — NikOS logo on Nord dark |
-| GRUB theme | Nordic |
+| GRUB theme | NikOS (Nord colours, text only) |
+| Browsers | Dark Firefox, Chromium and Google Chrome in the desktop colour |
 | Wallpaper | NikOS logo on Nord dark |
 | Terminal font | JetBrains Mono |
 
@@ -191,6 +192,17 @@ For a checkout-only refresh of the `script-helpers` revision pinned by this
 NikOS release, run `./update` from the repository root.
 
 ---
+
+## Verified installs
+
+NikOS installs nothing it cannot verify: every download is pinned to a version
+and checked against a sha256, every vendor apt key against a fingerprint, and
+npm/pip/go installs use exact versions. No `curl | sh`. The pins live in one
+file, [`vars/versions.yml`](vars/versions.yml); `scripts/bump-versions.py`
+checks upstream (`--check`), moves pins forward with the vendor's own checksums
+(`--bump`) and re-verifies every pin (`--verify`). `nikos update` treats a pin
+as a minimum and never downgrades. Each install and update log ends with a
+digest of failed tasks and warnings (`nikos log`).
 
 ## Customization
 

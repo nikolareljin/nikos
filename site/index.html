@@ -88,7 +88,8 @@
       </tr>
       <tr>
         <td><strong>Adds apt repositories</strong></td>
-        <td>GitHub CLI and Microsoft (VS Code), each with its own keyring. Node is not installed from apt - see below.</td>
+        <td>GitHub CLI and Microsoft (VS Code), each with its own keyring. Each signing key is checked against a
+        pinned fingerprint before apt trusts it. Node is not installed from apt - see below.</td>
       </tr>
       <tr>
         <td><strong>Provides Node without touching apt</strong></td>
@@ -100,8 +101,10 @@
       </tr>
       <tr>
         <td><strong>Installs Ollama</strong></td>
-        <td>Runs as a system service on 127.0.0.1:11434 and pulls one model by default (<code>qwen3.5:4b</code>, 3.4&nbsp;GB).
-        Nothing else is downloaded unless you ask for it.</td>
+        <td>From its pinned, sha256-checked release archive (not a piped install script). Runs as a system service
+        on 127.0.0.1:11434 and pulls one model by default (<code>qwen3.5:4b</code>, 3.4&nbsp;GB). Nothing else is
+        downloaded unless you ask for it. On an NVIDIA GPU with no driver loaded, Ubuntu's
+        <code>ubuntu-drivers install</code> adds one (turn off with <code>nikos_nvidia_drivers: false</code>).</td>
       </tr>
       <tr>
         <td><strong>Creates a conda environment</strong></td>
@@ -110,7 +113,22 @@
       </tr>
       <tr>
         <td><strong>Clones tools into <code>~/.local/share/nikos-tools</code></strong></td>
-        <td>distrodeck, image-view, git-lantern and ai-runner are built or installed from source.</td>
+        <td>distrodeck, image-view, git-lantern and ai-runner are built or installed from source, each at a pinned
+        release tag.</td>
+      </tr>
+      <tr>
+        <td><strong>Installs only from verified sources</strong></td>
+        <td>Every download is pinned to a version and checked against a sha256, every apt key against a
+        fingerprint, every npm/pip/go install to an exact version. The pins live in one file,
+        <code>vars/versions.yml</code>. <code>nikos update</code> treats them as minimums and never downgrades
+        something newer you installed yourself.</td>
+      </tr>
+      <tr>
+        <td><strong>Themes your browsers</strong></td>
+        <td>Firefox gets the built-in Dark theme and a <code>userChrome.css</code> that paints the window in the
+        desktop colour; Chromium and Google Chrome a dark theme in the same colour. Only existing profiles, and
+        your own lines in those files are kept. Off with <code>nikos_firefox_dark: false</code> /
+        <code>nikos_chromium_dark: false</code>.</td>
       </tr>
     </tbody>
   </table>

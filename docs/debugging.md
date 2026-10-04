@@ -48,6 +48,42 @@ grep -c '^fatal:' ~/.config/nikos/logs/install-latest.log
 awk '/^TASK \[/{t=$0} /^fatal: \[/{print t}' ~/.config/nikos/logs/install-latest.log
 ```
 
+### The digest at the end of every log
+
+Since 0.8.0 every install log and `nikos update` playbook log ends with a
+digest, so the end of the file says what went wrong:
+
+```
+=== NikOS log digest ===
+NikOS ref: 1.0.0   OS: Ubuntu 24.04.5 LTS   Kernel: ...
+Ansible: ansible-playbook [core 2.16.3]   Python: 3.12.3
+Free disk: / 43G, home 43G
+Failed tasks (1):
+  - [dev-tools : Clone ai-runner] Local modifications exist in the destination ...
+Warnings (1 distinct):
+  - (1x) [WARNING]: ...
+Errors (1 distinct):
+  - (1x) [ERROR]: ...
+=== end of digest ===
+```
+
+A failed task also prints its file and line (`task path: roles/.../main.yml:42`).
+
+### Where downloads and keys live
+
+Nothing is downloaded to a fixed `/tmp` path. Root steps use
+`/var/lib/nikos/downloads`, user steps `~/.cache/nikos/downloads` (both 0700),
+and apt signing keys are fetched and checked in `/var/lib/nikos/keys`. Cached
+archives there can be deleted; the next run downloads and re-checks them.
+
+### A download or key check fails
+
+Every download is checked against the sha256 pinned in `vars/versions.yml`,
+and every apt key against its pinned fingerprint. A mismatch stops the run: an
+upstream release was replaced or a key changed, and that needs a person, not a
+retry. `scripts/bump-versions.py --check` shows what upstream has now and
+`--verify` re-checks every pin (see docs/development.md).
+
 ## Common issues
 
 ### Xfce doesn't start after install
