@@ -52,10 +52,10 @@ get back in and update them.
 ## GRUB theme location
 
 GRUB loads its theme before the kernel runs, from a filesystem it can read
-itself. On an installed system NikOS always puts the Nordic theme in
-`/usr/share/grub/themes/Nordic`. When `/boot` is a separate mount or the root
+itself. On an installed system NikOS always puts the NikOS theme in
+`/usr/share/grub/themes/NikOS`. When `/boot` is a separate mount or the root
 filesystem sits on LUKS (`crypt` in `lsblk -s` of the root device), GRUB cannot
-read `/usr/share`, so the theme is also copied to `/boot/grub/themes/Nordic`
+read `/usr/share`, so the theme is also copied to `/boot/grub/themes/NikOS`
 and `GRUB_THEME` points at that copy.
 
 ## Image builds
@@ -64,7 +64,7 @@ When the play runs as an ISO build (`nikos_image_build: true` in
 `isoforge.yml`, a chroot, or `nikos_home: /etc/skel`):
 
 - `update-grub` is not run, by either role.
-- The GRUB theme goes to `/usr/share/grub/themes/Nordic` only, because the
+- The GRUB theme goes to `/usr/share/grub/themes/NikOS` only, because the
   image's squashfs excludes `boot/grub`. `GRUB_THEME` points there.
 - The `linux-image*`, `linux-generic*`, `linux-headers-generic` and
   `linux-modules*` packages are held while `base` upgrades packages and
