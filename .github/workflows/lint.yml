@@ -5,6 +5,11 @@ on:
   push:
     branches: [main, dev]
 
+# Read-only: these jobs check out the code and run it. Nothing here writes to
+# the repository, so the token gets no write scope.
+permissions:
+  contents: read
+
 jobs:
   ci:
     uses: nikolareljin/ci-helpers/.github/workflows/ci.yml@production

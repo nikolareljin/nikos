@@ -24,6 +24,9 @@ All notable changes to NikOS are documented here.
 - **Pull requests no longer wait forever on `check-playbook / ci`.** The
   dry-run job became a matrix, so its legs report under other names; an
   aggregate job reports the name the ruleset on `main` requires.
+- **The lint, dry-run and release tag gate workflows run with a read-only
+  token** (`permissions: contents: read`); they had no `permissions:` block,
+  which code scanning flagged.
 
 ### Changed
 - **`bump-versions.py --bump` moves every pin in one run, the Python packages

@@ -3,6 +3,11 @@ name: Release Tag Gate
 on:
   pull_request:
 
+# Read-only: these jobs check out the code and run it. Nothing here writes to
+# the repository, so the token gets no write scope.
+permissions:
+  contents: read
+
 jobs:
   gate:
     uses: nikolareljin/ci-helpers/.github/workflows/release-tag-gate.yml@production
