@@ -4,6 +4,19 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-03
+
+### Breaking
+Existing installs change on the first `nikos update` to 1.0.0:
+- NikOS-managed tool checkouts move from `~/Projects` to
+  `~/.local/share/nikos-tools` (old copies are left alone).
+- Ollama is installed from its release archive with a NikOS-written
+  `ollama.service`, so it restarts once.
+- Netdata comes from Ubuntu's `netdata` package (Netdata's repository on 26.04),
+  not the kickstart script; the `gh-copilot` extension is no longer installed.
+- Every external version is a pin in `vars/versions.yml`; on update a pin is a
+  minimum, so nothing is downgraded.
+
 ### Added
 - **Ubuntu and Xubuntu 22.04 and 26.04 LTS are supported** next to
   24.04. `install.sh` accepts all three; package names that differ are picked
@@ -22,29 +35,11 @@ All notable changes to NikOS are documented here.
   `nikos update` (which skips `install.sh`) fails early instead of on a
   missing package name.
 
-### Fixed
-- **The Ansible upgrade works on 22.04.** The PPA's ansible-core refused to
-  unpack over the archive's ansible 2.10 (both ship `/usr/bin/ansible`);
-  `install.sh` now removes the old package first.
-
-### Fixed
-- **Nothing installs from an unverified source any more.** Ollama, Bun, Helm,
-  act, Starship, mkcert, llama.cpp, Miniforge, mistral.rs, the nvm script and
-  Claude Code are pinned release files checked against a sha256 (the vendor's
-  published sum where there is one). No `curl | sh`, no vendor install script
-  run unchecked, no `releases/latest`, `@latest` or `state: latest`.
-- **Vendor apt keys are fingerprint-checked before apt trusts them**: VS Code,
-  GitHub CLI, Kubernetes, MongoDB, and the Ansible PPA in `install.sh`
-  (`scripts/verify-key-fingerprint.sh`; a wrong or extra key stops the run).
-- **Git checkouts are pinned to a release tag's commit** (image-view,
-  git-lantern, ai-runner, distrodeck) or a commit (BitNet, which has no tags),
-  not `main`. distrodeck checks the tag still points at its pinned commit.
-- **npm, PyPI and pipx installs use exact versions** (Gemini CLI, OpenClaw,
-  shell-gpt, glances, every package in the nikos-ai env), and the Qdrant image
-  is pinned by tag and digest.
-- **`nikos add mistral-rs` works.** It ran `cargo install mistralrs-server`,
-  a crate crates.io does not have; it now installs the pinned CPU release
-  (`mistralrs serve` is the server).
+- **`scripts/bump-versions.py`**: `--check` lists each pin against the newest
+  release at least 3 days old, `--bump NAME` moves a pin and records the new
+  sha256 after cross-checking the vendor's sums file (for Claude Code, its
+  manifest signed by the pinned release key), and `--verify` re-downloads
+  every pin and compares. See docs/development.md.
 
 ### Changed
 - **All pins live in `vars/versions.yml`**, one entry per dependency with its
@@ -71,12 +66,28 @@ All notable changes to NikOS are documented here.
   cli.github.com has `gh copilot` built in; the extension was an unchecked
   release binary. An older gh gets a one-line hint to upgrade.
 
-### Added
-- **`scripts/bump-versions.py`**: `--check` lists each pin against the newest
-  release at least 3 days old, `--bump NAME` moves a pin and records the new
-  sha256 after cross-checking the vendor's sums file (for Claude Code, its
-  manifest signed by the pinned release key), and `--verify` re-downloads
-  every pin and compares. See docs/development.md.
+### Fixed
+- **The Ansible upgrade works on 22.04.** The PPA's ansible-core refused to
+  unpack over the archive's ansible 2.10 (both ship `/usr/bin/ansible`);
+  `install.sh` now removes the old package first.
+
+- **Nothing installs from an unverified source any more.** Ollama, Bun, Helm,
+  act, Starship, mkcert, llama.cpp, Miniforge, mistral.rs, the nvm script and
+  Claude Code are pinned release files checked against a sha256 (the vendor's
+  published sum where there is one). No `curl | sh`, no vendor install script
+  run unchecked, no `releases/latest`, `@latest` or `state: latest`.
+- **Vendor apt keys are fingerprint-checked before apt trusts them**: VS Code,
+  GitHub CLI, Kubernetes, MongoDB, and the Ansible PPA in `install.sh`
+  (`scripts/verify-key-fingerprint.sh`; a wrong or extra key stops the run).
+- **Git checkouts are pinned to a release tag's commit** (image-view,
+  git-lantern, ai-runner, distrodeck) or a commit (BitNet, which has no tags),
+  not `main`. distrodeck checks the tag still points at its pinned commit.
+- **npm, PyPI and pipx installs use exact versions** (Gemini CLI, OpenClaw,
+  shell-gpt, glances, every package in the nikos-ai env), and the Qdrant image
+  is pinned by tag and digest.
+- **`nikos add mistral-rs` works.** It ran `cargo install mistralrs-server`,
+  a crate crates.io does not have; it now installs the pinned CPU release
+  (`mistralrs serve` is the server).
 
 ## [0.8.1] - 2026-10-02
 
