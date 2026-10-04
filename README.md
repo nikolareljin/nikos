@@ -279,9 +279,8 @@ aider / Claude Code / Continue  →  use in code
 
 ## Contributing
 
-Help is welcome: bug reports from real machines, fixes, new optional bundles,
-docs, and testing on hardware the maintainer does not have (NVIDIA and AMD
-GPUs, dual boot, Secure Boot, Ubuntu 22.04 and 26.04).
+Contributions are welcome: bug reports, fixes, new optional bundles, docs, and
+testing on a wide range of machines and setups.
 
 - **Found a problem?** [Open an issue](https://github.com/nikolareljin/nikos/issues/new/choose)
   and paste the log digest from the end of `nikos log 60`.

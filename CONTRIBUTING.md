@@ -1,9 +1,7 @@
 # Contributing to NikOS
 
-NikOS is a small project and help is welcome: bug reports from real machines,
-fixes, new optional bundles, documentation, and testing on hardware the
-maintainer does not have (NVIDIA and AMD GPUs, dual boot, Ubuntu 22.04 and
-26.04, Secure Boot).
+Contributions are welcome: bug reports, fixes, new optional bundles,
+documentation, and testing on a wide range of machines and setups.
 
 By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
