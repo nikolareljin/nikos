@@ -31,12 +31,13 @@ FILTER_UNIT = task("Write the Ollama forwarder's filter service")
 SERVICE = task("Write the Ollama forwarder service")
 
 
-def _stub_docker(bindir: Path, rootless: bool, gateway: str) -> None:
+def _stub_docker(bindir: Path, rootless: bool, gateway: str, desktop: bool = False) -> None:
     """Answers the docker calls bridge.yml makes, as the real CLI does: two bridge
     networks, the default one named docker0 and a compose one left to br-<id>."""
     p = bindir / "docker"
     p.write_text(
         "#!/bin/bash\n"
+        f'if [ "$1" = info ] && echo "$*" | grep -q OperatingSystem; then echo "{"Docker Desktop" if desktop else "Ubuntu 24.04 LTS"}"; exit 0; fi\n'
         f'if [ "$1" = info ]; then echo "[name=seccomp{",name=rootless" if rootless else ""}]"; exit 0; fi\n'
         'if [ "$2" = ls ]; then printf "%s\\n" aaaaaaaaaaaa 646c6b405144; exit 0; fi\n'
         f'if [ "$2" = inspect ] && [ "$3" = bridge ]; then echo "{gateway}"; exit 0; fi\n'
@@ -617,3 +618,55 @@ def test_check_fails_closed_when_interface_names_cannot_be_read(bindir):
     p.write_text("#!/bin/sh\ncase \"$*\" in *link*) exit 1 ;; *route*) echo ;; *) echo '1: lo    inet 127.0.0.1/8 scope host lo' ;; esac\n")
     p.chmod(0o755)
     assert _check(bindir).returncode == 2
+
+
+
+# --- third round: the rest of the system -------------------------------------------
+def test_auto_skips_docker_desktop(tmp_path, bindir):
+    """Docker Desktop's engine runs in a VM: its bridge is not on this host."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1", desktop=True)
+    out = run(tmp_path, [PROBE, CHOOSE, REFUSE], [bindir], nikos_ollama_bridge="auto")
+    assert out.returncode == 0, out.stdout
+    assert addr(out) == ""
+
+
+def _units_for_host(tmp_path, bindir, host):
+    units = tmp_path / "units"
+    units.mkdir()
+    tasks = []
+    for t, name in ((SERVICE, "nikos-ollama-bridge.service"), (FILTER_UNIT, "nikos-ollama-bridge-filter.service")):
+        t = {k: v for k, v in t.items() if k not in ("become", "register")}
+        t["ansible.builtin.copy"] = {**t["ansible.builtin.copy"], "dest": str(units / name)}
+        tasks.append(t)
+    decided = {"ansible.builtin.set_fact": {"ai_stack_bridge_wanted": True}}
+    out = run(tmp_path, [CHOOSE, decided, *tasks], [bindir], nikos_ollama_bridge="172.17.0.1", nikos_ollama_host=host)
+    assert out.returncode == 0, out.stdout
+    return units
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:11434", "localhost:11434", "[::1]:11434", "127.0.0.2:11500"])
+def test_the_proxy_forwards_to_the_engine_address_as_configured(tmp_path, bindir, host):
+    svc = (_units_for_host(tmp_path, bindir, host) / "nikos-ollama-bridge.service").read_text()
+    assert f"ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=60 {host}" in svc
+
+
+def test_the_forwarder_will_not_start_without_its_interface_filter_loaded(tmp_path, bindir):
+    units = _units_for_host(tmp_path, bindir, "127.0.0.1:11434")
+    svc = (units / "nikos-ollama-bridge.service").read_text()
+    assert "ExecCondition=+/usr/sbin/nft list table inet nikos_ollama_bridge" in svc
+    flt = (units / "nikos-ollama-bridge-filter.service").read_text()
+    # nftables.service's stock config flushes the ruleset: load after it, and again with it.
+    assert "After=nftables.service" in flt and "PartOf=nftables.service" in flt
+
+
+def test_doctor_warns_that_ufw_may_block_containers(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY)
+    p = bindir / "systemctl"
+    p.write_text('#!/bin/sh\ncase "$*" in *is-active*ufw*) exit 0 ;; *is-active*nikos-ollama-bridge-filter*) exit 0 ;; esac\nexit 3\n')
+    p.chmod(0o755)
+    units = tmp_path / "units"
+    _socket_unit(units, "172.17.0.1:11434")
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
+    line = next(l for l in out.splitlines() if "ufw is active" in l)
+    assert not line.startswith("[error]") and "ufw allow in on docker0 to any port 11434" in line, line

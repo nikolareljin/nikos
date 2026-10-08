@@ -27,7 +27,10 @@ All notable changes to NikOS are documented here.
   interface named `br-*` that Docker did not create refuses the forwarder,
   since the filter trusts that name. A forwarder that must not run is removed
   completely, including a partial install, and its files are kept until its
-  units are confirmed stopped.
+  units are confirmed stopped. It refuses to start without its nftables table
+  (a `flush ruleset` from `nftables.service` would remove it), skips Docker
+  Desktop, forwards to `nikos_ollama_host` as set, and `nikos doctor` warns
+  when `ufw` would drop container traffic.
 
 ## [1.0.2] - 2026-10-04
 

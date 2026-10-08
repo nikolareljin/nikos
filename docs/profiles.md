@@ -119,6 +119,14 @@ proves it in a privileged container: a machine behind another interface with an
 address inside `172.16.0.0/12` is refused, a container is answered
 (`NIKOS_MACHINE_TESTS=1 python -m pytest tests/test_ollama_bridge.py` runs it).
 
+The forwarder also refuses to start unless that table is loaded: Ubuntu's stock
+`nftables.service` begins with `flush ruleset`, so the filter loads after it and
+again whenever it restarts. `auto` skips Docker Desktop, whose engine and bridge
+live in a VM. The proxy forwards to `nikos_ollama_host` as set (`127.0.0.1`,
+`localhost` or `[::1]`). If `ufw` is active, its default deny drops container
+traffic before the forwarder sees it; `nikos doctor` names the `ufw allow` it
+needs.
+
 A refused start counts against the socket's trigger limit; a socket that hit it
 stays failed after the cause is gone. `nikos doctor` names that state and the
 `systemctl reset-failed` that clears it.

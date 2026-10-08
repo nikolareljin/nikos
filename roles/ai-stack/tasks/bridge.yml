@@ -15,6 +15,8 @@
     # Rootless Docker keeps its bridge in another network namespace; a
     # forwarder on the host does not reach it.
     if docker info -f '{% raw %}{{.SecurityOptions}}{% endraw %}' 2>/dev/null | grep -q rootless; then exit 0; fi
+    # Docker Desktop runs its engine in a VM: its bridge is not on this host.
+    if docker info -f '{% raw %}{{.OperatingSystem}}{% endraw %}' 2>/dev/null | grep -qi 'docker desktop'; then exit 0; fi
     # The IPv4 gateway: with IPv6 enabled the IPv6 one can come first.
     docker network inspect bridge -f '{% raw %}{{range .IPAM.Config}}{{.Gateway}} {{end}}{% endraw %}' 2>/dev/null \
       | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true
@@ -135,6 +137,10 @@
       [Unit]
       Description=NikOS: the Ollama forwarder answers only on Docker's bridges
       Before=nikos-ollama-bridge.socket
+      # nftables.service flushes the whole ruleset when it (re)starts; load
+      # after it, and again whenever it restarts.
+      After=nftables.service
+      PartOf=nftables.service
 
       [Service]
       Type=oneshot
@@ -189,7 +195,12 @@
       # 172.16.0.0/12 since the play ran stops the forwarder. The proxy exits
       # when idle, so the next connection starts it, and the check, again.
       ExecCondition=+/usr/local/libexec/nikos-ollama-bridge-check
-      ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=60 127.0.0.1:{{ ai_stack_bridge_port }}
+      # The interface filter must be loaded: nftables.service's stock config
+      # starts with "flush ruleset", which would remove it under a running socket.
+      ExecCondition=+/usr/sbin/nft list table inet nikos_ollama_bridge
+      # To the engine's own address, as nikos_ollama_host sets it (127.0.0.1,
+      # localhost or [::1]; site.yml allows only loopback).
+      ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=60 {{ nikos_ollama_host }}
       DynamicUser=yes
       NoNewPrivileges=yes
       ProtectSystem=strict

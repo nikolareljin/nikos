@@ -863,6 +863,11 @@ cmd_doctor() {
         issues=$((issues + 1))
       fi
       check "Ollama forwarder's interface filter loaded" systemctl is-active --quiet nikos-ollama-bridge-filter.service
+      # ufw's default deny drops a container's packets to the host before the
+      # forwarder sees them; a request from the host itself still passes.
+      if systemctl is-active --quiet ufw 2>/dev/null; then
+        print_warn "ufw is active: containers reach the forwarder only if it allows them, e.g. sudo ufw allow in on docker0 to any port ${listen##*:} proto tcp (and each br-* network)"
+      fi
       # The same check the forwarder runs before every start (roles/ai-stack).
       local guard="${NIKOS_HOME}/roles/ai-stack/files/nikos-ollama-bridge-check" shared rc=0
       if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then
