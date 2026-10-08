@@ -2,7 +2,7 @@
 
 All notable changes to NikOS are documented here.
 
-## [Unreleased]
+## [1.1.0] - 2026-10-08
 
 ### Added
 - **Containers reach the local Ollama.** Ollama listens on loopback only, and a
