@@ -676,3 +676,14 @@ def test_doctor_warns_that_ufw_may_block_containers(tmp_path, bindir):
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
     line = next(l for l in out.splitlines() if "ufw is active" in l)
     assert not _is_error(line) and "ufw allow in on docker0 to any port 11434" in line, line
+
+
+
+def test_the_post_tasks_include_hands_its_tag_to_the_included_tasks():
+    """include_role does not pass its tags on: under --tags ai-local the
+    included tasks were skipped unless the include applies the tag."""
+    play = yaml.safe_load((ROOT / "site.yml").read_text())[0]
+    post = next(t for t in play["post_tasks"]
+                if (t.get("ansible.builtin.include_role") or {}).get("tasks_from") == "bridge.yml")
+    assert post["ansible.builtin.include_role"]["apply"]["tags"] == ["ai-local"]
+    assert post["tags"] == ["ai-local"]

@@ -16,6 +16,10 @@ jobs:
     with:
       runner: ubuntu-24.04
       python_version: "3.12"
+      # The tests run against the tree an installed machine has: with
+      # script-helpers. Without it, scripts/nikos falls back to its own print
+      # functions and a test can pass on output no user ever sees.
+      submodules: "true"
       lint_command: |
         python -m pip install --upgrade pip
         python -m pip install ansible-lint pytest pillow
