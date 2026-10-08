@@ -37,23 +37,57 @@ docker = set(os.environ["DOCKER_IFS"].split()) | {"lo"}
 rng = ipaddress.ip_network("172.16.0.0/12")
 found = []
 
+
+def unreadable(what, line):
+    # Fail closed: a line this check does not understand is not a line it may skip.
+    print(f"cannot read this {what}: {line}", file=sys.stderr)
+    sys.exit(2)
+
+
 for line in os.environ["ADDRS"].splitlines():
     f = line.split()
-    if len(f) >= 4 and f[2] == "inet" and f[1] not in docker:
-        net = ipaddress.ip_interface(f[3]).network
+    if not f:
+        continue
+    if len(f) < 4 or f[2] != "inet":
+        unreadable("address", line)
+    iface = f[1].split("@")[0]
+    if iface in docker:
+        continue
+    try:
+        # Each address as written, for the message, and its network, for the test.
+        given = [f[3]]
+        # A point-to-point address names its peer: that one counts too.
+        if "peer" in f:
+            given.append(f[f.index("peer") + 1])
+        nets = [(g, ipaddress.ip_interface(g).network) for g in given]
+    except (ValueError, IndexError):
+        unreadable("address", line)
+    for g, net in nets:
         if net.overlaps(rng):
-            found.append(f"{f[1]} {f[3]}")
+            found.append(f"{iface} {g}")
 
+# Route types that carry no traffic toward another network.
+QUIET = {"local", "broadcast", "multicast", "anycast", "unreachable", "blackhole", "prohibit", "throw"}
+TYPES = QUIET | {"unicast", "nat"}
 for line in os.environ["ROUTES"].splitlines():
     f = line.split()
-    if not f or f[0] in ("default", "broadcast", "local", "multicast", "unreachable", "blackhole", "prohibit", "throw"):
+    if not f:
         continue
-    dev = f[f.index("dev") + 1] if "dev" in f else ""
-    if dev in docker or dev == "":
+    if f[0] in TYPES:
+        if f[0] in QUIET:
+            continue
+        f = f[1:]
+    if not f:
+        unreadable("route", line)
+    if f[0] == "default":
         continue
     try:
         net = ipaddress.ip_network(f[0], strict=False)
     except ValueError:
+        unreadable("route", line)
+    # A route with no device (via only, or a nexthop list) is not Docker's.
+    dev = f[f.index("dev") + 1] if "dev" in f and f.index("dev") + 1 < len(f) else "(no device)"
+    if dev in docker:
         continue
     if net.overlaps(rng):
         found.append(f"{dev} route {f[0]}")

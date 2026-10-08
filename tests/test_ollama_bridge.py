@@ -442,3 +442,38 @@ def test_check_fails_closed_when_routes_cannot_be_read(bindir):
     p.write_text("#!/bin/sh\ncase \"$*\" in *route*) exit 1 ;; *) echo '1: lo    inet 127.0.0.1/8 scope host lo' ;; esac\n")
     p.chmod(0o755)
     assert _check(bindir).returncode == 2
+
+
+# --- the parser fails closed ---------------------------------------------------
+def test_check_reads_a_route_with_a_type_keyword(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY, DOCKER_ROUTES + "unicast 172.20.0.0/16 via 10.8.0.1 dev tun0\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and "tun0 route 172.20.0.0/16" in r.stdout, r
+
+
+def test_check_counts_a_route_without_a_device(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY, DOCKER_ROUTES + "172.20.0.0/16 nhid 12 proto static\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and "(no device) route 172.20.0.0/16" in r.stdout, r
+
+
+def test_check_counts_a_point_to_point_peer_in_the_range(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY + "5: tun0    inet 10.8.0.2 peer 172.20.0.1/32 scope global tun0\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and "tun0 172.20.0.1/32" in r.stdout, r
+
+
+@pytest.mark.parametrize("routes", ["garbage-destination dev tun0\n", "unicast\n"])
+def test_check_refuses_a_route_it_cannot_read(bindir, routes):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY, DOCKER_ROUTES + routes)
+    assert _check(bindir).returncode == 2
+
+
+def test_check_refuses_an_address_line_it_cannot_read(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY + "5: odd0    something-else\n")
+    assert _check(bindir).returncode == 2
