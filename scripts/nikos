@@ -846,20 +846,6 @@ cmd_doctor() {
   # Containers reach the local Ollama through the forwarder on the Docker
   # bridge. A listed socket is not proof (FreeBind binds an address that does
   # not exist yet), so ask it for /api/version.
-  _doctor_bridge_shared_networks() {
-    local docker_ifs="" id name
-    if command -v docker >/dev/null 2>&1; then
-      for id in $(docker network ls -q --filter driver=bridge 2>/dev/null); do
-        # shellcheck disable=SC2016  # a docker template, not a shell expansion
-        name="$(docker network inspect -f '{{index .Options "com.docker.network.bridge.name"}}' "${id}" 2>/dev/null)"
-        docker_ifs="${docker_ifs} ${name:-br-${id:0:12}}"
-      done
-    fi
-    ip -4 -o addr show 2>/dev/null \
-      | awk -v keep="lo${docker_ifs}" 'BEGIN { n = split(keep, k, " "); for (i = 1; i <= n; i++) skip[k[i]] = 1 }
-                                         !($2 in skip) { print $2, $4 }' \
-      | grep -E ' 172\.(1[6-9]|2[0-9]|3[01])\.' || true
-  }
   _doctor_ollama_bridge() {
     local unit="${NIKOS_SYSTEMD_DIR:-/etc/systemd/system}/nikos-ollama-bridge.socket" listen
     if [[ -f "${unit}" ]]; then
@@ -869,11 +855,19 @@ cmd_doctor() {
       # The play refuses the forwarder where a LAN or VPN uses 172.16.0.0/12,
       # but a VPN can connect after the play ran; the filter would then let its
       # machines through. Docker names its own bridges; every other counts.
-      local shared
-      shared="$(_doctor_bridge_shared_networks)"
-      if [[ -n "${shared}" ]]; then
-        print_error "Ollama forwarder: ${shared//$'\n'/, } shares 172.16.0.0/12, which the forwarder lets through. Run: nikos update (it removes the forwarder), or set nikos_ollama_bridge to off"
-        issues=$((issues + 1))
+      # The same check the forwarder runs before every start (roles/ai-stack).
+      local guard="${NIKOS_HOME}/roles/ai-stack/files/nikos-ollama-bridge-check" shared rc=0
+      if [[ ! -x "${guard}" ]]; then
+        print_warn "Ollama forwarder: ${guard} is missing; the networks were not checked"
+      else
+        shared="$("${guard}" 2>&1)" || rc=$?
+        case "${rc}" in
+          0) print_success "Ollama forwarder: no network outside Docker uses 172.16.0.0/12" ;;
+          1) print_error "Ollama forwarder: ${shared//$'\n'/, } shares 172.16.0.0/12, which the forwarder lets through. It refuses to start while that holds; nikos update removes it, or set nikos_ollama_bridge to off"
+             issues=$((issues + 1)) ;;
+          *) print_error "Ollama forwarder: the networks could not be checked (${shared}); it refuses to start"
+             issues=$((issues + 1)) ;;
+        esac
       fi
     elif command -v docker >/dev/null 2>&1 && [[ "$(_nikos_var nikos_ollama_bridge auto)" != "off" ]]; then
       print_warn "No Ollama forwarder on the Docker bridge: containers cannot reach the local Ollama. Run: nikos update"

@@ -48,7 +48,8 @@ def run(tmp_path, tasks, path_dirs, system_path=True, **vars_):
     play = [{
         "hosts": "localhost", "connection": "local", "gather_facts": False,
         "environment": {"PATH": ":".join(dirs)},
-        "vars": {"nikos_ollama_mode": "local", "nikos_ollama_host": "127.0.0.1:11434", **vars_},
+        "vars": {"nikos_ollama_mode": "local", "nikos_ollama_host": "127.0.0.1:11434",
+                 "role_path": str(ROOT / "roles/ai-stack"), **vars_},
         "tasks": [*tasks, {"ansible.builtin.debug": {"msg": "ADDR=[{{ ai_stack_bridge_addr }}]"}}],
     }]
     (tmp_path / "play.yml").write_text(yaml.safe_dump(play))
@@ -148,13 +149,21 @@ def test_the_units_listen_on_the_bridge_and_forward_to_loopback(tmp_path, bindir
     assert "FreeBind=yes" in sock
     assert "IPAddressDeny=any" in sock
     assert "IPAddressAllow=localhost 172.16.0.0/12" in sock
-    assert "ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:11500" in svc
+    assert "ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=60 127.0.0.1:11500" in svc
+    # Checked before every start, as root, so a network that joined the range
+    # after the play stops the forwarder; idle exit makes every start recheck.
+    assert "ExecCondition=+/usr/local/libexec/nikos-ollama-bridge-check" in svc
 
 
 @pytest.mark.skipif(not shutil.which("systemd-analyze") or not Path("/usr/lib/systemd/systemd-socket-proxyd").exists(),
                     reason="needs systemd-analyze and systemd-socket-proxyd")
 def test_the_units_pass_systemd_analyze_verify(tmp_path, bindir):
     units = _write_units(tmp_path, bindir)
+    # The check is installed under /usr/local/libexec by the play; verify the
+    # unit against the repository's copy of the same file.
+    svc = units / "nikos-ollama-bridge.service"
+    svc.write_text(svc.read_text().replace("/usr/local/libexec/nikos-ollama-bridge-check",
+                                           str(ROOT / "roles/ai-stack/files/nikos-ollama-bridge-check")))
     out = subprocess.run(["systemd-analyze", "verify", "--man=no",
                           str(units / "nikos-ollama-bridge.socket"), str(units / "nikos-ollama-bridge.service")],
                          capture_output=True, text=True, timeout=60)
@@ -173,6 +182,7 @@ from tests.test_profiles import NIKOS_CLI, _fake_home
 
 def _doctor(tmp_path, units, path, extra_vars=""):
     home = _fake_home(tmp_path, "server")
+    (home / "roles").symlink_to(ROOT / "roles")
     if extra_vars:
         with open(home / "vars" / "local.yml", "a", encoding="utf-8") as fh:
             fh.write(extra_vars)
@@ -344,3 +354,51 @@ def test_doctor_is_quiet_about_dockers_own_networks(tmp_path, bindir):
     _socket_unit(units, "127.0.0.1:9")
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
     assert "shares 172.16.0.0/12" not in out, out
+
+
+
+# --- the check the forwarder runs before every start ---------------------------
+CHECK = ROOT / "roles/ai-stack/files/nikos-ollama-bridge-check"
+
+
+def _check(bindir, path_extra=True):
+    env = {"PATH": f"{bindir}:/usr/bin:/bin" if path_extra else str(bindir)}
+    return subprocess.run([str(CHECK)], capture_output=True, text=True, env=env, timeout=30)
+
+
+def test_check_passes_dockers_own_networks(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY)
+    r = _check(bindir)
+    assert (r.returncode, r.stdout) == (0, ""), r
+
+
+def test_check_names_another_network_in_the_range(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY + "5: tun0    inet 172.20.8.2/24 scope global tun0\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and r.stdout.strip() == "tun0 172.20.8.2/24", r
+
+
+def test_check_fails_closed_when_interfaces_cannot_be_read(bindir):
+    (bindir / "ip").write_text("#!/bin/sh\nexit 1\n")
+    (bindir / "ip").chmod(0o755)
+    assert _check(bindir).returncode == 2
+
+
+def test_check_fails_closed_when_docker_cannot_list_its_networks(bindir):
+    """Without Docker's names every bridge would look foreign, or be skipped."""
+    _stub_ip(bindir, DOCKER_ONLY)
+    (bindir / "docker").write_text("#!/bin/sh\nexit 1\n")
+    (bindir / "docker").chmod(0o755)
+    assert _check(bindir).returncode == 2
+
+
+def test_doctor_reports_a_check_that_cannot_run(tmp_path, bindir):
+    (bindir / "ip").write_text("#!/bin/sh\nexit 1\n")
+    (bindir / "ip").chmod(0o755)
+    units = tmp_path / "units"
+    _socket_unit(units, "127.0.0.1:9")
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
+    line = next(l for l in out.splitlines() if "could not be checked" in l)
+    assert line.startswith("[error]"), line

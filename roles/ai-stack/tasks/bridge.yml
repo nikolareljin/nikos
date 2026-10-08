@@ -46,31 +46,15 @@
     - ai_stack_bridge_addr | length > 0
     - ai_stack_bridge_addr is not regex('^172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}$')
 
-# The allowlist trusts any source in 172.16.0.0/12. That is Docker's range
-# only when no other network on this machine uses it: on a LAN or VPN in
-# 172.16.0.0/12, a neighbour with a route to the bridge address would pass the
-# filter and reach an Ollama that has no authentication. Docker names its own
-# bridge interfaces; every other interface counts, whatever it is called. If
-# the interfaces cannot be read, the task fails: no answer is not "no overlap".
+# The allowlist trusts any source in 172.16.0.0/12, which is Docker's range
+# only while no other network here uses it. files/nikos-ollama-bridge-check
+# decides, here and again before every start of the forwarder (ExecCondition),
+# so a VPN that connects later is caught too. It fails closed.
 - name: Find networks outside Docker that use 172.16.0.0/12
-  ansible.builtin.shell: |
-    set -euo pipefail
-    addrs="$(ip -4 -o addr show)"
-    docker_ifs=""
-    if command -v docker >/dev/null 2>&1; then
-      for id in $(docker network ls -q --filter driver=bridge); do
-        name="$(docker network inspect -f '{% raw %}{{index .Options "com.docker.network.bridge.name"}}{% endraw %}' "$id")"
-        docker_ifs="${docker_ifs} ${name:-br-${id:0:12}}"
-      done
-    fi
-    printf '%s\n' "${addrs}" \
-      | awk -v keep="lo${docker_ifs}" 'BEGIN { n = split(keep, k, " "); for (i = 1; i <= n; i++) skip[k[i]] = 1 }
-                                         !($2 in skip) { print $2, $4 }' \
-      | { grep -E ' 172\.(1[6-9]|2[0-9]|3[01])\.' || true; }
-  args:
-    executable: /bin/bash
+  ansible.builtin.command: "{{ role_path }}/files/nikos-ollama-bridge-check"
   register: ai_stack_bridge_overlap
   changed_when: false
+  failed_when: ai_stack_bridge_overlap.rc not in [0, 1]
   when: ai_stack_bridge_addr | length > 0
 
 - name: Decide whether the Ollama forwarder may run
@@ -79,6 +63,15 @@
     ai_stack_bridge_wanted: >-
       {{ ai_stack_bridge_addr | length > 0
          and (ai_stack_bridge_overlap.stdout | default('') | trim) | length == 0 }}
+
+- name: Install the forwarder's network check
+  ansible.builtin.copy:
+    src: nikos-ollama-bridge-check
+    dest: /usr/local/libexec/nikos-ollama-bridge-check
+    mode: "0755"
+  become: true
+  register: ai_stack_bridge_check
+  when: ai_stack_bridge_wanted | bool
 
 - name: Write the Ollama forwarder socket
   ansible.builtin.copy:
@@ -114,7 +107,11 @@
       After=nikos-ollama-bridge.socket ollama.service
 
       [Service]
-      ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:{{ ai_stack_bridge_port }}
+      # Checked before every start, as root (+): a LAN or VPN that joined
+      # 172.16.0.0/12 since the play ran stops the forwarder. The proxy exits
+      # when idle, so the next connection starts it, and the check, again.
+      ExecCondition=+/usr/local/libexec/nikos-ollama-bridge-check
+      ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=60 127.0.0.1:{{ ai_stack_bridge_port }}
       DynamicUser=yes
       NoNewPrivileges=yes
       ProtectSystem=strict
@@ -131,7 +128,9 @@
     name: nikos-ollama-bridge.socket
     enabled: true
     daemon_reload: true
-    state: "{{ 'restarted' if (ai_stack_bridge_socket is changed or ai_stack_bridge_service is changed) else 'started' }}"
+    state: >-
+      {{ 'restarted' if (ai_stack_bridge_socket is changed or ai_stack_bridge_service is changed
+                         or ai_stack_bridge_check is changed) else 'started' }}
   become: true
   when:
     - ai_stack_bridge_wanted | bool
@@ -166,6 +165,10 @@
         path: "/etc/systemd/system/{{ item }}"
         state: absent
       loop: [nikos-ollama-bridge.socket, nikos-ollama-bridge.service]
+    - name: Delete the forwarder's network check
+      ansible.builtin.file:
+        path: /usr/local/libexec/nikos-ollama-bridge-check
+        state: absent
     - name: Reload systemd after removing the forwarder
       ansible.builtin.systemd:
         daemon_reload: true

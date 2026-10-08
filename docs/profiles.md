@@ -101,8 +101,10 @@ interfaces cannot be read, the forwarder is refused. Wherever the forwarder must
 not run (`off`, remote mode, no Docker, a shared range) an installed one is
 stopped and removed before the play reports anything, and the role runs again
 after every other role, so Docker installed later in the same run is seen.
-`nikos doctor` also reports a network that joined the range after the play ran,
-such as a VPN.
+The same check (`roles/ai-stack/files/nikos-ollama-bridge-check`) runs before
+every start of the forwarder (`ExecCondition`), and the proxy exits after 60
+idle seconds, so a network that joins the range after the play, such as a VPN,
+stops the forwarder at its next start. `nikos doctor` runs it too.
 `nikos doctor` asks the forwarder for `/api/version`, because a listed socket
 proves nothing: with `FreeBind=yes` it is listed before the address exists.
 

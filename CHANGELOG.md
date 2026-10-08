@@ -17,8 +17,10 @@ All notable changes to NikOS are documented here.
   containers; Docker names its own bridges, every other interface counts, and
   a check that cannot run refuses. Where the forwarder must not run, an
   installed one is removed first, in every mode; the role runs again after
-  every role, so Docker installed later in the same run is seen; and `nikos
-  doctor` reports a network that joined the range afterwards.
+  every role, so Docker installed later in the same run is seen. One check
+  script decides, for the play, for `nikos doctor`, and before every start of
+  the forwarder (`ExecCondition`; the proxy exits when idle), so a VPN that
+  joins the range later stops it too.
 
 ## [1.0.2] - 2026-10-04
 
