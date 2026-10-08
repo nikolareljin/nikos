@@ -2,6 +2,17 @@
 
 All notable changes to NikOS are documented here.
 
+## [Unreleased]
+
+### Added
+- **Containers reach the local Ollama.** Ollama listens on loopback only, and a
+  container arrives on the Docker bridge, so `host.docker.internal:11434`
+  answered nothing. `roles/ai-stack` installs `nikos-ollama-bridge.socket` on
+  the Docker bridge address with `systemd-socket-proxyd` to the loopback
+  endpoint; only loopback and `172.16.0.0/12` may connect. `nikos_ollama_bridge`
+  (`auto`, `off`, or an address in `172.16.0.0/12`; anything else is refused)
+  controls it, and `nikos doctor` asks the forwarder for `/api/version`.
+
 ## [1.0.2] - 2026-10-04
 
 ### Added

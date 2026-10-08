@@ -841,6 +841,20 @@ cmd_doctor() {
       print_error "Ollama endpoint does not answer at ${endpoint:-unset}"
       issues=$((issues + 1))
     fi
+    [[ "${mode}" == "local" ]] && _doctor_ollama_bridge
+  }
+  # Containers reach the local Ollama through the forwarder on the Docker
+  # bridge. A listed socket is not proof (FreeBind binds an address that does
+  # not exist yet), so ask it for /api/version.
+  _doctor_ollama_bridge() {
+    local unit="${NIKOS_SYSTEMD_DIR:-/etc/systemd/system}/nikos-ollama-bridge.socket" listen
+    if [[ -f "${unit}" ]]; then
+      listen="$(sed -n 's/^ListenStream=//p' "${unit}" | head -1)"
+      check "Ollama forwarder answers on the Docker bridge (${listen})" \
+        curl -fsS --max-time 5 -o /dev/null "http://${listen}/api/version"
+    elif command -v docker >/dev/null 2>&1 && [[ "$(_nikos_var nikos_ollama_bridge auto)" != "off" ]]; then
+      print_warn "No Ollama forwarder on the Docker bridge: containers cannot reach the local Ollama. Run: nikos update"
+    fi
   }
   local profile
   profile="$(_nikos_var nikos_profile desktop)"

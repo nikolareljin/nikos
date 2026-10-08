@@ -314,6 +314,132 @@
     - nikos_ollama_mode == 'local'
     - not ansible_check_mode
 
+# Containers reach the local Ollama through a forwarder on the Docker bridge
+# address; Ollama itself stays on loopback (nikos_ollama_host). A systemd
+# socket listens there and systemd-socket-proxyd passes each connection to
+# loopback. Only loopback and 172.16.0.0/12 may connect.
+- name: Find the Docker bridge address for the Ollama forwarder
+  ansible.builtin.shell: |
+    set -o pipefail
+    command -v docker >/dev/null 2>&1 || exit 0
+    # Rootless Docker keeps its bridge in another network namespace; a
+    # forwarder on the host does not reach it.
+    if docker info -f '{% raw %}{{.SecurityOptions}}{% endraw %}' 2>/dev/null | grep -q rootless; then exit 0; fi
+    docker network inspect bridge -f '{% raw %}{{(index .IPAM.Config 0).Gateway}}{% endraw %}' 2>/dev/null || true
+  args:
+    executable: /bin/bash
+  register: ai_stack_bridge_probe
+  changed_when: false
+  failed_when: false
+  when:
+    - nikos_ollama_mode == 'local'
+    - (nikos_ollama_bridge | default('auto')) == 'auto'
+
+- name: Choose the Ollama forwarder address
+  ansible.builtin.set_fact:
+    ai_stack_bridge_addr: >-
+      {{ '' if nikos_ollama_mode != 'local' or (nikos_ollama_bridge | default('auto')) == 'off'
+         else ((ai_stack_bridge_probe.stdout | default('') | trim)
+               if (nikos_ollama_bridge | default('auto')) == 'auto'
+               else (nikos_ollama_bridge | trim)) }}
+    ai_stack_bridge_port: "{{ nikos_ollama_host.split(':')[-1] }}"
+
+# Bridge only: an address outside Docker's range would put Ollama, which has
+# no authentication, on a network other machines can reach.
+- name: Refuse an Ollama forwarder address outside the Docker bridge range
+  ansible.builtin.fail:
+    msg: >-
+      nikos_ollama_bridge resolved to '{{ ai_stack_bridge_addr }}', which is not a
+      Docker bridge address (172.16.0.0/12). Set nikos_ollama_bridge to the bridge
+      address, or to off.
+  when:
+    - ai_stack_bridge_addr | length > 0
+    - ai_stack_bridge_addr is not regex('^172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}$')
+
+- name: Write the Ollama forwarder socket
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/nikos-ollama-bridge.socket
+    mode: "0644"
+    content: |
+      # Managed by NikOS (roles/ai-stack). Set nikos_ollama_bridge in vars/local.yml.
+      [Unit]
+      Description=NikOS: containers reach the local Ollama (Docker bridge only)
+
+      [Socket]
+      ListenStream={{ ai_stack_bridge_addr }}:{{ ai_stack_bridge_port }}
+      # The bridge address exists only once Docker is up; bind before that.
+      FreeBind=yes
+      IPAddressDeny=any
+      IPAddressAllow=localhost 172.16.0.0/12
+
+      [Install]
+      WantedBy=sockets.target
+  become: true
+  register: ai_stack_bridge_socket
+  when: ai_stack_bridge_addr | length > 0
+
+- name: Write the Ollama forwarder service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/nikos-ollama-bridge.service
+    mode: "0644"
+    content: |
+      # Managed by NikOS (roles/ai-stack). Started by nikos-ollama-bridge.socket.
+      [Unit]
+      Description=NikOS: forward container connections to the local Ollama
+      Requires=nikos-ollama-bridge.socket
+      After=nikos-ollama-bridge.socket ollama.service
+
+      [Service]
+      ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:{{ ai_stack_bridge_port }}
+      DynamicUser=yes
+      NoNewPrivileges=yes
+      ProtectSystem=strict
+      ProtectHome=yes
+      PrivateTmp=yes
+      PrivateDevices=yes
+      RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+  become: true
+  register: ai_stack_bridge_service
+  when: ai_stack_bridge_addr | length > 0
+
+- name: Enable and start the Ollama forwarder
+  ansible.builtin.systemd:
+    name: nikos-ollama-bridge.socket
+    enabled: true
+    daemon_reload: true
+    state: "{{ 'restarted' if (ai_stack_bridge_socket is changed or ai_stack_bridge_service is changed) else 'started' }}"
+  become: true
+  when:
+    - ai_stack_bridge_addr | length > 0
+    - not ansible_check_mode
+
+- name: Look for an Ollama forwarder that no longer applies
+  ansible.builtin.stat:
+    path: /etc/systemd/system/nikos-ollama-bridge.socket
+  register: ai_stack_bridge_installed
+  when: ai_stack_bridge_addr | length == 0
+
+- name: Remove the Ollama forwarder that no longer applies
+  when:
+    - ai_stack_bridge_addr | length == 0
+    - ai_stack_bridge_installed.stat.exists | default(false)
+    - not ansible_check_mode
+  become: true
+  block:
+    - name: Stop the Ollama forwarder
+      ansible.builtin.systemd:
+        name: nikos-ollama-bridge.socket
+        state: stopped
+        enabled: false
+    - name: Delete the Ollama forwarder units
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ item }}"
+        state: absent
+      loop: [nikos-ollama-bridge.socket, nikos-ollama-bridge.service]
+    - name: Reload systemd after removing the forwarder
+      ansible.builtin.systemd:
+        daemon_reload: true
+
 - name: Pull default Ollama model
   ansible.builtin.command: ollama pull {{ ollama_default_model }}
   register: ai_stack_ollama_pull
