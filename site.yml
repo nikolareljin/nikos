@@ -196,6 +196,11 @@
       ansible.builtin.include_role:
         name: ai-stack
         tasks_from: bridge.yml
+        # include_role does not hand its tags to the tasks it includes: without
+        # this, --tags ai-local (nikos add, the optional-bundle refresh) ran the
+        # include and skipped every task in it.
+        apply:
+          tags: [ai-local]
       tags: [ai-local]
 
     - name: Initialize git submodules (script-helpers)  # noqa: command-instead-of-module

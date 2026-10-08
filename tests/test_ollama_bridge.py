@@ -187,6 +187,12 @@ import threading
 from tests.test_profiles import NIKOS_CLI, _fake_home
 
 
+def _is_error(line: str) -> bool:
+    """script-helpers prints "[Error!]: "; the CLI's fallback, when the
+    submodule is absent, prints "[error] ". Either is an error line."""
+    return line.startswith(("[error]", "[Error!]"))
+
+
 def _doctor(tmp_path, units, path, extra_vars=""):
     home = _fake_home(tmp_path, "server")
     (home / "roles").symlink_to(ROOT / "roles")
@@ -219,7 +225,7 @@ def test_doctor_asks_the_forwarder_and_reports_an_answer(tmp_path):
     finally:
         srv.shutdown()
     line = next(l for l in out.splitlines() if "Ollama forwarder answers" in l)
-    assert not line.startswith("[error]"), out
+    assert not _is_error(line), out
 
 
 def test_doctor_reports_a_forwarder_that_does_not_answer(tmp_path):
@@ -227,7 +233,7 @@ def test_doctor_reports_a_forwarder_that_does_not_answer(tmp_path):
     _socket_unit(units, "127.0.0.1:9")
     out = _doctor(tmp_path, units, "/usr/bin:/bin")
     line = next(l for l in out.splitlines() if "Ollama forwarder answers" in l)
-    assert line.startswith("[error]"), line
+    assert _is_error(line), line
 
 
 def test_doctor_warns_when_docker_has_no_forwarder(tmp_path, bindir):
@@ -364,7 +370,7 @@ def test_doctor_reports_a_network_that_joined_dockers_range_after_the_play(tmp_p
     _socket_unit(units, "127.0.0.1:9")
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
     line = next(l for l in out.splitlines() if "shares 172.16.0.0/12" in l)
-    assert line.startswith("[error]") and "tun0 172.20.8.2/24" in line, line
+    assert _is_error(line) and "tun0 172.20.8.2/24" in line, line
 
 
 def test_doctor_is_quiet_about_dockers_own_networks(tmp_path, bindir):
@@ -421,7 +427,7 @@ def test_doctor_reports_a_check_that_cannot_run(tmp_path, bindir):
     _socket_unit(units, "127.0.0.1:9")
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
     line = next(l for l in out.splitlines() if "could not be checked" in l)
-    assert line.startswith("[error]"), line
+    assert _is_error(line), line
 
 
 
@@ -535,7 +541,7 @@ def test_doctor_names_a_failed_socket_and_how_to_clear_it(tmp_path, bindir):
     _socket_unit(units, "127.0.0.1:9")
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
     line = next(l for l in out.splitlines() if "socket has failed" in l)
-    assert line.startswith("[error]") and "systemctl reset-failed nikos-ollama-bridge.socket" in line, line
+    assert _is_error(line) and "systemctl reset-failed nikos-ollama-bridge.socket" in line, line
 
 
 def test_doctor_reports_a_filter_that_is_not_loaded(tmp_path, bindir):
@@ -546,7 +552,7 @@ def test_doctor_reports_a_filter_that_is_not_loaded(tmp_path, bindir):
     _socket_unit(units, "127.0.0.1:9")
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
     line = next(l for l in out.splitlines() if "interface filter loaded" in l)
-    assert line.startswith("[error]"), line
+    assert _is_error(line), line
 
 
 def test_doctor_without_docker_access_warns_instead_of_failing(tmp_path, bindir):
@@ -559,7 +565,7 @@ def test_doctor_without_docker_access_warns_instead_of_failing(tmp_path, bindir)
     _socket_unit(units, "127.0.0.1:9")
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
     line = next(l for l in out.splitlines() if "networks not checked here" in l)
-    assert not line.startswith("[error]"), line
+    assert not _is_error(line), line
     assert "could not be checked" not in out, out
 
 
@@ -669,4 +675,15 @@ def test_doctor_warns_that_ufw_may_block_containers(tmp_path, bindir):
     _socket_unit(units, "172.17.0.1:11434")
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
     line = next(l for l in out.splitlines() if "ufw is active" in l)
-    assert not line.startswith("[error]") and "ufw allow in on docker0 to any port 11434" in line, line
+    assert not _is_error(line) and "ufw allow in on docker0 to any port 11434" in line, line
+
+
+
+def test_the_post_tasks_include_hands_its_tag_to_the_included_tasks():
+    """include_role does not pass its tags on: under --tags ai-local the
+    included tasks were skipped unless the include applies the tag."""
+    play = yaml.safe_load((ROOT / "site.yml").read_text())[0]
+    post = next(t for t in play["post_tasks"]
+                if (t.get("ansible.builtin.include_role") or {}).get("tasks_from") == "bridge.yml")
+    assert post["ansible.builtin.include_role"]["apply"]["tags"] == ["ai-local"]
+    assert post["tags"] == ["ai-local"]
