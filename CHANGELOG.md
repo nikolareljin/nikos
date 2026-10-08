@@ -12,6 +12,11 @@ All notable changes to NikOS are documented here.
   creates, and `tests/machine/ollama_bridge_files.sh` runs the file tasks as root
   on a stock `ubuntu:24.04` (`NIKOS_MACHINE_TESTS=1`). The failed run stopped
   before any forwarder unit was written, so nothing half-installed was left.
+- `tests/machine/ollama_bridge_systemd.sh` runs the forwarder for real under
+  systemd on a stock `ubuntu:24.04`: a LAN inside `172.16.0.0/12` refuses it and
+  nothing is installed; installed, a container is answered and a LAN machine
+  with a route to the bridge address is not; a second run changes nothing;
+  `off` removes every piece and nothing listens.
 
 ## [1.1.0] - 2026-10-08
 

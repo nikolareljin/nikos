@@ -715,3 +715,14 @@ def test_every_forwarder_file_is_written_on_a_stock_ubuntu():
                        capture_output=True, text=True, timeout=900)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "ok: every forwarder file written on a stock image" in r.stdout
+
+
+@pytest.mark.skipif(os.environ.get("NIKOS_MACHINE_TESTS") != "1",
+                    reason="machine check: needs Docker with privileged containers; NIKOS_MACHINE_TESTS=1")
+def test_the_forwarder_under_systemd_on_a_stock_ubuntu():
+    """The real tasks under systemd: refuse a shared range, install, answer a
+    container, refuse a LAN machine, change nothing on a second run, remove on off."""
+    r = subprocess.run(["bash", str(ROOT / "tests/machine/ollama_bridge_systemd.sh")],
+                       capture_output=True, text=True, timeout=1200)
+    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-2000:]
+    assert "ok: refused a shared range, installed, answered a container" in r.stdout
