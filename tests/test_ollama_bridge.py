@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-TASKS = yaml.safe_load((ROOT / "roles/ai-stack/tasks/main.yml").read_text())
+TASKS = yaml.safe_load((ROOT / "roles/ai-stack/tasks/bridge.yml").read_text())
 
 
 def task(name):
@@ -30,11 +30,15 @@ SERVICE = task("Write the Ollama forwarder service")
 
 
 def _stub_docker(bindir: Path, rootless: bool, gateway: str) -> None:
+    """Answers the docker calls bridge.yml makes, as the real CLI does: two bridge
+    networks, the default one named docker0 and a compose one left to br-<id>."""
     p = bindir / "docker"
     p.write_text(
-        "#!/bin/sh\n"
-        f'case "$1" in info) echo "[name=seccomp{",name=rootless" if rootless else ""}]" ;;'
-        f' network) echo "{gateway}" ;; esac\n'
+        "#!/bin/bash\n"
+        f'if [ "$1" = info ]; then echo "[name=seccomp{",name=rootless" if rootless else ""}]"; exit 0; fi\n'
+        'if [ "$2" = ls ]; then printf "%s\\n" aaaaaaaaaaaa 646c6b405144; exit 0; fi\n'
+        f'if [ "$2" = inspect ] && [ "$3" = bridge ]; then echo "{gateway}"; exit 0; fi\n'
+        'if [ "$2" = inspect ]; then [ "${@: -1}" = aaaaaaaaaaaa ] && echo docker0 || echo; exit 0; fi\n'
     )
     p.chmod(0o755)
 
@@ -129,7 +133,8 @@ def _write_units(tmp_path, bindir):
         t = {k: v for k, v in t.items() if k not in ("become", "register")}
         t["ansible.builtin.copy"] = {**t["ansible.builtin.copy"], "dest": str(units / name)}
         tasks.append(t)
-    out = run(tmp_path, [CHOOSE, *tasks], [bindir], nikos_ollama_bridge="172.17.0.1",
+    decided = {"ansible.builtin.set_fact": {"ai_stack_bridge_wanted": True}}
+    out = run(tmp_path, [CHOOSE, decided, *tasks], [bindir], nikos_ollama_bridge="172.17.0.1",
               nikos_ollama_host="127.0.0.1:11500")
     assert out.returncode == 0, out.stdout
     return units
@@ -231,21 +236,111 @@ DOCKER_ONLY = ("1: lo    inet 127.0.0.1/8 scope host lo\n"
                "4: br-646c6b405144    inet 172.18.0.1/16 scope global br-646c6b405144\n")
 
 
+DECIDE = task("Decide whether the Ollama forwarder may run")
+
+
+def guard_run(tmp_path, bindir, **vars_):
+    """CHOOSE, the checks and the decision, then the refusal; the decision is printed."""
+    tasks = [CHOOSE, REFUSE, OVERLAP, DECIDE,
+             {"ansible.builtin.debug": {"msg": "WANTED=[{{ ai_stack_bridge_wanted }}]"}}, GUARD]
+    return run(tmp_path, tasks, [bindir], **vars_)
+
+
 def test_docker_networks_alone_pass(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY)
-    out = run(tmp_path, [CHOOSE, REFUSE, OVERLAP, GUARD], [bindir], nikos_ollama_bridge="172.17.0.1")
+    out = guard_run(tmp_path, bindir, nikos_ollama_bridge="172.17.0.1")
     assert out.returncode == 0, out.stdout
+    assert "WANTED=[True]" in out.stdout, out.stdout
+
+
+def test_an_interface_is_trusted_because_docker_names_it_not_because_of_its_name(tmp_path, bindir):
+    """br-* not created by Docker is somebody else's network."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY + "5: br-lan    inet 172.16.9.1/24 scope global br-lan\n")
+    out = guard_run(tmp_path, bindir, nikos_ollama_bridge="172.17.0.1")
+    assert out.returncode != 0
+    assert "br-lan 172.16.9.1/24" in out.stdout, out.stdout
+
+
+def test_interfaces_that_cannot_be_read_refuse_the_forwarder(tmp_path, bindir):
+    """Fail closed: no answer from ip is not "no overlap"."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    (bindir / "ip").write_text("#!/bin/sh\necho 'ip: cannot open netlink socket' >&2\nexit 1\n")
+    (bindir / "ip").chmod(0o755)
+    out = guard_run(tmp_path, bindir, nikos_ollama_bridge="172.17.0.1")
+    assert out.returncode != 0
+    assert "WANTED=[True]" not in out.stdout, out.stdout
+
+
+def test_remote_mode_wants_no_forwarder_so_an_installed_one_is_removed(tmp_path, bindir):
+    out = guard_run(tmp_path, bindir, nikos_ollama_bridge="auto", nikos_ollama_mode="remote")
+    assert out.returncode == 0, out.stdout
+    assert "WANTED=[False]" in out.stdout, out.stdout
+
+
+def test_the_forwarder_is_removed_before_a_refusal_ends_the_play():
+    names = [t["name"] for t in TASKS]
+    assert names.index("Remove the Ollama forwarder that must not run") < \
+        names.index("Refuse the Ollama forwarder where another network shares Docker's range")
+    removal = next(t for t in TASKS if t["name"] == "Remove the Ollama forwarder that must not run")
+    assert "not (ai_stack_bridge_wanted | bool)" in removal["when"]
+
+
+def test_bridge_yml_is_included_in_every_mode():
+    main = yaml.safe_load((ROOT / "roles/ai-stack/tasks/main.yml").read_text())
+    inc = next(t for t in main if t.get("ansible.builtin.include_tasks") == "bridge.yml")
+    assert "when" not in inc
+    play = yaml.safe_load((ROOT / "site.yml").read_text())[0]
+    post = next(t for t in play["post_tasks"]
+                if (t.get("ansible.builtin.include_role") or {}).get("tasks_from") == "bridge.yml")
+    assert "when" not in post
 
 
 @pytest.mark.parametrize("iface,addr", [("eth0", "172.16.4.20/24"), ("tun0", "172.31.0.7/16"), ("wg0", "172.20.1.1/24")])
 def test_a_lan_or_vpn_in_dockers_range_refuses_the_forwarder(tmp_path, bindir, iface, addr):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY + f"5: {iface}    inet {addr} scope global {iface}\n")
-    out = run(tmp_path, [CHOOSE, REFUSE, OVERLAP, GUARD], [bindir], nikos_ollama_bridge="172.17.0.1")
+    out = guard_run(tmp_path, bindir, nikos_ollama_bridge="172.17.0.1")
     assert out.returncode != 0
     assert f"{iface} {addr}" in out.stdout and "could reach Ollama" in out.stdout, out.stdout
 
 
 def test_no_forwarder_means_no_overlap_check(tmp_path, bindir):
     _stub_ip(bindir, DOCKER_ONLY + "5: eth0    inet 172.16.4.20/24 scope global eth0\n")
-    out = run(tmp_path, [CHOOSE, REFUSE, OVERLAP, GUARD], [bindir], nikos_ollama_bridge="off")
+    out = guard_run(tmp_path, bindir, nikos_ollama_bridge="off")
     assert out.returncode == 0, out.stdout
+
+
+
+def test_the_forwarder_also_runs_after_every_role():
+    """Docker is installed by dev-tools, after ai-stack: a first install would
+    find no bridge if the forwarder ran only inside ai-stack."""
+    play = yaml.safe_load((ROOT / "site.yml").read_text())[0]
+    roles = [r["role"] if isinstance(r, dict) else r for r in play["roles"]]
+    assert roles.index("dev-tools") > roles.index("ai-stack")
+    post = [t for t in play["post_tasks"]
+            if (t.get("ansible.builtin.include_role") or {}).get("tasks_from") == "bridge.yml"]
+    assert post and post[0]["ansible.builtin.include_role"]["name"] == "ai-stack"
+    main = yaml.safe_load((ROOT / "roles/ai-stack/tasks/main.yml").read_text())
+    assert any(t.get("ansible.builtin.include_tasks") == "bridge.yml" for t in main)
+
+
+
+def test_doctor_reports_a_network_that_joined_dockers_range_after_the_play(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY + "5: tun0    inet 172.20.8.2/24 scope global tun0\n")
+    units = tmp_path / "units"
+    _socket_unit(units, "127.0.0.1:9")
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
+    line = next(l for l in out.splitlines() if "shares 172.16.0.0/12" in l)
+    assert line.startswith("[error]") and "tun0 172.20.8.2/24" in line, line
+
+
+def test_doctor_is_quiet_about_dockers_own_networks(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY)
+    units = tmp_path / "units"
+    _socket_unit(units, "127.0.0.1:9")
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
+    assert "shares 172.16.0.0/12" not in out, out

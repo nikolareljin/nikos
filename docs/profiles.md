@@ -95,7 +95,14 @@ explicit address must be in `172.16.0.0/12`; the play refuses any other. The
 play also refuses the forwarder when a network that is not Docker's (a LAN, a
 VPN) uses `172.16.0.0/12` on this machine: the filter could not tell its
 machines from containers. Set `off`, or move Docker's `default-address-pools`
-out of that range.
+out of that range. Docker says which interfaces are its own bridges; any other
+interface counts, whatever its name. Every check fails closed: when the
+interfaces cannot be read, the forwarder is refused. Wherever the forwarder must
+not run (`off`, remote mode, no Docker, a shared range) an installed one is
+stopped and removed before the play reports anything, and the role runs again
+after every other role, so Docker installed later in the same run is seen.
+`nikos doctor` also reports a network that joined the range after the play ran,
+such as a VPN.
 `nikos doctor` asks the forwarder for `/api/version`, because a listed socket
 proves nothing: with `FreeBind=yes` it is listed before the address exists.
 

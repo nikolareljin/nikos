@@ -14,7 +14,11 @@ All notable changes to NikOS are documented here.
   controls it, and `nikos doctor` asks the forwarder for `/api/version`. The
   play refuses the forwarder where a LAN or VPN on the machine also uses
   `172.16.0.0/12`, since the filter could not tell those machines from
-  containers.
+  containers; Docker names its own bridges, every other interface counts, and
+  a check that cannot run refuses. Where the forwarder must not run, an
+  installed one is removed first, in every mode; the role runs again after
+  every role, so Docker installed later in the same run is seen; and `nikos
+  doctor` reports a network that joined the range afterwards.
 
 ## [1.0.2] - 2026-10-04
 
