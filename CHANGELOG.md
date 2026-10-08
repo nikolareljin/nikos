@@ -2,6 +2,17 @@
 
 All notable changes to NikOS are documented here.
 
+## [Unreleased]
+
+### Fixed
+- **`nikos update` to 1.1.0 failed at "Install the forwarder's network check":**
+  `Destination directory /usr/local/libexec does not exist`. Ubuntu does not ship
+  that directory; it is created first now. A test requires every file the
+  forwarder installs to go into a directory Ubuntu ships or an earlier task
+  creates, and `tests/machine/ollama_bridge_files.sh` runs the file tasks as root
+  on a stock `ubuntu:24.04` (`NIKOS_MACHINE_TESTS=1`). The failed run stopped
+  before any forwarder unit was written, so nothing half-installed was left.
+
 ## [1.1.0] - 2026-10-08
 
 ### Added

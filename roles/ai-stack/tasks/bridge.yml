@@ -73,6 +73,15 @@
       {{ ai_stack_bridge_addr | length > 0
          and (ai_stack_bridge_overlap.stdout | default('') | trim) | length == 0 }}
 
+# Ubuntu does not ship /usr/local/libexec; copy fails on a missing directory.
+- name: Create the directory for the forwarder's network check
+  ansible.builtin.file:
+    path: /usr/local/libexec
+    state: directory
+    mode: "0755"
+  become: true
+  when: ai_stack_bridge_wanted | bool
+
 - name: Install the forwarder's network check
   ansible.builtin.copy:
     src: nikos-ollama-bridge-check
