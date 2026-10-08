@@ -234,9 +234,18 @@ def test_doctor_warns_when_docker_has_no_forwarder(tmp_path, bindir):
 
 
 # --- another network in Docker's range ---------------------------------------
-def _stub_ip(bindir: Path, lines: str) -> None:
+DOCKER_ROUTES = ("default via 192.168.1.1 dev wlan0 proto dhcp\n"
+                 "172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1\n"
+                 "172.18.0.0/16 dev br-646c6b405144 proto kernel scope link src 172.18.0.1\n"
+                 "local 172.17.0.1 dev docker0 table local proto kernel scope host src 172.17.0.1\n"
+                 "192.168.1.0/24 dev wlan0 proto kernel scope link src 192.168.1.162\n")
+
+
+def _stub_ip(bindir: Path, lines: str, routes: str = DOCKER_ROUTES) -> None:
+    """`ip ... addr` prints the addresses, `ip ... route` the routes."""
     p = bindir / "ip"
-    p.write_text("#!/bin/sh\ncat <<'EOF'\n" + lines + "EOF\n")
+    p.write_text("#!/bin/sh\ncase \"$*\" in *route*) cat <<'EOF'\n" + routes + "EOF\n;;"
+                 " *) cat <<'EOF'\n" + lines + "EOF\n;; esac\n")
     p.chmod(0o755)
 
 
@@ -402,3 +411,34 @@ def test_doctor_reports_a_check_that_cannot_run(tmp_path, bindir):
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
     line = next(l for l in out.splitlines() if "could not be checked" in l)
     assert line.startswith("[error]"), line
+
+
+
+def test_check_names_a_vpn_route_into_the_range_without_an_address_there(bindir):
+    """A VPN can route 172.20.0.0/16 while its own address is elsewhere."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY + "5: tun0    inet 10.8.0.2/24 scope global tun0\n",
+             DOCKER_ROUTES + "172.20.0.0/16 via 10.8.0.1 dev tun0\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and r.stdout.strip() == "tun0 route 172.20.0.0/16", r
+
+
+def test_check_names_a_route_that_covers_the_whole_range(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY, DOCKER_ROUTES + "172.0.0.0/8 via 10.8.0.1 dev tun0\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and "tun0 route 172.0.0.0/8" in r.stdout, r
+
+
+def test_check_ignores_the_default_route_and_dockers_own(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY)
+    assert _check(bindir).returncode == 0
+
+
+def test_check_fails_closed_when_routes_cannot_be_read(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    p = bindir / "ip"
+    p.write_text("#!/bin/sh\ncase \"$*\" in *route*) exit 1 ;; *) echo '1: lo    inet 127.0.0.1/8 scope host lo' ;; esac\n")
+    p.chmod(0o755)
+    assert _check(bindir).returncode == 2

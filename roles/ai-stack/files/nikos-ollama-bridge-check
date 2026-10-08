@@ -3,18 +3,21 @@
 # before every start (ExecCondition), and by `nikos doctor`.
 #
 # The Ollama forwarder admits any source in 172.16.0.0/12. That is Docker's
-# range only while no other network on this machine uses it: on a LAN or VPN
-# in that range, a neighbour with a route to the bridge address would reach an
-# Ollama that has no authentication. Docker names its own bridge interfaces;
-# every other interface counts, whatever it is called.
+# range only while no other network on this machine reaches into it: a LAN or
+# VPN with an address there, or a route there (a VPN can route 172.20.0.0/16
+# without holding an address in it), would let its machines reach an Ollama
+# that has no authentication. Docker names its own bridge interfaces; every
+# other interface counts, whatever it is called. The default route is not
+# counted: it covers every address and says nothing about this range.
 #
-# Prints each other interface in 172.16.0.0/12 as "name address".
+# Prints each such interface address or route.
 # Exit: 0 none (the forwarder may run); 1 one or more (it must not);
-#       2 the interfaces could not be read (it must not: no answer is not "none").
+#       2 something could not be read (it must not: no answer is not "none").
 set -uo pipefail
 
 addrs="$(ip -4 -o addr show 2>/dev/null)" || { echo "cannot read the network interfaces (ip -4 addr)" >&2; exit 2; }
 [[ -n "${addrs}" ]] || { echo "no network interfaces listed (ip -4 addr)" >&2; exit 2; }
+routes="$(ip -4 route show table all 2>/dev/null)" || { echo "cannot read the routes (ip -4 route)" >&2; exit 2; }
 
 docker_ifs=""
 if command -v docker >/dev/null 2>&1; then
@@ -27,10 +30,36 @@ if command -v docker >/dev/null 2>&1; then
   done
 fi
 
-shared="$(printf '%s\n' "${addrs}" \
-  | awk -v keep="lo${docker_ifs}" 'BEGIN { n = split(keep, k, " "); for (i = 1; i <= n; i++) skip[k[i]] = 1 }
-                                     !($2 in skip) { print $2, $4 }' \
-  | grep -E ' 172\.(1[6-9]|2[0-9]|3[01])\.')"
-[[ -z "${shared}" ]] && exit 0
-printf '%s\n' "${shared}"
-exit 1
+DOCKER_IFS="${docker_ifs}" ADDRS="${addrs}" ROUTES="${routes}" python3 - <<'PY'
+import ipaddress, os, sys
+
+docker = set(os.environ["DOCKER_IFS"].split()) | {"lo"}
+rng = ipaddress.ip_network("172.16.0.0/12")
+found = []
+
+for line in os.environ["ADDRS"].splitlines():
+    f = line.split()
+    if len(f) >= 4 and f[2] == "inet" and f[1] not in docker:
+        net = ipaddress.ip_interface(f[3]).network
+        if net.overlaps(rng):
+            found.append(f"{f[1]} {f[3]}")
+
+for line in os.environ["ROUTES"].splitlines():
+    f = line.split()
+    if not f or f[0] in ("default", "broadcast", "local", "multicast", "unreachable", "blackhole", "prohibit", "throw"):
+        continue
+    dev = f[f.index("dev") + 1] if "dev" in f else ""
+    if dev in docker or dev == "":
+        continue
+    try:
+        net = ipaddress.ip_network(f[0], strict=False)
+    except ValueError:
+        continue
+    if net.overlaps(rng):
+        found.append(f"{dev} route {f[0]}")
+
+if found:
+    print("\n".join(dict.fromkeys(found)))
+    sys.exit(1)
+sys.exit(0)
+PY
