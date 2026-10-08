@@ -285,7 +285,7 @@ def test_an_interface_is_trusted_because_docker_names_it_not_because_of_its_name
     _stub_ip(bindir, DOCKER_ONLY + "5: br-lan    inet 172.16.9.1/24 scope global br-lan\n")
     out = guard_run(tmp_path, bindir, nikos_ollama_bridge="172.17.0.1")
     assert out.returncode != 0
-    assert "br-lan 172.16.9.1/24" in out.stdout, out.stdout
+    assert "br-lan (named like a Docker bridge, not Docker's)" in out.stdout, out.stdout
 
 
 def test_interfaces_that_cannot_be_read_refuse_the_forwarder(tmp_path, bindir):
@@ -556,3 +556,42 @@ def test_doctor_without_docker_access_warns_instead_of_failing(tmp_path, bindir)
     line = next(l for l in out.splitlines() if "networks not checked here" in l)
     assert not line.startswith("[error]"), line
     assert "could not be checked" not in out, out
+
+
+def test_any_leftover_piece_counts_as_an_installed_forwarder(tmp_path, bindir):
+    """A partial install (only the filter, say) must be removed, not kept."""
+    look = task("Look for an Ollama forwarder that must not run")
+    decide = task("Decide whether an Ollama forwarder is installed")
+    leftover = tmp_path / "ollama-bridge.nft"
+    leftover.write_text("")
+    look = {**look, "loop": [str(tmp_path / "no.socket"), str(leftover)]}
+    play_tasks = [{"ansible.builtin.set_fact": {"ai_stack_bridge_wanted": False, "ai_stack_bridge_addr": ""}}, look, decide,
+                  {"ansible.builtin.debug": {"msg": "ADDR=[{{ ai_stack_bridge_installed.stat.exists }}]"}}]
+    out = run(tmp_path, play_tasks, [bindir])
+    assert out.returncode == 0, out.stdout
+    assert addr(out) == "True"
+
+
+
+def test_check_refuses_a_bridge_named_like_dockers_whatever_its_address(bindir):
+    """The interface filter trusts br-*: a VM bridge called br-vms must not exist
+    beside it, even on 192.168.x where the address filter would not care."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY + "5: br-vms    inet 192.168.50.1/24 scope global br-vms\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and "br-vms (named like a Docker bridge, not Docker's)" in r.stdout, r
+
+
+def test_the_forwarder_is_not_deleted_while_a_unit_still_runs(tmp_path, bindir):
+    """Deleting the files of a socket that would not stop hides a listener."""
+    block = next(t for t in TASKS if t["name"] == "Remove the Ollama forwarder that must not run")
+    stop = next(t for t in block["block"] if t["name"] == "Stop the Ollama forwarder's units")
+    stop = {k: v for k, v in stop.items() if k != "become"}
+    p = bindir / "systemctl"
+    p.write_text('#!/bin/sh\ncase "$*" in *is-active*nikos-ollama-bridge.socket*) exit 0 ;; *is-active*) exit 3 ;; esac\nexit 0\n')
+    p.chmod(0o755)
+    out = run(tmp_path, [{"ansible.builtin.set_fact": {"ai_stack_bridge_addr": ""}}, stop], [bindir])
+    assert out.returncode != 0
+    assert "still running: nikos-ollama-bridge.socket" in out.stdout, out.stdout
+    names = [t["name"] for t in block["block"]]
+    assert names.index("Stop the Ollama forwarder's units") < names.index("Delete the Ollama forwarder units")

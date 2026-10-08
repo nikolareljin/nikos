@@ -112,7 +112,9 @@ packet came in. So the forwarder also has an interface filter: an nftables table
 of its own (`/etc/nikos/ollama-bridge.nft`, loaded by
 `nikos-ollama-bridge-filter.service`) lets the bridge address's Ollama port answer
 only `lo`, `docker0` and `br-*`, and the socket requires it: no filter, no
-forwarder. It never flushes or edits Docker's rules. `tests/machine/ollama_bridge_filter.sh`
+forwarder. Because it trusts the name pattern `br-*`, the network check also
+refuses any interface named `br-*` that Docker did not create, whatever its
+address. It never flushes or edits Docker's rules. `tests/machine/ollama_bridge_filter.sh`
 proves it in a privileged container: a machine behind another interface with an
 address inside `172.16.0.0/12` is refused, a container is answered
 (`NIKOS_MACHINE_TESTS=1 python -m pytest tests/test_ollama_bridge.py` runs it).

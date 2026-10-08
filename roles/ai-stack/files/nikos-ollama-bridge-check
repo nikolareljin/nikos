@@ -10,7 +10,10 @@
 # other interface counts, whatever it is called. The default route is not
 # counted: it covers every address and says nothing about this range.
 #
-# Prints each such interface address or route.
+# The forwarder's interface filter trusts the names lo, docker0 and br-*; an
+# interface named br-* that Docker did not create is refused for that reason.
+#
+# Prints each such interface address, route or name.
 # Exit: 0 none (the forwarder may run); 1 one or more (it must not);
 #       2 something could not be read (it must not: no answer is not "none").
 set -uo pipefail
@@ -52,6 +55,11 @@ for line in os.environ["ADDRS"].splitlines():
         unreadable("address", line)
     iface = f[1].split("@")[0]
     if iface in docker:
+        continue
+    # The forwarder's interface filter trusts the name pattern br-*: a bridge
+    # that is not Docker's must not carry it, whatever its address.
+    if iface.startswith("br-"):
+        found.append(f"{iface} (named like a Docker bridge, not Docker's)")
         continue
     try:
         # Each address as written, for the message, and its network, for the test.

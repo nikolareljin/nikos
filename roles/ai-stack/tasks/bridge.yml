@@ -229,9 +229,22 @@
 # before any refusal below, so a refusal never leaves one running.
 - name: Look for an Ollama forwarder that must not run
   ansible.builtin.stat:
-    path: /etc/systemd/system/nikos-ollama-bridge.socket
-  register: ai_stack_bridge_installed
+    path: "{{ item }}"
+  loop:
+    - /etc/systemd/system/nikos-ollama-bridge.socket
+    - /etc/systemd/system/nikos-ollama-bridge-filter.service
+    - /etc/nikos/ollama-bridge.nft
+    - /usr/local/libexec/nikos-ollama-bridge-check
+  register: ai_stack_bridge_found
   when: not (ai_stack_bridge_wanted | bool)
+
+# Any piece left from an earlier run, even a partial one, means remove it all.
+- name: Decide whether an Ollama forwarder is installed
+  ansible.builtin.set_fact:
+    ai_stack_bridge_installed:
+      stat:
+        exists: "{{ (ai_stack_bridge_found.results | default([]) | selectattr('stat', 'defined')
+                    | map(attribute='stat.exists') | select | list | length) > 0 }}"
 
 - name: Remove the Ollama forwarder that must not run
   when:
@@ -240,20 +253,20 @@
     - not ansible_check_mode
   become: true
   block:
-    - name: Stop the Ollama forwarder
-      ansible.builtin.systemd:
-        name: nikos-ollama-bridge.socket
-        state: stopped
-        enabled: false
-    - name: Stop the Ollama forwarder service
-      ansible.builtin.systemd:
-        name: nikos-ollama-bridge.service
-        state: stopped
-    - name: Stop the Ollama forwarder's filter
-      ansible.builtin.systemd:
-        name: nikos-ollama-bridge-filter.service
-        state: stopped
-        enabled: false
+    # A unit that is already gone is fine (a partial install is what this
+    # cleans); one still running afterwards is not, and fails the play before
+    # its files are deleted: deleting them would hide a listening socket.
+    - name: Stop the Ollama forwarder's units
+      ansible.builtin.shell: |
+        set -uo pipefail
+        units="nikos-ollama-bridge.socket nikos-ollama-bridge.service nikos-ollama-bridge-filter.service"
+        for u in $units; do systemctl disable --now "$u" >/dev/null 2>&1 || true; done
+        running=""
+        for u in $units; do systemctl is-active --quiet "$u" && running="$running $u"; done
+        if [ -n "$running" ]; then echo "still running:$running" >&2; exit 1; fi
+      args:
+        executable: /bin/bash
+      changed_when: true
     - name: Delete the Ollama forwarder units
       ansible.builtin.file:
         path: "/etc/systemd/system/{{ item }}"
