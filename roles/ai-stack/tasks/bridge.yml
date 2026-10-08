@@ -15,9 +15,14 @@
     # Rootless Docker keeps its bridge in another network namespace; a
     # forwarder on the host does not reach it.
     if docker info -f '{% raw %}{{.SecurityOptions}}{% endraw %}' 2>/dev/null | grep -q rootless; then exit 0; fi
-    docker network inspect bridge -f '{% raw %}{{(index .IPAM.Config 0).Gateway}}{% endraw %}' 2>/dev/null || true
+    # The IPv4 gateway: with IPv6 enabled the IPv6 one can come first.
+    docker network inspect bridge -f '{% raw %}{{range .IPAM.Config}}{{.Gateway}} {{end}}{% endraw %}' 2>/dev/null \
+      | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true
   args:
     executable: /bin/bash
+  # As root: the user running the play may not be in the docker group yet (it is
+  # added during this same install), and an unanswered docker call is no bridge.
+  become: true
   register: ai_stack_bridge_probe
   changed_when: false
   failed_when: false
@@ -52,6 +57,8 @@
 # so a VPN that connects later is caught too. It fails closed.
 - name: Find networks outside Docker that use 172.16.0.0/12
   ansible.builtin.command: "{{ role_path }}/files/nikos-ollama-bridge-check"
+  # As root, for the same reason as the probe: Docker's network list needs it.
+  become: true
   register: ai_stack_bridge_overlap
   changed_when: false
   failed_when: ai_stack_bridge_overlap.rc not in [0, 1]
@@ -73,6 +80,74 @@
   register: ai_stack_bridge_check
   when: ai_stack_bridge_wanted | bool
 
+# The address filter on the socket decides by source address, which says
+# nothing about where a packet came in. This filter decides by interface: the
+# bridge address answers on the Ollama port only to loopback and to Docker's
+# bridges. It is its own table, so it never touches Docker's rules, and the
+# socket requires it: no filter, no forwarder.
+- name: Install nftables for the Ollama forwarder's filter
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+  become: true
+  when: ai_stack_bridge_wanted | bool
+
+- name: Create the NikOS configuration directory
+  ansible.builtin.file:
+    path: /etc/nikos
+    state: directory
+    mode: "0755"
+  become: true
+  when: ai_stack_bridge_wanted | bool
+
+- name: Write the Ollama forwarder's interface filter
+  ansible.builtin.copy:
+    dest: /etc/nikos/ollama-bridge.nft
+    mode: "0644"
+    content: |
+      # Managed by NikOS (roles/ai-stack). Loaded by nikos-ollama-bridge-filter.service.
+      # The Ollama forwarder on {{ ai_stack_bridge_addr }}:{{ ai_stack_bridge_port }} answers
+      # only to loopback and Docker's bridges, whatever the source address says.
+      table inet nikos_ollama_bridge
+      delete table inet nikos_ollama_bridge
+      table inet nikos_ollama_bridge {
+        chain input {
+          type filter hook input priority filter - 5; policy accept;
+          ip daddr {{ ai_stack_bridge_addr }} tcp dport {{ ai_stack_bridge_port }} jump from_docker_only
+        }
+        chain from_docker_only {
+          iifname "lo" return
+          iifname "docker0" return
+          iifname "br-*" return
+          drop
+        }
+      }
+  become: true
+  register: ai_stack_bridge_nft
+  when: ai_stack_bridge_wanted | bool
+
+- name: Write the Ollama forwarder's filter service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/nikos-ollama-bridge-filter.service
+    mode: "0644"
+    content: |
+      # Managed by NikOS (roles/ai-stack). The socket requires it.
+      [Unit]
+      Description=NikOS: the Ollama forwarder answers only on Docker's bridges
+      Before=nikos-ollama-bridge.socket
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/sbin/nft -f /etc/nikos/ollama-bridge.nft
+      ExecStop=/usr/sbin/nft delete table inet nikos_ollama_bridge
+
+      [Install]
+      WantedBy=sockets.target
+  become: true
+  register: ai_stack_bridge_filter_unit
+  when: ai_stack_bridge_wanted | bool
+
 - name: Write the Ollama forwarder socket
   ansible.builtin.copy:
     dest: /etc/systemd/system/nikos-ollama-bridge.socket
@@ -81,6 +156,9 @@
       # Managed by NikOS (roles/ai-stack). Set nikos_ollama_bridge in vars/local.yml.
       [Unit]
       Description=NikOS: containers reach the local Ollama (Docker bridge only)
+      # No interface filter, no forwarder.
+      Requires=nikos-ollama-bridge-filter.service
+      After=nikos-ollama-bridge-filter.service
 
       [Socket]
       ListenStream={{ ai_stack_bridge_addr }}:{{ ai_stack_bridge_port }}
@@ -123,6 +201,17 @@
   register: ai_stack_bridge_service
   when: ai_stack_bridge_wanted | bool
 
+- name: Enable and start the Ollama forwarder's filter
+  ansible.builtin.systemd:
+    name: nikos-ollama-bridge-filter.service
+    enabled: true
+    daemon_reload: true
+    state: "{{ 'restarted' if (ai_stack_bridge_nft is changed or ai_stack_bridge_filter_unit is changed) else 'started' }}"
+  become: true
+  when:
+    - ai_stack_bridge_wanted | bool
+    - not ansible_check_mode
+
 - name: Enable and start the Ollama forwarder
   ansible.builtin.systemd:
     name: nikos-ollama-bridge.socket
@@ -160,11 +249,20 @@
       ansible.builtin.systemd:
         name: nikos-ollama-bridge.service
         state: stopped
+    - name: Stop the Ollama forwarder's filter
+      ansible.builtin.systemd:
+        name: nikos-ollama-bridge-filter.service
+        state: stopped
+        enabled: false
     - name: Delete the Ollama forwarder units
       ansible.builtin.file:
         path: "/etc/systemd/system/{{ item }}"
         state: absent
-      loop: [nikos-ollama-bridge.socket, nikos-ollama-bridge.service]
+      loop: [nikos-ollama-bridge.socket, nikos-ollama-bridge.service, nikos-ollama-bridge-filter.service]
+    - name: Delete the Ollama forwarder's interface filter
+      ansible.builtin.file:
+        path: /etc/nikos/ollama-bridge.nft
+        state: absent
     - name: Delete the forwarder's network check
       ansible.builtin.file:
         path: /usr/local/libexec/nikos-ollama-bridge-check

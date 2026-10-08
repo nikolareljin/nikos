@@ -26,6 +26,8 @@ REFUSE = task("Refuse an Ollama forwarder address outside the Docker bridge rang
 OVERLAP = task("Find networks outside Docker that use 172.16.0.0/12")
 GUARD = task("Refuse the Ollama forwarder where another network shares Docker's range")
 SOCKET = task("Write the Ollama forwarder socket")
+NFT = task("Write the Ollama forwarder's interface filter")
+FILTER_UNIT = task("Write the Ollama forwarder's filter service")
 SERVICE = task("Write the Ollama forwarder service")
 
 
@@ -44,6 +46,8 @@ def _stub_docker(bindir: Path, rootless: bool, gateway: str) -> None:
 
 
 def run(tmp_path, tasks, path_dirs, system_path=True, **vars_):
+    # The probe and the check run as root on a machine; here, as the test user.
+    tasks = [{k: v for k, v in t.items() if k != "become"} for t in tasks]
     dirs = [*map(str, path_dirs), *(["/usr/bin", "/bin"] if system_path else [])]
     play = [{
         "hosts": "localhost", "connection": "local", "gather_facts": False,
@@ -130,7 +134,8 @@ def _write_units(tmp_path, bindir):
     units = tmp_path / "units"
     units.mkdir()
     tasks = []
-    for t, name in ((SOCKET, "nikos-ollama-bridge.socket"), (SERVICE, "nikos-ollama-bridge.service")):
+    for t, name in ((SOCKET, "nikos-ollama-bridge.socket"), (SERVICE, "nikos-ollama-bridge.service"),
+                    (FILTER_UNIT, "nikos-ollama-bridge-filter.service"), (NFT, "ollama-bridge.nft")):
         t = {k: v for k, v in t.items() if k not in ("become", "register")}
         t["ansible.builtin.copy"] = {**t["ansible.builtin.copy"], "dest": str(units / name)}
         tasks.append(t)
@@ -165,7 +170,8 @@ def test_the_units_pass_systemd_analyze_verify(tmp_path, bindir):
     svc.write_text(svc.read_text().replace("/usr/local/libexec/nikos-ollama-bridge-check",
                                            str(ROOT / "roles/ai-stack/files/nikos-ollama-bridge-check")))
     out = subprocess.run(["systemd-analyze", "verify", "--man=no",
-                          str(units / "nikos-ollama-bridge.socket"), str(units / "nikos-ollama-bridge.service")],
+                          str(units / "nikos-ollama-bridge.socket"), str(units / "nikos-ollama-bridge.service"),
+                          str(units / "nikos-ollama-bridge-filter.service")],
                          capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr
     assert "nikos-ollama-bridge" not in out.stderr, out.stderr
@@ -477,3 +483,76 @@ def test_check_refuses_an_address_line_it_cannot_read(bindir):
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY + "5: odd0    something-else\n")
     assert _check(bindir).returncode == 2
+
+
+
+# --- the interface filter ---------------------------------------------------------
+def test_the_socket_requires_the_interface_filter(tmp_path, bindir):
+    units = _write_units(tmp_path, bindir)
+    sock = (units / "nikos-ollama-bridge.socket").read_text()
+    assert "Requires=nikos-ollama-bridge-filter.service" in sock
+    nft = (units / "ollama-bridge.nft").read_text()
+    assert "ip daddr 172.17.0.1 tcp dport 11500 jump from_docker_only" in nft
+    # Its own table, replaced whole: never a flush of Docker's rules.
+    assert "flush ruleset" not in nft and "delete table inet nikos_ollama_bridge" in nft
+    for allowed in ('iifname "lo" return', 'iifname "docker0" return', 'iifname "br-*" return'):
+        assert allowed in nft
+    assert nft.rstrip().splitlines()[-3].strip() == "drop"
+
+
+@pytest.mark.skipif(os.environ.get("NIKOS_MACHINE_TESTS") != "1",
+                    reason="machine check: needs Docker with privileged containers; NIKOS_MACHINE_TESTS=1")
+def test_the_interface_filter_lets_docker_in_and_a_lan_in_the_same_range_not(tmp_path, bindir):
+    units = _write_units(tmp_path, bindir)
+    nft = units / "ollama-bridge.nft"
+    nft.write_text(nft.read_text().replace("tcp dport 11500", "tcp dport 11434"))
+    r = subprocess.run(["bash", str(ROOT / "tests/machine/ollama_bridge_filter.sh"), str(nft)],
+                       capture_output=True, text=True, timeout=600)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "ok: only the Docker side reaches the bridge address" in r.stdout
+
+
+def _stub_systemctl(bindir: Path, failed_socket: bool, filter_active: bool) -> None:
+    p = bindir / "systemctl"
+    p.write_text(
+        "#!/bin/sh\n"
+        f'case "$*" in *is-failed*nikos-ollama-bridge.socket*) exit {0 if failed_socket else 1} ;;\n'
+        f' *is-active*nikos-ollama-bridge-filter*) exit {0 if filter_active else 3} ;; esac\nexit 3\n'
+    )
+    p.chmod(0o755)
+
+
+def test_doctor_names_a_failed_socket_and_how_to_clear_it(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY)
+    _stub_systemctl(bindir, failed_socket=True, filter_active=True)
+    units = tmp_path / "units"
+    _socket_unit(units, "127.0.0.1:9")
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
+    line = next(l for l in out.splitlines() if "socket has failed" in l)
+    assert line.startswith("[error]") and "systemctl reset-failed nikos-ollama-bridge.socket" in line, line
+
+
+def test_doctor_reports_a_filter_that_is_not_loaded(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY)
+    _stub_systemctl(bindir, failed_socket=False, filter_active=False)
+    units = tmp_path / "units"
+    _socket_unit(units, "127.0.0.1:9")
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
+    line = next(l for l in out.splitlines() if "interface filter loaded" in l)
+    assert line.startswith("[error]"), line
+
+
+def test_doctor_without_docker_access_warns_instead_of_failing(tmp_path, bindir):
+    p = bindir / "docker"
+    p.write_text("#!/bin/sh\necho 'permission denied while trying to connect to the Docker daemon socket' >&2\nexit 1\n")
+    p.chmod(0o755)
+    _stub_ip(bindir, DOCKER_ONLY)
+    _stub_systemctl(bindir, failed_socket=False, filter_active=True)
+    units = tmp_path / "units"
+    _socket_unit(units, "127.0.0.1:9")
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
+    line = next(l for l in out.splitlines() if "networks not checked here" in l)
+    assert not line.startswith("[error]"), line
+    assert "could not be checked" not in out, out

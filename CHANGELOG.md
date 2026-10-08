@@ -20,7 +20,10 @@ All notable changes to NikOS are documented here.
   every role, so Docker installed later in the same run is seen. One check
   script decides, for the play, for `nikos doctor`, and before every start of
   the forwarder (`ExecCondition`; the proxy exits when idle), so a VPN that
-  joins the range later stops it too.
+  joins the range later stops it too. An nftables table of its own lets the
+  bridge address's Ollama port answer only `lo`, `docker0` and `br-*`, whatever
+  the source address, and the socket requires it; a machine check proves a
+  LAN machine inside `172.16.0.0/12` is refused and a container answered.
 
 ## [1.0.2] - 2026-10-04
 

@@ -107,9 +107,19 @@ every start of the forwarder (`ExecCondition`), and the proxy exits after 60
 idle seconds, so a network that joins the range after the play, such as a VPN,
 stops the forwarder at its next start. `nikos doctor` runs it too.
 
-What this cannot do: the filter decides by source address, and a connection
-already open is not checked again until the proxy has been idle for 60
-seconds.
+The address filter decides by source address, which says nothing about where a
+packet came in. So the forwarder also has an interface filter: an nftables table
+of its own (`/etc/nikos/ollama-bridge.nft`, loaded by
+`nikos-ollama-bridge-filter.service`) lets the bridge address's Ollama port answer
+only `lo`, `docker0` and `br-*`, and the socket requires it: no filter, no
+forwarder. It never flushes or edits Docker's rules. `tests/machine/ollama_bridge_filter.sh`
+proves it in a privileged container: a machine behind another interface with an
+address inside `172.16.0.0/12` is refused, a container is answered
+(`NIKOS_MACHINE_TESTS=1 python -m pytest tests/test_ollama_bridge.py` runs it).
+
+A refused start counts against the socket's trigger limit; a socket that hit it
+stays failed after the cause is gone. `nikos doctor` names that state and the
+`systemctl reset-failed` that clears it.
 `nikos doctor` asks the forwarder for `/api/version`, because a listed socket
 proves nothing: with `FreeBind=yes` it is listed before the address exists.
 

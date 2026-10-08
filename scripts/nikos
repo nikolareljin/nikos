@@ -855,9 +855,21 @@ cmd_doctor() {
       # The play refuses the forwarder where a LAN or VPN uses 172.16.0.0/12,
       # but a VPN can connect after the play ran; the filter would then let its
       # machines through. Docker names its own bridges; every other counts.
+      # Refused starts (a shared range, an unreadable check) count against the
+      # socket's trigger limit, and a socket that hit it stays failed after the
+      # cause is gone.
+      if systemctl is-failed --quiet nikos-ollama-bridge.socket 2>/dev/null; then
+        print_error "Ollama forwarder socket has failed (refused starts hit its limit). After fixing the cause: sudo systemctl reset-failed nikos-ollama-bridge.socket && sudo systemctl start nikos-ollama-bridge.socket"
+        issues=$((issues + 1))
+      fi
+      check "Ollama forwarder's interface filter loaded" systemctl is-active --quiet nikos-ollama-bridge-filter.service
       # The same check the forwarder runs before every start (roles/ai-stack).
       local guard="${NIKOS_HOME}/roles/ai-stack/files/nikos-ollama-bridge-check" shared rc=0
-      if [[ ! -x "${guard}" ]]; then
+      if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then
+        # As a user without access to Docker the check cannot read Docker's
+        # networks; the forwarder itself runs it as root.
+        print_warn "Ollama forwarder: networks not checked here (no access to Docker as $(id -un)); the forwarder checks them as root before every start"
+      elif [[ ! -x "${guard}" ]]; then
         print_warn "Ollama forwarder: ${guard} is missing; the networks were not checked"
       else
         shared="$("${guard}" 2>&1)" || rc=$?
