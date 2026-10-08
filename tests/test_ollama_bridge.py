@@ -687,3 +687,42 @@ def test_the_post_tasks_include_hands_its_tag_to_the_included_tasks():
                 if (t.get("ansible.builtin.include_role") or {}).get("tasks_from") == "bridge.yml")
     assert post["ansible.builtin.include_role"]["apply"]["tags"] == ["ai-local"]
     assert post["tags"] == ["ai-local"]
+
+
+
+# Directories every Ubuntu install has; anything else a task writes into must be
+# created by an earlier task. /usr/local/libexec is not one: Ubuntu does not ship it.
+SHIPPED_DIRS = {"/etc/systemd/system"}
+
+
+def test_every_file_the_forwarder_installs_has_its_directory():
+    created = set()
+    for t in TASKS:
+        f = t.get("ansible.builtin.file") or {}
+        if f.get("state") == "directory":
+            created.add(f["path"])
+        dest = (t.get("ansible.builtin.copy") or {}).get("dest")
+        if dest:
+            parent = str(Path(dest).parent)
+            assert parent in SHIPPED_DIRS or parent in created, \
+                f"{t['name']}: {parent} is neither shipped by Ubuntu nor created before it"
+
+
+@pytest.mark.skipif(os.environ.get("NIKOS_MACHINE_TESTS") != "1",
+                    reason="machine check: needs Docker; NIKOS_MACHINE_TESTS=1")
+def test_every_forwarder_file_is_written_on_a_stock_ubuntu():
+    r = subprocess.run(["bash", str(ROOT / "tests/machine/ollama_bridge_files.sh")],
+                       capture_output=True, text=True, timeout=900)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "ok: every forwarder file written on a stock image" in r.stdout
+
+
+@pytest.mark.skipif(os.environ.get("NIKOS_MACHINE_TESTS") != "1",
+                    reason="machine check: needs Docker with privileged containers; NIKOS_MACHINE_TESTS=1")
+def test_the_forwarder_under_systemd_on_a_stock_ubuntu():
+    """The real tasks under systemd: refuse a shared range, install, answer a
+    container, refuse a LAN machine, change nothing on a second run, remove on off."""
+    r = subprocess.run(["bash", str(ROOT / "tests/machine/ollama_bridge_systemd.sh")],
+                       capture_output=True, text=True, timeout=1200)
+    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-2000:]
+    assert "ok: refused a shared range, installed, answered a container" in r.stdout
