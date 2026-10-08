@@ -11,7 +11,10 @@ All notable changes to NikOS are documented here.
   the Docker bridge address with `systemd-socket-proxyd` to the loopback
   endpoint; only loopback and `172.16.0.0/12` may connect. `nikos_ollama_bridge`
   (`auto`, `off`, or an address in `172.16.0.0/12`; anything else is refused)
-  controls it, and `nikos doctor` asks the forwarder for `/api/version`.
+  controls it, and `nikos doctor` asks the forwarder for `/api/version`. The
+  play refuses the forwarder where a LAN or VPN on the machine also uses
+  `172.16.0.0/12`, since the filter could not tell those machines from
+  containers.
 
 ## [1.0.2] - 2026-10-04
 

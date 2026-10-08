@@ -91,7 +91,11 @@ the network is refused, and Ollama itself stays on loopback.
 `nikos_ollama_bridge: auto` uses the bridge of a rootful Docker Engine and
 installs nothing without Docker or with rootless Docker, whose bridge lives in
 another network namespace. `off` removes a forwarder installed earlier. An
-explicit address must be in `172.16.0.0/12`; the play refuses any other.
+explicit address must be in `172.16.0.0/12`; the play refuses any other. The
+play also refuses the forwarder when a network that is not Docker's (a LAN, a
+VPN) uses `172.16.0.0/12` on this machine: the filter could not tell its
+machines from containers. Set `off`, or move Docker's `default-address-pools`
+out of that range.
 `nikos doctor` asks the forwarder for `/api/version`, because a listed socket
 proves nothing: with `FreeBind=yes` it is listed before the address exists.
 

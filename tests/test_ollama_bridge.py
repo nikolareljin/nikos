@@ -23,6 +23,8 @@ def task(name):
 PROBE = task("Find the Docker bridge address for the Ollama forwarder")
 CHOOSE = task("Choose the Ollama forwarder address")
 REFUSE = task("Refuse an Ollama forwarder address outside the Docker bridge range")
+OVERLAP = task("Find networks outside Docker that use 172.16.0.0/12")
+GUARD = task("Refuse the Ollama forwarder where another network shares Docker's range")
 SOCKET = task("Write the Ollama forwarder socket")
 SERVICE = task("Write the Ollama forwarder service")
 
@@ -213,3 +215,37 @@ def test_doctor_warns_when_docker_has_no_forwarder(tmp_path, bindir):
     out = _doctor(tmp_path / "off", tmp_path / "none", f"{bindir}:/usr/bin:/bin",
                   extra_vars='nikos_ollama_bridge: "off"\n')
     assert "No Ollama forwarder" not in out, out
+
+
+
+# --- another network in Docker's range ---------------------------------------
+def _stub_ip(bindir: Path, lines: str) -> None:
+    p = bindir / "ip"
+    p.write_text("#!/bin/sh\ncat <<'EOF'\n" + lines + "EOF\n")
+    p.chmod(0o755)
+
+
+DOCKER_ONLY = ("1: lo    inet 127.0.0.1/8 scope host lo\n"
+               "2: wlan0    inet 192.168.1.162/24 brd 192.168.1.255 scope global wlan0\n"
+               "3: docker0    inet 172.17.0.1/16 scope global docker0\n"
+               "4: br-646c6b405144    inet 172.18.0.1/16 scope global br-646c6b405144\n")
+
+
+def test_docker_networks_alone_pass(tmp_path, bindir):
+    _stub_ip(bindir, DOCKER_ONLY)
+    out = run(tmp_path, [CHOOSE, REFUSE, OVERLAP, GUARD], [bindir], nikos_ollama_bridge="172.17.0.1")
+    assert out.returncode == 0, out.stdout
+
+
+@pytest.mark.parametrize("iface,addr", [("eth0", "172.16.4.20/24"), ("tun0", "172.31.0.7/16"), ("wg0", "172.20.1.1/24")])
+def test_a_lan_or_vpn_in_dockers_range_refuses_the_forwarder(tmp_path, bindir, iface, addr):
+    _stub_ip(bindir, DOCKER_ONLY + f"5: {iface}    inet {addr} scope global {iface}\n")
+    out = run(tmp_path, [CHOOSE, REFUSE, OVERLAP, GUARD], [bindir], nikos_ollama_bridge="172.17.0.1")
+    assert out.returncode != 0
+    assert f"{iface} {addr}" in out.stdout and "could reach Ollama" in out.stdout, out.stdout
+
+
+def test_no_forwarder_means_no_overlap_check(tmp_path, bindir):
+    _stub_ip(bindir, DOCKER_ONLY + "5: eth0    inet 172.16.4.20/24 scope global eth0\n")
+    out = run(tmp_path, [CHOOSE, REFUSE, OVERLAP, GUARD], [bindir], nikos_ollama_bridge="off")
+    assert out.returncode == 0, out.stdout
