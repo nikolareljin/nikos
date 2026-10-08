@@ -21,6 +21,10 @@ set -uo pipefail
 addrs="$(ip -4 -o addr show 2>/dev/null)" || { echo "cannot read the network interfaces (ip -4 addr)" >&2; exit 2; }
 [[ -n "${addrs}" ]] || { echo "no network interfaces listed (ip -4 addr)" >&2; exit 2; }
 routes="$(ip -4 route show table all 2>/dev/null)" || { echo "cannot read the routes (ip -4 route)" >&2; exit 2; }
+# Every interface by name, with or without an IPv4 address: the br-* rule is
+# about names, and a bridge with no IPv4 address is trusted by name too.
+links="$(ip -o link show 2>/dev/null)" || { echo "cannot read the interfaces (ip link)" >&2; exit 2; }
+[[ -n "${links}" ]] || { echo "no interfaces listed (ip link)" >&2; exit 2; }
 
 docker_ifs=""
 if command -v docker >/dev/null 2>&1; then
@@ -33,7 +37,7 @@ if command -v docker >/dev/null 2>&1; then
   done
 fi
 
-DOCKER_IFS="${docker_ifs}" ADDRS="${addrs}" ROUTES="${routes}" python3 - <<'PY'
+DOCKER_IFS="${docker_ifs}" ADDRS="${addrs}" ROUTES="${routes}" LINKS="${links}" python3 - <<'PY'
 import ipaddress, os, sys
 
 docker = set(os.environ["DOCKER_IFS"].split()) | {"lo"}
@@ -54,13 +58,8 @@ for line in os.environ["ADDRS"].splitlines():
     if len(f) < 4 or f[2] != "inet":
         unreadable("address", line)
     iface = f[1].split("@")[0]
-    if iface in docker:
-        continue
-    # The forwarder's interface filter trusts the name pattern br-*: a bridge
-    # that is not Docker's must not carry it, whatever its address.
-    if iface.startswith("br-"):
-        found.append(f"{iface} (named like a Docker bridge, not Docker's)")
-        continue
+    if iface in docker or iface.startswith("br-"):
+        continue  # Docker's; and a foreign br-* is refused by name below
     try:
         # Each address as written, for the message, and its network, for the test.
         given = [f[3]]
@@ -73,6 +72,19 @@ for line in os.environ["ADDRS"].splitlines():
     for g, net in nets:
         if net.overlaps(rng):
             found.append(f"{iface} {g}")
+
+# The forwarder's interface filter trusts the name pattern br-*: an interface
+# by that name that Docker did not create is refused, whatever its addresses,
+# including none.
+for line in os.environ["LINKS"].splitlines():
+    f = line.split(": ")
+    if len(f) < 2:
+        unreadable("interface", line)
+    name = f[1].split("@")[0].strip()
+    if not name:
+        unreadable("interface", line)
+    if name.startswith("br-") and name not in docker:
+        found.append(f"{name} (named like a Docker bridge, not Docker's)")
 
 # Route types that carry no traffic toward another network.
 QUIET = {"local", "broadcast", "multicast", "anycast", "unreachable", "blackhole", "prohibit", "throw"}

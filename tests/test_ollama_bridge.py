@@ -247,10 +247,14 @@ DOCKER_ROUTES = ("default via 192.168.1.1 dev wlan0 proto dhcp\n"
                  "192.168.1.0/24 dev wlan0 proto kernel scope link src 192.168.1.162\n")
 
 
-def _stub_ip(bindir: Path, lines: str, routes: str = DOCKER_ROUTES) -> None:
-    """`ip ... addr` prints the addresses, `ip ... route` the routes."""
+def _stub_ip(bindir: Path, lines: str, routes: str = DOCKER_ROUTES, extra_links: str = "") -> None:
+    """`ip ... addr` prints the addresses, `ip ... route` the routes, and
+    `ip ... link` every interface named in the addresses, plus extra_links."""
+    names = list(dict.fromkeys(l.split()[1] for l in lines.splitlines() if l.strip()))
+    links = "".join(f"{i}: {n}: <UP> mtu 1500 state UP\n" for i, n in enumerate(names, 1)) + extra_links
     p = bindir / "ip"
     p.write_text("#!/bin/sh\ncase \"$*\" in *route*) cat <<'EOF'\n" + routes + "EOF\n;;"
+                 " *link*) cat <<'EOF'\n" + links + "EOF\n;;"
                  " *) cat <<'EOF'\n" + lines + "EOF\n;; esac\n")
     p.chmod(0o755)
 
@@ -595,3 +599,21 @@ def test_the_forwarder_is_not_deleted_while_a_unit_still_runs(tmp_path, bindir):
     assert "still running: nikos-ollama-bridge.socket" in out.stdout, out.stdout
     names = [t["name"] for t in block["block"]]
     assert names.index("Stop the Ollama forwarder's units") < names.index("Delete the Ollama forwarder units")
+
+
+
+def test_check_refuses_a_foreign_br_interface_with_no_ipv4_address(bindir):
+    """The br-* rule is about names: an interface with no IPv4 address is
+    still trusted by the interface filter by its name."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY, extra_links="9: br-ghost: <BROADCAST,UP> mtu 1500 state UP\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and "br-ghost (named like a Docker bridge, not Docker's)" in r.stdout, r
+
+
+def test_check_fails_closed_when_interface_names_cannot_be_read(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    p = bindir / "ip"
+    p.write_text("#!/bin/sh\ncase \"$*\" in *link*) exit 1 ;; *route*) echo ;; *) echo '1: lo    inet 127.0.0.1/8 scope host lo' ;; esac\n")
+    p.chmod(0o755)
+    assert _check(bindir).returncode == 2
