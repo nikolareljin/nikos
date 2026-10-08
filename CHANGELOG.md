@@ -2,7 +2,7 @@
 
 All notable changes to NikOS are documented here.
 
-## [Unreleased]
+## [1.1.1] - 2026-10-08
 
 ### Fixed
 - **`nikos update` to 1.1.0 failed at "Install the forwarder's network check":**
