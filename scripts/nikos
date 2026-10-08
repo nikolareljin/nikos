@@ -841,6 +841,54 @@ cmd_doctor() {
       print_error "Ollama endpoint does not answer at ${endpoint:-unset}"
       issues=$((issues + 1))
     fi
+    [[ "${mode}" == "local" ]] && _doctor_ollama_bridge
+  }
+  # Containers reach the local Ollama through the forwarder on the Docker
+  # bridge. A listed socket is not proof (FreeBind binds an address that does
+  # not exist yet), so ask it for /api/version.
+  _doctor_ollama_bridge() {
+    local unit="${NIKOS_SYSTEMD_DIR:-/etc/systemd/system}/nikos-ollama-bridge.socket" listen
+    if [[ -f "${unit}" ]]; then
+      listen="$(sed -n 's/^ListenStream=//p' "${unit}" | head -1)"
+      check "Ollama forwarder answers on the Docker bridge (${listen})" \
+        curl -fsS --max-time 5 -o /dev/null "http://${listen}/api/version"
+      # The play refuses the forwarder where a LAN or VPN uses 172.16.0.0/12,
+      # but a VPN can connect after the play ran; the filter would then let its
+      # machines through. Docker names its own bridges; every other counts.
+      # Refused starts (a shared range, an unreadable check) count against the
+      # socket's trigger limit, and a socket that hit it stays failed after the
+      # cause is gone.
+      if systemctl is-failed --quiet nikos-ollama-bridge.socket 2>/dev/null; then
+        print_error "Ollama forwarder socket has failed (refused starts hit its limit). After fixing the cause: sudo systemctl reset-failed nikos-ollama-bridge.socket && sudo systemctl start nikos-ollama-bridge.socket"
+        issues=$((issues + 1))
+      fi
+      check "Ollama forwarder's interface filter loaded" systemctl is-active --quiet nikos-ollama-bridge-filter.service
+      # ufw's default deny drops a container's packets to the host before the
+      # forwarder sees them; a request from the host itself still passes.
+      if systemctl is-active --quiet ufw 2>/dev/null; then
+        print_warn "ufw is active: containers reach the forwarder only if it allows them, e.g. sudo ufw allow in on docker0 to any port ${listen##*:} proto tcp (and each br-* network)"
+      fi
+      # The same check the forwarder runs before every start (roles/ai-stack).
+      local guard="${NIKOS_HOME}/roles/ai-stack/files/nikos-ollama-bridge-check" shared rc=0
+      if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then
+        # As a user without access to Docker the check cannot read Docker's
+        # networks; the forwarder itself runs it as root.
+        print_warn "Ollama forwarder: networks not checked here (no access to Docker as $(id -un)); the forwarder checks them as root before every start"
+      elif [[ ! -x "${guard}" ]]; then
+        print_warn "Ollama forwarder: ${guard} is missing; the networks were not checked"
+      else
+        shared="$("${guard}" 2>&1)" || rc=$?
+        case "${rc}" in
+          0) print_success "Ollama forwarder: no network outside Docker uses 172.16.0.0/12" ;;
+          1) print_error "Ollama forwarder: ${shared//$'\n'/, } shares 172.16.0.0/12, which the forwarder lets through. It refuses to start while that holds; nikos update removes it, or set nikos_ollama_bridge to off"
+             issues=$((issues + 1)) ;;
+          *) print_error "Ollama forwarder: the networks could not be checked (${shared}); it refuses to start"
+             issues=$((issues + 1)) ;;
+        esac
+      fi
+    elif command -v docker >/dev/null 2>&1 && [[ "$(_nikos_var nikos_ollama_bridge auto)" != "off" ]]; then
+      print_warn "No Ollama forwarder on the Docker bridge: containers cannot reach the local Ollama. Run: nikos update"
+    fi
   }
   local profile
   profile="$(_nikos_var nikos_profile desktop)"

@@ -314,6 +314,10 @@
     - nikos_ollama_mode == 'local'
     - not ansible_check_mode
 
+# In every mode: where the forwarder must not run, an installed one is removed.
+- name: Install or remove the Ollama forwarder for containers
+  ansible.builtin.include_tasks: bridge.yml
+
 - name: Pull default Ollama model
   ansible.builtin.command: ollama pull {{ ollama_default_model }}
   register: ai_stack_ollama_pull

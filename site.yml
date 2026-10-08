@@ -190,6 +190,14 @@
       tags: [never, monitoring]
 
   post_tasks:
+    # Again after every role: Docker comes with dev-tools, after ai-stack, so on
+    # a first install ai-stack finds no bridge. Idempotent when nothing changed.
+    - name: Install or remove the Ollama forwarder for containers, now that Docker is installed
+      ansible.builtin.include_role:
+        name: ai-stack
+        tasks_from: bridge.yml
+      tags: [ai-local]
+
     - name: Initialize git submodules (script-helpers)  # noqa: command-instead-of-module
       ansible.builtin.command:
         cmd: git submodule update --init --recursive

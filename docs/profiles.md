@@ -70,6 +70,7 @@ nikos_ollama_mode: "local"            # local | remote
 nikos_ollama_host: "127.0.0.1:11434"  # loopback only; Ollama has no auth
 nikos_ollama_remote_url: ""           # required when the mode is remote
 nikos_node_role: "workstation"        # workstation | inference | services
+nikos_ollama_bridge: "auto"           # auto | off | a Docker bridge address
 ```
 
 `local` writes `OLLAMA_HOST` into `/etc/systemd/system/ollama.service.d/nikos.conf`
@@ -77,6 +78,60 @@ and refuses to start when another process already holds the port. `remote`
 installs no local Ollama. `nikos status` prints the mode, endpoint and node
 role; `nikos doctor` sends a request to the endpoint and fails if it does not
 answer.
+
+A container cannot reach a loopback-only Ollama: it arrives on the Docker
+bridge, not on loopback. So `local` also installs a forwarder:
+`nikos-ollama-bridge.socket` listens on the Docker bridge address (what
+`host.docker.internal` resolves to with `extra_hosts:
+["host.docker.internal:host-gateway"]`; `172.17.0.1` on a default Docker Engine)
+and `nikos-ollama-bridge.service` runs `systemd-socket-proxyd` to the loopback
+endpoint. Only loopback and `172.16.0.0/12` may connect, so another machine on
+the network is refused, and Ollama itself stays on loopback.
+
+`nikos_ollama_bridge: auto` uses the bridge of a rootful Docker Engine and
+installs nothing without Docker or with rootless Docker, whose bridge lives in
+another network namespace. `off` removes a forwarder installed earlier. An
+explicit address must be in `172.16.0.0/12`; the play refuses any other. The
+play also refuses the forwarder when a network that is not Docker's (a LAN, a
+VPN) reaches into `172.16.0.0/12` on this machine, by an address or by a route
+(a VPN can route `172.20.0.0/16` without an address there): the filter could not tell its
+machines from containers. Set `off`, or move Docker's `default-address-pools`
+out of that range. Docker says which interfaces are its own bridges; any other
+interface counts, whatever its name. Every check fails closed: when the
+interfaces cannot be read, the forwarder is refused. Wherever the forwarder must
+not run (`off`, remote mode, no Docker, a shared range) an installed one is
+stopped and removed before the play reports anything, and the role runs again
+after every other role, so Docker installed later in the same run is seen.
+The same check (`roles/ai-stack/files/nikos-ollama-bridge-check`) runs before
+every start of the forwarder (`ExecCondition`), and the proxy exits after 60
+idle seconds, so a network that joins the range after the play, such as a VPN,
+stops the forwarder at its next start. `nikos doctor` runs it too.
+
+The address filter decides by source address, which says nothing about where a
+packet came in. So the forwarder also has an interface filter: an nftables table
+of its own (`/etc/nikos/ollama-bridge.nft`, loaded by
+`nikos-ollama-bridge-filter.service`) lets the bridge address's Ollama port answer
+only `lo`, `docker0` and `br-*`, and the socket requires it: no filter, no
+forwarder. Because it trusts the name pattern `br-*`, the network check also
+refuses any interface named `br-*` that Docker did not create, whatever its
+address. It never flushes or edits Docker's rules. `tests/machine/ollama_bridge_filter.sh`
+proves it in a privileged container: a machine behind another interface with an
+address inside `172.16.0.0/12` is refused, a container is answered
+(`NIKOS_MACHINE_TESTS=1 python -m pytest tests/test_ollama_bridge.py` runs it).
+
+The forwarder also refuses to start unless that table is loaded: Ubuntu's stock
+`nftables.service` begins with `flush ruleset`, so the filter loads after it and
+again whenever it restarts. `auto` skips Docker Desktop, whose engine and bridge
+live in a VM. The proxy forwards to `nikos_ollama_host` as set (`127.0.0.1`,
+`localhost` or `[::1]`). If `ufw` is active, its default deny drops container
+traffic before the forwarder sees it; `nikos doctor` names the `ufw allow` it
+needs.
+
+A refused start counts against the socket's trigger limit; a socket that hit it
+stays failed after the cause is gone. `nikos doctor` names that state and the
+`systemctl reset-failed` that clears it.
+`nikos doctor` asks the forwarder for `/api/version`, because a listed socket
+proves nothing: with `FreeBind=yes` it is listed before the address exists.
 
 ## Verifying a profile in a VM
 

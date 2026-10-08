@@ -46,6 +46,15 @@ nikos_node_role: "workstation"
 nikos_ollama_host: "127.0.0.1:11434"
 nikos_ollama_remote_url: ""
 
+# Containers reach the local Ollama through a forwarder on the Docker bridge
+# address (what host.docker.internal resolves to with host-gateway), because
+# Ollama itself stays on loopback. Only loopback and Docker's 172.16.0.0/12 may
+# connect, so another machine on the network cannot.
+#   auto - the bridge of a rootful Docker Engine, when there is one (default)
+#   off  - no forwarder; one installed earlier is removed
+#   an address in 172.16.0.0/12 - that bridge
+nikos_ollama_bridge: "auto"
+
 nikos_version: "{{ lookup('file', playbook_dir + '/VERSION') | trim }}"
 
 # Timezone and locale

@@ -2,6 +2,36 @@
 
 All notable changes to NikOS are documented here.
 
+## [Unreleased]
+
+### Added
+- **Containers reach the local Ollama.** Ollama listens on loopback only, and a
+  container arrives on the Docker bridge, so `host.docker.internal:11434`
+  answered nothing. `roles/ai-stack` installs `nikos-ollama-bridge.socket` on
+  the Docker bridge address with `systemd-socket-proxyd` to the loopback
+  endpoint; only loopback and `172.16.0.0/12` may connect. `nikos_ollama_bridge`
+  (`auto`, `off`, or an address in `172.16.0.0/12`; anything else is refused)
+  controls it, and `nikos doctor` asks the forwarder for `/api/version`. The
+  play refuses the forwarder where a LAN or VPN on the machine also uses
+  `172.16.0.0/12`, since the filter could not tell those machines from
+  containers; Docker names its own bridges, every other interface counts, and
+  a check that cannot run refuses. Where the forwarder must not run, an
+  installed one is removed first, in every mode; the role runs again after
+  every role, so Docker installed later in the same run is seen. One check
+  script decides, for the play, for `nikos doctor`, and before every start of
+  the forwarder (`ExecCondition`; the proxy exits when idle), so a VPN that
+  joins the range later stops it too. An nftables table of its own lets the
+  bridge address's Ollama port answer only `lo`, `docker0` and `br-*`, whatever
+  the source address, and the socket requires it; a machine check proves a
+  LAN machine inside `172.16.0.0/12` is refused and a container answered. An
+  interface named `br-*` that Docker did not create refuses the forwarder,
+  since the filter trusts that name. A forwarder that must not run is removed
+  completely, including a partial install, and its files are kept until its
+  units are confirmed stopped. It refuses to start without its nftables table
+  (a `flush ruleset` from `nftables.service` would remove it), skips Docker
+  Desktop, forwards to `nikos_ollama_host` as set, and `nikos doctor` warns
+  when `ufw` would drop container traffic.
+
 ## [1.0.2] - 2026-10-04
 
 ### Added
