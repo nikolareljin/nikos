@@ -36,6 +36,7 @@ UNUSED_IMAGES=false
 usage() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; }
 
 need_number() { [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo "$1 needs a whole number of days" >&2; exit 2; }; }
+need_value() { [[ -n "${2:-}" && "${2:-}" != -* ]] || { echo "$1 needs a value (see --help)" >&2; exit 2; }; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply) APPLY=true ;;
@@ -43,7 +44,7 @@ while [[ $# -gt 0 ]]; do
     --keep-days) need_number "$1" "${2:-}"; KEEP_DAYS="$2"; shift ;;
     --idle-days) need_number "$1" "${2:-}"; IDLE_DAYS="$2"; shift ;;
     --projects) [[ -d "${2:-}" ]] || { echo "--projects needs a directory" >&2; exit 2; }; PROJECTS="$2"; shift ;;
-    --only) ONLY="${2:-}"; shift ;;
+    --only) need_value "$1" "${2:-}"; ONLY="$2"; shift ;;
     --unused-images) UNUSED_IMAGES=true ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
@@ -79,18 +80,48 @@ if wants docker; then
 fi
 
 # --- node_modules in idle repositories ----------------------------------------
-# A repository is idle when its last commit is older than --idle-days and it has
-# no uncommitted change. Only a node_modules beside a package.json is removed
+# A repository is idle when its last commit is older than --idle-days, it has
+# no uncommitted change, and nothing runs from it now: no process of this user
+# has its working directory inside it, and no running container bind-mounts it
+# (a service started a month ago and left running has no recent commit). Only a node_modules beside a package.json is removed
 # (npm install puts it back), never one git tracks, and never one that belongs
 # to a nested repository other than the one being looked at.
+in_use() { # in_use <repo>: a running process or container uses it
+  local r="$1" p
+  # A process uses the repository it runs in: its working directory is inside.
+  # (Not the other way round: a shell in ~/Projects uses none of them.)
+  for p in ${IN_USE_CWD[@]+"${IN_USE_CWD[@]}"}; do
+    [[ "$p" == "$r" || "$p" == "$r"/* ]] && return 0
+  done
+  # A bind mount reaches everything under its source, so a container that
+  # mounts a parent directory may use this repository too.
+  for p in ${IN_USE_MOUNT[@]+"${IN_USE_MOUNT[@]}"}; do
+    [[ "$p" == "$r" || "$p" == "$r"/* || "$r" == "$p"/* ]] && return 0
+  done
+  return 1
+}
 if wants node; then
   now="$(date +%s)"
+  IN_USE_CWD=() IN_USE_MOUNT=()
+  for p in /proc/[0-9]*; do
+    c="$(readlink "$p/cwd" 2>/dev/null)" || continue
+    [[ -n "$c" ]] && IN_USE_CWD+=("$c")
+  done
+  if docker_up; then
+    while IFS= read -r m; do [[ -n "$m" && "$m" != / ]] && IN_USE_MOUNT+=("$m"); done < <(docker ps -q | xargs -r docker inspect \
+      -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}{{"\n"}}{{end}}{{end}}' 2>/dev/null)
+  fi
   while IFS= read -r -d '' gitdir; do
     repo="$(dirname "$gitdir")"
     last="$(git -C "$repo" log -1 --format=%ct 2>/dev/null)" || continue
     [[ -n "$last" ]] || continue
     (( now - last > IDLE_DAYS * 86400 )) || continue
     [[ -z "$(git -C "$repo" status --porcelain 2>/dev/null)" ]] || continue
+    repo="$(cd "$repo" && pwd -P)"
+    if in_use "$repo"; then
+      echo "Kept: $(basename "$repo") is in use (a process or container runs from it)."
+      continue
+    fi
     while IFS= read -r -d '' nm; do
       [[ -L "$nm" ]] && continue
       [[ -f "$(dirname "$nm")/package.json" ]] || continue

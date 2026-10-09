@@ -34,7 +34,8 @@ def env(tmp_path):
     for name in ("docker", "uv", "pnpm", "npm"):
         (bindir / name).write_text(
             f'#!/bin/sh\necho "{name} $*" >> {log}\n'
-            'case "$*" in "system df"*) echo "Build Cache|1.5GB" ;; "cache dir") echo /nonexistent ;; esac\n'
+            'case "$*" in "system df"*) echo "Build Cache|1.5GB" ;; "cache dir") echo /nonexistent ;;\n'
+            '  "ps -q") [ -n "$FAKE_MOUNT" ] && echo c1 ;; inspect*) [ -n "$FAKE_MOUNT" ] && echo "$FAKE_MOUNT" ;; esac\n'
             "exit 0\n"
         )
         (bindir / name).chmod(0o755)
@@ -138,4 +139,53 @@ def test_help_is_the_header_comment_only(env):
     assert r.returncode == 0 and calls == ""
     assert "--apply" in r.stdout and "NEVER removed" in r.stdout
     assert "set -euo pipefail" not in r.stdout and "#" not in r.stdout
+
+
+def test_a_repository_a_process_runs_in_is_kept(env):
+    """No commit for a month does not mean unused: a dev server left running."""
+    idle = repo(env, "idle")
+    proc = subprocess.Popen(["sleep", "30"], cwd=idle / "node_modules")
+    try:
+        r, _ = run(env, "--apply", "--yes", "--only", "node")
+    finally:
+        proc.kill()
+        proc.wait()
+    assert r.returncode == 0, r.stderr
+    assert (idle / "node_modules").is_dir()
+    assert "idle is in use" in r.stdout
+
+
+def test_a_repository_a_running_container_mounts_is_kept(env):
+    idle = repo(env, "idle")
+    env["env"]["FAKE_MOUNT"] = str(idle.resolve())
+    r, _ = run(env, "--apply", "--yes", "--only", "node")
+    assert r.returncode == 0, r.stderr
+    assert (idle / "node_modules").is_dir()
+
+
+@pytest.mark.parametrize("flag", ["--only", "--projects", "--keep-days"])
+def test_an_option_without_its_value_is_named(env, flag):
+    r = subprocess.run(["bash", str(SCRIPT), flag], capture_output=True, text=True,
+                       env=env["env"], stdin=subprocess.DEVNULL, timeout=60)
+    assert r.returncode == 2 and flag in r.stderr, r.stderr
+
+
+def test_a_process_in_the_parent_directory_uses_no_repository(env):
+    """A shell sitting in ~/Projects runs in none of the repositories under it."""
+    idle = repo(env, "idle")
+    proc = subprocess.Popen(["sleep", "30"], cwd=env["projects"])
+    try:
+        r, _ = run(env, "--apply", "--yes", "--only", "node")
+    finally:
+        proc.kill()
+        proc.wait()
+    assert r.returncode == 0, r.stderr
+    assert not (idle / "node_modules").exists()
+
+
+def test_a_container_mounting_the_parent_directory_keeps_them(env):
+    idle = repo(env, "idle")
+    env["env"]["FAKE_MOUNT"] = str(env["projects"].resolve())
+    run(env, "--apply", "--yes", "--only", "node")
+    assert (idle / "node_modules").is_dir()
 

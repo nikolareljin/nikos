@@ -321,7 +321,7 @@ it only with `--apply` (it asks first; `--yes` for no terminal):
 |---|---|
 | Docker build cache not used in `--keep-days` (7) | cache used this week |
 | Docker images with no tag; with `--unused-images`, tagged ones no container uses | images any container, running or stopped, uses |
-| `node_modules` in git repositories under `--projects` (`~/Projects`) with no commit for `--idle-days` (30) and nothing uncommitted, beside a `package.json` | repositories in use, tracked or nested ones |
+| `node_modules` in git repositories under `--projects` (`~/Projects`) with no commit for `--idle-days` (30) and nothing uncommitted, beside a `package.json` | repositories with recent commits or uncommitted changes, one a process of yours runs in or a running container bind-mounts, tracked or nested ones |
 | uv, pnpm, npm cache entries no project uses; pip files not used in `--keep-days` | everything referenced |
 
 Never removed: Docker volumes (databases, indexes and models, also of projects not

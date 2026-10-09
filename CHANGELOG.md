@@ -7,7 +7,8 @@ All notable changes to NikOS are documented here.
 ### Added
 - `nikos clean` (`scripts/clean-caches.sh`) frees disk from caches nothing uses: Docker
   build cache unused for `--keep-days` (7), untagged images, `node_modules` in git
-  repositories idle for `--idle-days` (30) with nothing uncommitted, and unused uv,
+  repositories idle for `--idle-days` (30) with nothing uncommitted and nothing running
+  from them (no process of yours inside, no running container bind-mounting them), and unused uv,
   pnpm, npm and pip cache entries. A dry run lists each item with its size; `--apply`
   removes. It never removes Docker volumes, containers, virtual environments, build
   output or tracked files, and calls no `docker volume` or `docker system prune`.
