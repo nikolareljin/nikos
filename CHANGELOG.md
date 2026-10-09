@@ -2,6 +2,15 @@
 
 All notable changes to NikOS are documented here.
 
+## [Unreleased]
+
+### Fixed
+- `nikos doctor` reported the Ollama forwarder down while containers were
+  answered: it probed from the host with the bridge address as source, which was
+  dropped. It probes from `127.0.0.1` now.
+- `nikos doctor` warned "ufw is active" with ufw off: `ufw.service` stays active
+  after it runs. It reads `ENABLED=` in `/etc/ufw/ufw.conf` now.
+
 ## [1.1.1] - 2026-10-08
 
 ### Fixed

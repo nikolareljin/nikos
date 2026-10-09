@@ -850,8 +850,10 @@ cmd_doctor() {
     local unit="${NIKOS_SYSTEMD_DIR:-/etc/systemd/system}/nikos-ollama-bridge.socket" listen
     if [[ -f "${unit}" ]]; then
       listen="$(sed -n 's/^ListenStream=//p' "${unit}" | head -1)"
+      # From loopback: a host request to its own bridge address goes out with
+      # that address as source, and was seen dropped while containers got answers.
       check "Ollama forwarder answers on the Docker bridge (${listen})" \
-        curl -fsS --max-time 5 -o /dev/null "http://${listen}/api/version"
+        curl -fsS --max-time 5 --interface 127.0.0.1 -o /dev/null "http://${listen}/api/version"
       # The play refuses the forwarder where a LAN or VPN uses 172.16.0.0/12,
       # but a VPN can connect after the play ran; the filter would then let its
       # machines through. Docker names its own bridges; every other counts.
@@ -865,7 +867,9 @@ cmd_doctor() {
       check "Ollama forwarder's interface filter loaded" systemctl is-active --quiet nikos-ollama-bridge-filter.service
       # ufw's default deny drops a container's packets to the host before the
       # forwarder sees them; a request from the host itself still passes.
-      if systemctl is-active --quiet ufw 2>/dev/null; then
+      # ufw.service is a oneshot that stays "active" with the firewall off;
+      # ENABLED= in ufw.conf is what says whether it filters.
+      if grep -Eqs '^ENABLED=yes' "${NIKOS_UFW_CONF:-/etc/ufw/ufw.conf}"; then
         print_warn "ufw is active: containers reach the forwarder only if it allows them, e.g. sudo ufw allow in on docker0 to any port ${listen##*:} proto tcp (and each br-* network)"
       fi
       # The same check the forwarder runs before every start (roles/ai-stack).
