@@ -12,6 +12,8 @@ All notable changes to NikOS are documented here.
   pnpm, npm and pip cache entries. A dry run lists each item with its size; `--apply`
   removes. It never removes Docker volumes, containers, virtual environments, build
   output or tracked files, and calls no `docker volume` or `docker system prune`.
+- The site lists `nikos clean`: the command table on the included page and the
+  maintenance commands on the install page.
 
 ### Fixed
 - `nikos doctor` reported the Ollama forwarder down while containers were

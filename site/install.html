@@ -132,12 +132,23 @@ nikos add ollama-vision
 nikos status
 nikos doctor
 
+<span class="c"># free disk from caches nothing uses (a dry run; --apply removes, after a yes)</span>
+nikos clean
+nikos clean --apply
+
 <span class="c"># read the last playbook log</span>
 nikos log 100</code></pre>
 
   <p>Every role is idempotent, so re-running changes only what has drifted. <code>nikos update</code> reads
   its target from what is checked out: a release install advances to the newest release only when that
   release is genuinely newer, and a branch install stays on its branch. An update never downgrades.</p>
+
+  <p><code>nikos clean</code> lists, with sizes, what nothing uses: Docker build cache unused for a
+  week (every builder), untagged images, <code>node_modules</code> in git repositories with no commit
+  for 30 days, nothing uncommitted and nothing running from them, and unused uv, pnpm, npm and pip
+  cache entries. It removes them only with <code>--apply</code>. It never removes Docker volumes,
+  containers, virtual environments, build output or tracked files. Details:
+  <a href="https://github.com/nikolareljin/nikos/blob/main/docs/debugging.md#disk-full-nikos-clean">docs/debugging.md</a>.</p>
 
   <h2>Customising before you run</h2>
 
