@@ -695,6 +695,8 @@ def test_doctor_says_nothing_of_ufw_when_it_is_off(tmp_path, bindir, conf_text):
     if conf_text is not None:
         conf.write_text(conf_text)
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin", ufw_conf=conf)
+    # The network check runs after the ufw check: doctor got past it.
+    assert "no network outside Docker uses 172.16.0.0/12" in out, out
     assert "ufw is active" not in out, out
 
 
