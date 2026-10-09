@@ -131,3 +131,11 @@ def test_no_terminal_and_no_yes_removes_nothing(env):
 def test_bad_options_are_refused(env, args):
     r, calls = run(env, *args)
     assert r.returncode == 2 and calls == ""
+
+
+def test_help_is_the_header_comment_only(env):
+    r, calls = run(env, "--help")
+    assert r.returncode == 0 and calls == ""
+    assert "--apply" in r.stdout and "NEVER removed" in r.stdout
+    assert "set -euo pipefail" not in r.stdout and "#" not in r.stdout
+

@@ -32,7 +32,8 @@ PROJECTS="${HOME}/Projects"
 ONLY="docker,node,packages"
 UNUSED_IMAGES=false
 
-usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; }
+# The comment block at the top, up to the first line that is not a comment.
+usage() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; }
 
 need_number() { [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo "$1 needs a whole number of days" >&2; exit 2; }; }
 while [[ $# -gt 0 ]]; do
