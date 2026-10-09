@@ -211,3 +211,21 @@ def test_without_proc_lsof_names_the_working_directories(env):
     assert r.returncode == 0, r.stderr
     assert (idle / "node_modules").is_dir() and "idle is in use" in r.stdout
 
+
+def test_npm_and_pnpm_wait_for_a_running_install(env, tmp_path):
+    """Their cache cleanups can remove what a running install has just written."""
+    fake = tmp_path / "npm-running" / "npm"
+    fake.parent.mkdir()
+    fake.write_text("#!/bin/sh\nsleep 30\n")
+    fake.chmod(0o755)
+    proc = subprocess.Popen([str(fake)])
+    try:
+        r, calls = run(env, "--apply", "--yes", "--only", "packages")
+    finally:
+        proc.kill()
+        proc.wait()
+    assert r.returncode == 0, r.stderr
+    assert "skipped, an npm, pnpm or yarn process is running" in r.stdout
+    assert "npm cache verify" not in calls and "pnpm store prune" not in calls
+    assert "uv cache prune" in calls
+

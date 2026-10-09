@@ -154,15 +154,28 @@ if wants node; then
 fi
 
 # --- package-manager caches: only what nothing uses ---------------------------
+# npm's garbage collection and pnpm's store prune can remove what an install
+# running at the same moment has written but not yet indexed. While one runs,
+# those two are skipped; uv locks its cache, and pip's step only takes files
+# unused for days.
+installing() { # installing <name>...: a process with that exact name runs
+  local n
+  for n in "$@"; do pgrep -x "$n" >/dev/null 2>&1 && return 0; done
+  return 1
+}
 if wants packages; then
   if command -v uv >/dev/null 2>&1; then
     plan "uv cache: entries no environment uses" "of $(human "$(uv cache dir 2>/dev/null)")" "uv cache prune"
   fi
-  if command -v pnpm >/dev/null 2>&1; then
-    plan "pnpm store: packages no project references" "-" "pnpm store prune"
-  fi
-  if command -v npm >/dev/null 2>&1; then
-    plan "npm cache: garbage and unreferenced data" "of $(human "${HOME}/.npm/_cacache")" "npm cache verify"
+  if installing npm pnpm yarn; then
+    echo "npm and pnpm caches: skipped, an npm, pnpm or yarn process is running."
+  else
+    if command -v pnpm >/dev/null 2>&1; then
+      plan "pnpm store: packages no project references" "-" "pnpm store prune"
+    fi
+    if command -v npm >/dev/null 2>&1; then
+      plan "npm cache: garbage and unreferenced data" "of $(human "${HOME}/.npm/_cacache")" "npm cache verify"
+    fi
   fi
   pip_cache="${HOME}/.cache/pip"
   if [[ -d "$pip_cache" ]]; then
