@@ -275,7 +275,7 @@ aider / Claude Code / Continue  →  use in code
 - [Customization](docs/customization.md) — vars, roles, optional bundles
 - [Profiles](docs/profiles.md) - desktop and server, and which roles each runs
 - [Dual boot](docs/dual-boot.md) - os-prober, boot order, UEFI vs legacy, Secure Boot
-- [Debugging](docs/debugging.md) — `nikos doctor`, common issues, logs
+- [Debugging](docs/debugging.md) — `nikos doctor`, `nikos clean` (disk full), common issues, logs
 - [Development](docs/development.md) — adding roles, testing, contributing
 
 ## Contributing
