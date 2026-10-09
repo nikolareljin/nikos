@@ -193,14 +193,15 @@ def _is_error(line: str) -> bool:
     return line.startswith(("[error]", "[Error!]"))
 
 
-def _doctor(tmp_path, units, path, extra_vars=""):
+def _doctor(tmp_path, units, path, extra_vars="", ufw_conf=None):
     home = _fake_home(tmp_path, "server")
     (home / "roles").symlink_to(ROOT / "roles")
     if extra_vars:
         with open(home / "vars" / "local.yml", "a", encoding="utf-8") as fh:
             fh.write(extra_vars)
     env = dict(os.environ, NIKOS_HOME=str(home), HOME=str(tmp_path), PATH=path,
-               NIKOS_SYSTEMD_DIR=str(units))
+               NIKOS_SYSTEMD_DIR=str(units),
+               NIKOS_UFW_CONF=str(ufw_conf or tmp_path / "no-ufw.conf"))
     r = subprocess.run(["bash", str(NIKOS_CLI), "doctor"], capture_output=True, text=True, env=env, timeout=60)
     return re.sub(r"\x1b\[[0-9;]*m", "", r.stdout + r.stderr)
 
@@ -669,13 +670,48 @@ def test_doctor_warns_that_ufw_may_block_containers(tmp_path, bindir):
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY)
     p = bindir / "systemctl"
+    p.write_text('#!/bin/sh\ncase "$*" in *is-active*nikos-ollama-bridge-filter*) exit 0 ;; esac\nexit 3\n')
+    p.chmod(0o755)
+    units = tmp_path / "units"
+    _socket_unit(units, "172.17.0.1:11434")
+    conf = tmp_path / "ufw.conf"
+    conf.write_text("ENABLED=yes\n")
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin", ufw_conf=conf)
+    line = next(l for l in out.splitlines() if "ufw is active" in l)
+    assert not _is_error(line) and "ufw allow in on docker0 to any port 11434" in line, line
+
+
+@pytest.mark.parametrize("conf_text", ["ENABLED=no\n", None])
+def test_doctor_says_nothing_of_ufw_when_it_is_off(tmp_path, bindir, conf_text):
+    """ufw.service reads active with ENABLED=no: it is a oneshot that stays up."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY)
+    p = bindir / "systemctl"
     p.write_text('#!/bin/sh\ncase "$*" in *is-active*ufw*) exit 0 ;; *is-active*nikos-ollama-bridge-filter*) exit 0 ;; esac\nexit 3\n')
     p.chmod(0o755)
     units = tmp_path / "units"
     _socket_unit(units, "172.17.0.1:11434")
-    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
-    line = next(l for l in out.splitlines() if "ufw is active" in l)
-    assert not _is_error(line) and "ufw allow in on docker0 to any port 11434" in line, line
+    conf = tmp_path / "ufw.conf"
+    if conf_text is not None:
+        conf.write_text(conf_text)
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin", ufw_conf=conf)
+    assert "ufw is active" not in out, out
+
+
+def test_doctor_probes_the_forwarder_from_loopback(tmp_path, bindir):
+    """A host request to its own bridge address carries that address as source
+    and was dropped on a real machine; from 127.0.0.1 it is answered."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY)
+    args = tmp_path / "curl-args"
+    p = bindir / "curl"
+    p.write_text(f'#!/bin/sh\necho "$*" >> {args}\nexit 0\n')
+    p.chmod(0o755)
+    units = tmp_path / "units"
+    _socket_unit(units, "172.17.0.1:11434")
+    _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
+    probe = next(l for l in args.read_text().splitlines() if "172.17.0.1:11434" in l)
+    assert "--interface 127.0.0.1" in probe, probe
 
 
 
