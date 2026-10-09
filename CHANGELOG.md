@@ -2,7 +2,7 @@
 
 All notable changes to NikOS are documented here.
 
-## [Unreleased]
+## [1.2.0] - 2026-10-09
 
 ### Added
 - `nikos clean` (`scripts/clean-caches.sh`) frees disk from caches nothing uses: Docker
@@ -13,7 +13,7 @@ All notable changes to NikOS are documented here.
   removes. It never removes Docker volumes, containers, virtual environments, build
   output or tracked files, and calls no `docker volume` or `docker system prune`.
 - The site lists `nikos clean`: the command table on the included page and the
-  maintenance commands on the install page.
+  maintenance commands on the install page. The install page names the version it comes with.
 
 ### Fixed
 - `nikos doctor` reported the Ollama forwarder down while containers were
