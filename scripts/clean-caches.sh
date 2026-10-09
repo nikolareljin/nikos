@@ -66,8 +66,19 @@ docker_up() { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; 
 if wants docker; then
   if docker_up; then
     build="$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null | sed -n 's/^Build Cache|//p')"
-    plan "Docker build cache not used in ${KEEP_DAYS} days" "up to ${build:-?}" \
-      "docker builder prune -f --filter until=$((KEEP_DAYS * 24))h"
+    # Every builder: a docker-container builder (multi-arch builds) keeps its own
+    # cache, which `docker builder prune` (the default builder) never sees.
+    builders="$(docker buildx ls --format '{{.Name}}' 2>/dev/null | sed 's/\*$//' | sort -u)" || builders=""
+    if [[ -n "$builders" ]]; then
+      for b in $builders; do
+        plan "Docker build cache of builder $b, not used in ${KEEP_DAYS} days" "up to ${build:-?}" \
+          "docker buildx prune --builder $b -f --filter until=$((KEEP_DAYS * 24))h"
+        build="(above)"
+      done
+    else
+      plan "Docker build cache not used in ${KEEP_DAYS} days" "up to ${build:-?}" \
+        "docker builder prune -f --filter until=$((KEEP_DAYS * 24))h"
+    fi
     dangling="$(docker image ls -q -f dangling=true | wc -l | tr -d ' ')"
     plan "Docker images with no tag (${dangling})" "-" "docker image prune -f"
     if $UNUSED_IMAGES; then
@@ -103,10 +114,20 @@ in_use() { # in_use <repo>: a running process or container uses it
 if wants node; then
   now="$(date +%s)"
   IN_USE_CWD=() IN_USE_MOUNT=()
-  for p in /proc/[0-9]*; do
-    c="$(readlink "$p/cwd" 2>/dev/null)" || continue
-    [[ -n "$c" ]] && IN_USE_CWD+=("$c")
-  done
+  proc="${CLEAN_PROC_DIR:-/proc}"   # a test seam
+  if [[ -d "$proc" ]]; then
+    for p in "$proc"/[0-9]*; do
+      c="$(readlink "$p/cwd" 2>/dev/null)" || continue
+      [[ -n "$c" ]] && IN_USE_CWD+=("$c")
+    done
+  elif command -v lsof >/dev/null 2>&1; then
+    # macOS has no /proc: lsof lists each process's working directory.
+    while IFS= read -r c; do [[ -n "$c" ]] && IN_USE_CWD+=("$c"); done \
+      < <(lsof -a -d cwd -u "$(id -u)" -Fn 2>/dev/null | sed -n 's/^n//p')
+  else
+    echo "Cannot tell which repositories processes run in (no /proc, no lsof): node_modules is left alone." >&2
+    IDLE_DAYS=999999
+  fi
   if docker_up; then
     while IFS= read -r m; do [[ -n "$m" && "$m" != / ]] && IN_USE_MOUNT+=("$m"); done < <(docker ps -q | xargs -r docker inspect \
       -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}{{"\n"}}{{end}}{{end}}' 2>/dev/null)

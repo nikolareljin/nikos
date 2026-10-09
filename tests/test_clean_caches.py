@@ -31,11 +31,13 @@ def env(tmp_path):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     log = tmp_path / "calls"
-    for name in ("docker", "uv", "pnpm", "npm"):
+    for name in ("docker", "uv", "pnpm", "npm", "lsof"):
         (bindir / name).write_text(
             f'#!/bin/sh\necho "{name} $*" >> {log}\n'
             'case "$*" in "system df"*) echo "Build Cache|1.5GB" ;; "cache dir") echo /nonexistent ;;\n'
-            '  "ps -q") [ -n "$FAKE_MOUNT" ] && echo c1 ;; inspect*) [ -n "$FAKE_MOUNT" ] && echo "$FAKE_MOUNT" ;; esac\n'
+            '  "ps -q") [ -n "$FAKE_MOUNT" ] && echo c1 ;; inspect*) [ -n "$FAKE_MOUNT" ] && echo "$FAKE_MOUNT" ;;\n'
+            '  "buildx ls"*) [ -n "$FAKE_BUILDERS" ] && printf "%b\\n" "$FAKE_BUILDERS" ;;\n'
+            '  "-a -d cwd"*) [ -n "$FAKE_CWD" ] && echo "n$FAKE_CWD" ;; esac\n'
             "exit 0\n"
         )
         (bindir / name).chmod(0o755)
@@ -188,4 +190,24 @@ def test_a_container_mounting_the_parent_directory_keeps_them(env):
     env["env"]["FAKE_MOUNT"] = str(env["projects"].resolve())
     run(env, "--apply", "--yes", "--only", "node")
     assert (idle / "node_modules").is_dir()
+
+
+def test_every_builder_is_pruned(env):
+    """A docker-container builder keeps its own cache; builder prune misses it."""
+    env["env"]["FAKE_BUILDERS"] = "default*\\nmultiarch\\ndefault"
+    _, calls = run(env, "--apply", "--yes", "--only", "docker")
+    assert "docker buildx prune --builder default -f --filter until=168h" in calls
+    assert "docker buildx prune --builder multiarch -f --filter until=168h" in calls
+    assert calls.count("buildx prune --builder default ") == 1
+    assert "docker builder prune" not in calls
+
+
+def test_without_proc_lsof_names_the_working_directories(env):
+    """macOS has no /proc."""
+    idle = repo(env, "idle")
+    env["env"]["CLEAN_PROC_DIR"] = "/nonexistent-proc"
+    env["env"]["FAKE_CWD"] = str((idle / "node_modules").resolve())
+    r, _ = run(env, "--apply", "--yes", "--only", "node")
+    assert r.returncode == 0, r.stderr
+    assert (idle / "node_modules").is_dir() and "idle is in use" in r.stdout
 
