@@ -286,6 +286,8 @@ Usage:
   nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw
   nikos status           Show NikOS version, Ollama models, installed roles
   nikos doctor           Check for broken configs and missing dependencies
+  nikos clean [--apply]  Free disk: old Docker build cache, idle node_modules, unused
+                         package caches. A dry run unless --apply; never Docker volumes
   nikos log [N]          Show last N lines of the latest playbook log (default 50)
   nikos log list         List available log files
   nikos help             Show this message
@@ -988,6 +990,7 @@ case "${1:-help}" in
   add)    cmd_add "${2:-}" ;;
   status) cmd_status ;;
   doctor) cmd_doctor ;;
+  clean)  shift; exec bash "${NIKOS_HOME}/scripts/clean-caches.sh" "$@" ;;
   log)    cmd_log "${2:-50}" ;;
   help | --help | -h) usage ;;
   *)

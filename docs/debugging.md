@@ -311,6 +311,28 @@ git -C ~/.local/share/nikos branch --show-current           # branch installs
 An empty `branch --show-current` with a tag from `describe` is a release
 install and is expected.
 
+## Disk full: nikos clean
+
+A full disk fails quietly: Elasticsearch, for one, blocks writes above 95% and
+indexing just stops. `nikos clean` lists what nothing uses, with sizes, and removes
+it only with `--apply` (it asks first; `--yes` for no terminal):
+
+| What | Kept |
+|---|---|
+| Docker build cache not used in `--keep-days` (7) | cache used this week |
+| Docker images with no tag; with `--unused-images`, tagged ones no container uses | images any container, running or stopped, uses |
+| `node_modules` in git repositories under `--projects` (`~/Projects`) with no commit for `--idle-days` (30) and nothing uncommitted, beside a `package.json` | repositories in use, tracked or nested ones |
+| uv, pnpm, npm cache entries no project uses; pip files not used in `--keep-days` | everything referenced |
+
+Never removed: Docker volumes (databases, indexes and models, also of projects not
+being worked on), containers, virtual environments, build output, tracked files.
+`--only docker,node,packages` limits it.
+
+```bash
+nikos clean                 # what would go, and how much
+nikos clean --apply         # remove it, after a yes
+```
+
 ## Ansible logs
 
 Run the playbook directly with verbose output:

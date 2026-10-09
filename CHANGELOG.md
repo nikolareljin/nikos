@@ -4,6 +4,14 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+### Added
+- `nikos clean` (`scripts/clean-caches.sh`) frees disk from caches nothing uses: Docker
+  build cache unused for `--keep-days` (7), untagged images, `node_modules` in git
+  repositories idle for `--idle-days` (30) with nothing uncommitted, and unused uv,
+  pnpm, npm and pip cache entries. A dry run lists each item with its size; `--apply`
+  removes. It never removes Docker volumes, containers, virtual environments, build
+  output or tracked files, and calls no `docker volume` or `docker system prune`.
+
 ### Fixed
 - `nikos doctor` reported the Ollama forwarder down while containers were
   answered: it probed from the host with the bridge address as source, which was

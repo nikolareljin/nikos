@@ -170,6 +170,7 @@ nikos add mistral-rs # install optional: mistral.rs Rust LLM server
 nikos add ollama-*   # install optional: a model group (see Local models above)
 nikos status         # show version, Ollama models, conda envs
 nikos doctor         # check for broken configs and missing tools
+nikos clean          # list unused caches to free disk; --apply removes them (never volumes)
 nikos log [N]        # tail the latest playbook log
 ```
 
