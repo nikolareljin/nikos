@@ -102,6 +102,10 @@ docker_code="$(ask from_docker)"; lan_code="$(ask from_lan)"
 echo "B: through the forwarder: docker0 -> ${docker_code}, lan0 -> ${lan_code:-000}"
 [[ "${docker_code}" == 200 ]] || { inside 'journalctl -u nikos-ollama-bridge.service -n 20 --no-pager' || true; echo "FAIL: a container got no answer"; exit 1; }
 [[ "${lan_code}" != 200 ]] || { echo "FAIL: a LAN machine in 172.16.0.0/12 got an answer"; exit 1; }
+# nikos doctor's probe, as scripts/nikos runs it: from the host, source 127.0.0.1.
+inside 'curl -fsS --max-time 5 --interface 127.0.0.1 -o /dev/null http://172.17.0.1:11434/' \
+  || { echo "FAIL: the doctor's probe from 127.0.0.1 got no answer"; exit 1; }
+echo "B: nikos doctor's probe from 127.0.0.1 is answered"
 
 again="$(play 172.17.0.1 2>&1)" || { echo "${again}" | tail -20; echo "FAIL: the second run failed"; exit 1; }
 changed="$(echo "${again}" | sed -n 's/.*changed=\([0-9]*\).*/\1/p' | head -1)"
