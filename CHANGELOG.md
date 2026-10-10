@@ -4,13 +4,6 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
-### Added
-- Search and share metadata on every page of the site: description, keywords, canonical
-  URL, Open Graph and Twitter card with a 1200x630 image (`site/assets/og-image.png`), and
-  JSON-LD (`SoftwareApplication` on the home page). `site/sitemap.xml` lists the pages.
-  `scripts/seo.py --write` writes it all from one table; `tests/test_seo.py` fails on a
-  stale block, a changed title, a duplicate tag, or a page missing from the table.
-
 ### Changed
 - `nikos clean` clears the whole uv cache (`uv cache clean`), not only what `uv cache prune`
   calls unreachable: prune kept nearly all of a 22 GB cache, because uv's index still points
