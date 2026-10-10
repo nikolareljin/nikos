@@ -66,24 +66,31 @@ docker_up() { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; 
 if wants docker; then
   if docker_up; then
     build="$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null | sed -n 's/^Build Cache|//p')"
+    # --keep-days 0: all of it, with no age filter.
+    age_filter=""; age_text="not used in ${KEEP_DAYS} days"
+    if (( KEEP_DAYS > 0 )); then age_filter=" --filter until=$((KEEP_DAYS * 24))h"; else age_text="all of it"; fi
     # Every builder: a docker-container builder (multi-arch builds) keeps its own
     # cache, which `docker builder prune` (the default builder) never sees.
     builders="$(docker buildx ls --format '{{.Name}}' 2>/dev/null | sed 's/\*$//' | sort -u)" || builders=""
     if [[ -n "$builders" ]]; then
       for b in $builders; do
-        plan "Docker build cache of builder $b, not used in ${KEEP_DAYS} days" "up to ${build:-?}" \
-          "docker buildx prune --builder $b -f --filter until=$((KEEP_DAYS * 24))h"
+        plan "Docker build cache of builder $b, ${age_text}" "up to ${build:-?}" \
+          "docker buildx prune --builder $b -f${age_filter}"
         build="(above)"
       done
     else
-      plan "Docker build cache not used in ${KEEP_DAYS} days" "up to ${build:-?}" \
-        "docker builder prune -f --filter until=$((KEEP_DAYS * 24))h"
+      plan "Docker build cache, ${age_text}" "up to ${build:-?}" \
+        "docker builder prune -f${age_filter}"
     fi
     dangling="$(docker image ls -q -f dangling=true | wc -l | tr -d ' ')"
     plan "Docker images with no tag (${dangling})" "-" "docker image prune -f"
     if $UNUSED_IMAGES; then
-      plan "Docker images no container uses, older than ${KEEP_DAYS} days" "-" \
-        "docker image prune -a -f --filter until=$((KEEP_DAYS * 24))h"
+      if (( KEEP_DAYS > 0 )); then
+        plan "Docker images no container uses, older than ${KEEP_DAYS} days" "-" \
+          "docker image prune -a -f --filter until=$((KEEP_DAYS * 24))h"
+      else
+        plan "Docker images no container uses" "-" "docker image prune -a -f"
+      fi
     fi
   else
     echo "Docker: not running or not reachable; skipped."
@@ -165,7 +172,9 @@ installing() { # installing <name>...: a process with that exact name runs
 }
 if wants packages; then
   if command -v uv >/dev/null 2>&1; then
-    plan "uv cache: entries no environment uses" "of $(human "$(uv cache dir 2>/dev/null)")" "uv cache prune"
+    # A short lock wait: another uv process (an install) holds the lock, and the
+    # prune is skipped rather than waiting minutes or forcing it.
+    plan "uv cache: entries no environment uses" "of $(human "$(uv cache dir 2>/dev/null)")" "env UV_LOCK_TIMEOUT=10 uv cache prune"
   fi
   if installing npm pnpm yarn; then
     echo "npm and pnpm caches: skipped, an npm, pnpm or yarn process is running."
@@ -198,7 +207,6 @@ for item in "${PLAN[@]}"; do
   printf '%-62s %10s\n' "$what" "$size"
 done
 echo
-before="$(df -Pk / | awk 'NR==2 {print $4}')"
 if ! $APPLY; then
   echo "Dry run: nothing was removed. Run with --apply to remove the above."
   exit 0
@@ -212,10 +220,14 @@ if ! $YES; then
   [[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]] || { echo "Nothing removed."; exit 0; }
 fi
 
+free_kb() { df -Pk / | awk 'NR==2 {print $4}'; }
+gb() { awk -v k="$1" 'BEGIN {printf "%.1f", k / 1048576}'; }
 failed=0
+before="$(free_kb)"
 for item in "${PLAN[@]}"; do
   IFS='|' read -r what _ action <<<"$item"
   echo "-> $what"
+  step_before="$(free_kb)"
   if [[ "$action" == /* ]]; then
     # A path: only a node_modules directory, checked again right before.
     if [[ "$(basename "$action")" == node_modules && -d "$action" && ! -L "$action" ]]; then
@@ -225,10 +237,19 @@ for item in "${PLAN[@]}"; do
     fi
   else
     # shellcheck disable=SC2086  # the planned command, split into words on purpose
-    $action >/dev/null || { echo "   failed: $action" >&2; failed=1; }
+    if ! err="$($action 2>&1 >/dev/null)"; then
+      if [[ "$action" == *"uv cache prune"* && "$err" == *"lock"* ]]; then
+        echo "   skipped: another uv process holds its cache; run again when it is done"
+      else
+        printf '   failed: %s\n%s\n' "$action" "$err" >&2
+        failed=1
+      fi
+    fi
   fi
+  echo "   freed $(gb $(( $(free_kb) - step_before ))) GB"
 done
-after="$(df -Pk / | awk 'NR==2 {print $4}')"
+after="$(free_kb)"
 echo
-echo "Freed on /: $(( (after - before) / 1048576 )) GB ($(df -h / | awk 'NR==2 {print $5}') used now)."
+echo "Free on /: $(gb "$before") GB before, $(gb "$after") GB after ($(df -h / | awk 'NR==2 {print $5}') used)."
+echo "Other programs write to the disk at the same time, so the numbers are approximate."
 exit "$failed"

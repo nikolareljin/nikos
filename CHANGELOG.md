@@ -2,6 +2,17 @@
 
 All notable changes to NikOS are documented here.
 
+## [Unreleased]
+
+### Fixed
+- `nikos clean` reported "Freed on /: 0 GB" after freeing about 10 GB: one rounded-down
+  difference measured around the confirmation prompt. Each step now reports what it freed,
+  and the total shows free space before and after.
+- `nikos clean` waited 5 minutes on a uv cache another uv process held, then reported a
+  failure. It waits 10 seconds (`UV_LOCK_TIMEOUT`) and reports the step as skipped.
+- `nikos clean --keep-days 0` passed `until=0h`; it now removes all build cache, and with
+  `--unused-images` every image no container uses, with no age filter.
+
 ## [1.2.0] - 2026-10-09
 
 ### Added
