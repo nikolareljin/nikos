@@ -5,6 +5,11 @@ All notable changes to NikOS are documented here.
 ## [Unreleased]
 
 ### Changed
+- `nikos clean` clears the whole uv cache (`uv cache clean`), not only what `uv cache prune`
+  calls unreachable: prune kept nearly all of a 22 GB cache, because uv's index still points
+  at its unpacked packages. It is downloads; environments keep their files. When a uv
+  process holds the cache (a `uvx` tool such as an MCP server holds it while it runs), the
+  step is skipped after 10 seconds, naming the processes; `--uv-force` clears it anyway.
 - The open browser tab is easier to see. Firefox paints it in the NikOS accent, Nord
   frost `#88C0D0` (as GRUB's selected entry), with dark text, against the `#2E3440`
   strip; before, it was one step lighter (`#3B4252`), too close to tell. Chromium and
