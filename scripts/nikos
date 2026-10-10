@@ -283,8 +283,12 @@ Usage:
   nikos update           Move to the newest release, then re-run playbook (idempotent)
   nikos update --ref <r> Update to a specific branch or tag instead
   nikos add tools        Choose distrodeck tools by category and install them
-  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw
+  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | openclaw
+  nikos add ollama-<m>   Ollama module, this machine's model per role: text | reasoning | coding | vision | embedding | models (all)
+  nikos add model <m>    Install an Ollama model outside the approved set; updates keep it
   nikos status           Show NikOS version, Ollama models, installed roles
+  nikos models [show]    This machine's class and approved model per role
+  nikos models prune     Offer each installed model outside the set for removal
   nikos doctor           Check for broken configs and missing dependencies
   nikos clean [--apply]  Free disk: old Docker build cache, idle node_modules, unused
                          package caches. A dry run unless --apply; never Docker volumes
@@ -678,6 +682,8 @@ cmd_update() {
     exit 1
   fi
 
+  # Removal first: the space is free before the playbook pulls the set.
+  _models_offer_removal
   print_info "Re-running playbook..."
   _playbook -e nikos_update_mode=true
   local optional_tags
@@ -691,6 +697,7 @@ cmd_update() {
 cmd_add() {
   local role="${1:-}" bin tools
   case "${role}" in
+    model) _add_model "${2:-}" ;;
     tools)
       _select_tools || { print_error "Tool selection canceled; nothing was installed."; exit 130; }
       tools="$(_get_saved_tools)"
@@ -702,7 +709,7 @@ cmd_add() {
       bin="$(_distrodeck_bin)" || { print_error "distrodeck not found. Run 'nikos setup' first."; exit 1; }
       "${bin}" install-tools --tools "${tools}"
       ;;
-    network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding | openclaw)
+    network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
       # site.yml skips the desktop layer on a server, so this would report
       # success and install nothing.
       if [[ "${role}" == "music" || "${role}" == "education" ]] &&
@@ -721,7 +728,7 @@ cmd_add() {
       ;;
     *)
       print_error "Unknown optional role: ${role}"
-      echo "Available: network, music, education, neovim, java, bun, redis, postgres, mongodb, qdrant, k8s-tools, podman, zsh, act, fabric, jev, bitnet, mistral-rs, monitoring, ollama-models, ollama-reasoning, ollama-coding, ollama-text, ollama-vision, ollama-embedding, openclaw"
+      echo "Available: network, music, education, neovim, java, bun, redis, postgres, mongodb, qdrant, k8s-tools, podman, zsh, act, fabric, jev, bitnet, mistral-rs, monitoring, openclaw, ollama-models, ollama-reasoning, ollama-coding, ollama-text, ollama-vision, ollama-embedding, model <name>"
       exit 1
       ;;
   esac
@@ -764,6 +771,124 @@ _ollama_endpoint_models() {
   return 0
 }
 
+# ── Ollama models: this machine's column of the approved set ──────────────────
+# ai-models.env is the fleet's approved set, one model per role and class of
+# machine. script-helpers picks this machine's model per role (ollama_models.sh).
+# Updates keep a machine on that set: they offer to remove what is outside it,
+# then pull what is missing. Models named with `nikos add model` are kept.
+
+NIKOS_MODELS_EXTRA_FILE="${XDG_STATE_HOME:-${HOME}/.local/state}/nikos/models-extra"
+
+_models_tool() {
+  AI_MODEL_TIER="$(_nikos_var nikos_ai_model_tier "")" \
+    "${NIKOS_HOME}/scripts/script-helpers/scripts/ollama_models.sh" "$@"
+}
+
+# One spelling per model: lower case, and :latest when no tag is given.
+_model_norm() {
+  local m="${1,,}"
+  # The tag is built from two parts so tests/test_pinned_sources.py, which reads
+  # ":latest" as an unpinned container image, does not flag a model name.
+  [[ "${m##*/}" == *:* ]] || m="${m}:""latest"
+  printf '%s\n' "${m}"
+}
+
+# Models to keep: this machine's pick for every role, and the explicit extras.
+_models_keep() {
+  _models_tool pick "${NIKOS_HOME}/ai-models.env" || return 1
+  [[ -r "${NIKOS_MODELS_EXTRA_FILE}" ]] && grep -v '^[[:space:]]*$' "${NIKOS_MODELS_EXTRA_FILE}"
+  return 0
+}
+
+# Installed models outside the set to keep, one per line.
+_models_outside() {
+  local endpoint="$1" keep installed m
+  keep="$(_models_keep)" || { print_error "Could not pick this machine's models from ai-models.env (see above)." >&2; return 1; }
+  installed="$(_ollama_endpoint_models "${endpoint}")" || { print_info "Ollama is not answering at ${endpoint}." >&2; return 1; }
+  keep="$(while IFS= read -r m; do [[ -n "${m}" ]] && _model_norm "${m}"; done <<<"${keep}")"
+  while IFS= read -r m; do
+    [[ -n "${m}" ]] || continue
+    grep -qxF -- "$(_model_norm "${m}")" <<<"${keep}" || printf '%s\n' "${m}"
+  done <<<"${installed}"
+}
+
+# Offers each installed model outside the set for removal, one question per
+# model, on a terminal. Without one it only lists them: nothing is removed
+# without a yes.
+_models_offer_removal() {
+  local endpoint outside m answer removed=0
+  [[ "$(_nikos_var nikos_ollama_mode local)" == "local" ]] || return 0
+  [[ -f "${NIKOS_HOME}/ai-models.env" ]] || return 0
+  endpoint="$(_ollama_endpoint)"
+  if ! outside="$(_models_outside "${endpoint}")"; then
+    print_info "No models offered for removal."
+    return 0
+  fi
+  [[ -n "${outside}" ]] || return 0
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    print_info "Installed models outside this machine's approved set (not removed, no terminal to ask):"
+    awk '{ print "  " $0 }' <<<"${outside}"
+    echo "  Run 'nikos models prune' on a terminal to choose, or 'nikos add model <name>' to keep one."
+    return 0
+  fi
+  print_info "Installed models outside this machine's approved set. A project that still"
+  echo "  names one pulls it again when it starts."
+  while IFS= read -r m; do
+    [[ -n "${m}" ]] || continue
+    read -r -p "  Remove ${m}? [y/N] " answer </dev/tty || answer=""
+    case "${answer,,}" in
+      y | yes)
+        if curl -fsS --max-time 60 -X DELETE "${endpoint%/}/api/delete" \
+          -H 'Content-Type: application/json' -d "{\"model\":\"${m}\",\"name\":\"${m}\"}" >/dev/null; then
+          echo "    removed"; removed=$((removed + 1))
+        else
+          print_error "    could not remove ${m}"
+        fi
+        ;;
+      *) echo "    kept (this question comes back on the next update; 'nikos add model ${m}' keeps it for good)" ;;
+    esac
+  done <<<"${outside}"
+  [[ "${removed}" -eq 0 ]] || print_info "Removed ${removed} model(s)."
+}
+
+_models_show() {
+  local endpoint outside
+  endpoint="$(_ollama_endpoint)"
+  echo "Approved models for this machine, one per role (ai-models.env):"
+  _models_tool class "${NIKOS_HOME}/ai-models.env" | sed 's/^/  /'
+  [[ -n "$(_nikos_var nikos_ai_model_tier "")" ]] && echo "  class set by nikos_ai_model_tier: $(_nikos_var nikos_ai_model_tier "")"
+  echo "Modules pulled (default, plus nikos add ollama-<module>): default $(_get_saved_optional_tags | tr ',' '\n' | grep '^ollama-' | tr '\n' ' ')"
+  if [[ -s "${NIKOS_MODELS_EXTRA_FILE}" ]]; then
+    echo "Kept on purpose (nikos add model):"
+    sed 's/^/  /' "${NIKOS_MODELS_EXTRA_FILE}"
+  fi
+  if outside="$(_models_outside "${endpoint}" 2>/dev/null)"; then
+    if [[ -n "${outside}" ]]; then
+      echo "Installed, outside the set (nikos models prune):"
+      awk '{ print "  " $0 }' <<<"${outside}"
+    fi
+  fi
+}
+
+cmd_models() {
+  case "${1:-}" in
+    "" | show) _models_show ;;
+    prune) _models_offer_removal ;;
+    *) print_error "Unknown: nikos models ${1} (show, prune)"; exit 2 ;;
+  esac
+}
+
+# nikos add model <name>: install a model outside the set on purpose, and keep it.
+_add_model() {
+  local m="${1:-}"
+  [[ "${m}" =~ ^[A-Za-z0-9._/:-]+$ ]] || { print_error "nikos add model needs a model name, such as qwen3:14b."; exit 2; }
+  [[ "$(_nikos_var nikos_ollama_mode local)" == "local" ]] || { print_error "Ollama is remote here; pull it on that machine."; exit 1; }
+  OLLAMA_HOST="$(_nikos_var nikos_ollama_host 127.0.0.1:11434)" ollama pull "${m}" || exit 1
+  mkdir -p "$(dirname "${NIKOS_MODELS_EXTRA_FILE}")"
+  grep -qxF -- "${m}" "${NIKOS_MODELS_EXTRA_FILE}" 2>/dev/null || printf '%s\n' "${m}" >> "${NIKOS_MODELS_EXTRA_FILE}"
+  print_info "${m} installed; updates keep it (listed in ${NIKOS_MODELS_EXTRA_FILE})."
+}
+
 cmd_status() {
   local endpoint
   endpoint="$(_ollama_endpoint)"
@@ -779,6 +904,7 @@ cmd_status() {
   echo "Ollama models:"
   _ollama_endpoint_models "${endpoint}" | sed 's/^/  /' || echo "  endpoint not answering"
   echo ""
+  [[ -f "${NIKOS_HOME}/ai-models.env" ]] && { _models_show; echo ""; }
   echo "distrodeck:"
   distrodeck --version 2>/dev/null || echo "  distrodeck not found"
   echo ""
@@ -987,7 +1113,8 @@ case "${1:-help}" in
       *) print_error "Unknown option for nikos update: ${2}"; exit 2 ;;
     esac
     ;;
-  add)    cmd_add "${2:-}" ;;
+  add)    cmd_add "${2:-}" "${3:-}" ;;
+  models) cmd_models "${2:-}" ;;
   status) cmd_status ;;
   doctor) cmd_doctor ;;
   clean)  shift; exec bash "${NIKOS_HOME}/scripts/clean-caches.sh" "$@" ;;

@@ -318,102 +318,159 @@
 - name: Install or remove the Ollama forwarder for containers
   ansible.builtin.include_tasks: bridge.yml
 
-- name: Pull default Ollama model
-  ansible.builtin.command: ollama pull {{ ollama_default_model }}
-  register: ai_stack_ollama_pull
-  changed_when: "'pulling' in ai_stack_ollama_pull.stdout or 'success' in ai_stack_ollama_pull.stdout"
-  until: ai_stack_ollama_pull.rc == 0
-  retries: 3
-  delay: 10
-  ignore_errors: true
+# Models: modules (default, text, reasoning, coding, vision, embedding), each
+# one model per role from this machine's column of the fleet's approved set
+# (ai-models.env; ADR-0058). script-helpers measures the machine (memory,
+# largest GPU), picks each role's model, checks disk and memory before a pull,
+# and falls back one column when a model does not fit. The default runs on
+# setup and update; a module runs once `nikos add ollama-<module>` selected it,
+# and updates replay it. `nikos update` first offers to remove models that are
+# not approved for this machine (scripts/nikos).
+
+- name: Pull this machine's the default model Ollama models
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/script-helpers/scripts/ollama_models.sh', 'ensure',
+              playbook_dir ~ '/ai-models.env', 'http://' ~ nikos_ollama_host] + ai_stack_model_modules.default }}"
+  register: ai_stack_models_default
+  changed_when: "'pulling' in (ai_stack_models_default.stdout + ai_stack_models_default.stderr) | lower"
+  failed_when: false
   environment:
-    OLLAMA_HOST: "{{ nikos_ollama_host }}"
+    OLLAMA_PULL_MISSING: "1"
+    AI_MODEL_TIER: "{{ nikos_ai_model_tier | default('') }}"
   when: nikos_ollama_mode == 'local'
 
-# Each capability group carries its own tag as well as the shared
-# `ollama-models` one, so a laptop can take a single group without pulling the
-# whole set. `never` keeps them all off a default install.
+- name: Say which of the the default model models were not pulled
+  ansible.builtin.debug:
+    msg: "{{ (ai_stack_models_default.stderr_lines | default([]))[-6:] }}"
+  when:
+    - nikos_ollama_mode == 'local'
+    - (ai_stack_models_default.rc | default(0)) != 0
 
-- name: Pull general purpose reasoning Ollama models when requested - about 24 GB
-  ansible.builtin.command: ollama pull {{ item }}
-  loop: "{{ ollama_models_reasoning }}"
-  register: ai_stack_reasoning_ollama_pull
-  changed_when: >-
-    'pulling' in ai_stack_reasoning_ollama_pull.stdout or
-    'success' in ai_stack_reasoning_ollama_pull.stdout
-  until: ai_stack_reasoning_ollama_pull.rc == 0
-  retries: 3
-  delay: 10
-  ignore_errors: true
+- name: Pull this machine's text generation Ollama models
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/script-helpers/scripts/ollama_models.sh', 'ensure',
+              playbook_dir ~ '/ai-models.env', 'http://' ~ nikos_ollama_host] + ai_stack_model_modules.text }}"
+  register: ai_stack_models_text
+  changed_when: "'pulling' in (ai_stack_models_text.stdout + ai_stack_models_text.stderr) | lower"
+  failed_when: false
   environment:
-    OLLAMA_HOST: "{{ nikos_ollama_host }}"
-  when: nikos_ollama_mode == 'local'
-  tags: [never, ollama-models, ollama-reasoning]
-
-- name: Pull code Ollama models when requested - about 24 GB
-  ansible.builtin.command: ollama pull {{ item }}
-  loop: "{{ ollama_models_coding }}"
-  register: ai_stack_coding_ollama_pull
-  changed_when: >-
-    'pulling' in ai_stack_coding_ollama_pull.stdout or
-    'success' in ai_stack_coding_ollama_pull.stdout
-  until: ai_stack_coding_ollama_pull.rc == 0
-  retries: 3
-  delay: 10
-  ignore_errors: true
-  environment:
-    OLLAMA_HOST: "{{ nikos_ollama_host }}"
-  when: nikos_ollama_mode == 'local'
-  tags: [never, ollama-models, ollama-coding]
-
-- name: Pull text generation Ollama models when requested - about 16 GB
-  ansible.builtin.command: ollama pull {{ item }}
-  loop: "{{ ollama_models_text }}"
-  register: ai_stack_text_ollama_pull
-  changed_when: >-
-    'pulling' in ai_stack_text_ollama_pull.stdout or
-    'success' in ai_stack_text_ollama_pull.stdout
-  until: ai_stack_text_ollama_pull.rc == 0
-  retries: 3
-  delay: 10
-  ignore_errors: true
-  environment:
-    OLLAMA_HOST: "{{ nikos_ollama_host }}"
+    OLLAMA_PULL_MISSING: "1"
+    AI_MODEL_TIER: "{{ nikos_ai_model_tier | default('') }}"
   when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-text]
 
-- name: Pull image analysis Ollama models when requested - about 9.4 GB
-  ansible.builtin.command: ollama pull {{ item }}
-  loop: "{{ ollama_models_vision }}"
-  register: ai_stack_vision_ollama_pull
-  changed_when: >-
-    'pulling' in ai_stack_vision_ollama_pull.stdout or
-    'success' in ai_stack_vision_ollama_pull.stdout
-  until: ai_stack_vision_ollama_pull.rc == 0
-  retries: 3
-  delay: 10
-  ignore_errors: true
+- name: Say which of the text generation models were not pulled
+  ansible.builtin.debug:
+    msg: "{{ (ai_stack_models_text.stderr_lines | default([]))[-6:] }}"
+  when:
+    - nikos_ollama_mode == 'local'
+    - (ai_stack_models_text.rc | default(0)) != 0
+  tags: [never, ollama-models, ollama-text]
+
+- name: Pull this machine's reasoning Ollama models
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/script-helpers/scripts/ollama_models.sh', 'ensure',
+              playbook_dir ~ '/ai-models.env', 'http://' ~ nikos_ollama_host] + ai_stack_model_modules.reasoning }}"
+  register: ai_stack_models_reasoning
+  changed_when: "'pulling' in (ai_stack_models_reasoning.stdout + ai_stack_models_reasoning.stderr) | lower"
+  failed_when: false
   environment:
-    OLLAMA_HOST: "{{ nikos_ollama_host }}"
+    OLLAMA_PULL_MISSING: "1"
+    AI_MODEL_TIER: "{{ nikos_ai_model_tier | default('') }}"
+  when: nikos_ollama_mode == 'local'
+  tags: [never, ollama-models, ollama-reasoning]
+
+- name: Say which of the reasoning models were not pulled
+  ansible.builtin.debug:
+    msg: "{{ (ai_stack_models_reasoning.stderr_lines | default([]))[-6:] }}"
+  when:
+    - nikos_ollama_mode == 'local'
+    - (ai_stack_models_reasoning.rc | default(0)) != 0
+  tags: [never, ollama-models, ollama-reasoning]
+
+- name: Pull this machine's code Ollama models
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/script-helpers/scripts/ollama_models.sh', 'ensure',
+              playbook_dir ~ '/ai-models.env', 'http://' ~ nikos_ollama_host] + ai_stack_model_modules.coding }}"
+  register: ai_stack_models_coding
+  changed_when: "'pulling' in (ai_stack_models_coding.stdout + ai_stack_models_coding.stderr) | lower"
+  failed_when: false
+  environment:
+    OLLAMA_PULL_MISSING: "1"
+    AI_MODEL_TIER: "{{ nikos_ai_model_tier | default('') }}"
+  when: nikos_ollama_mode == 'local'
+  tags: [never, ollama-models, ollama-coding]
+
+- name: Say which of the code models were not pulled
+  ansible.builtin.debug:
+    msg: "{{ (ai_stack_models_coding.stderr_lines | default([]))[-6:] }}"
+  when:
+    - nikos_ollama_mode == 'local'
+    - (ai_stack_models_coding.rc | default(0)) != 0
+  tags: [never, ollama-models, ollama-coding]
+
+- name: Pull this machine's image analysis Ollama models
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/script-helpers/scripts/ollama_models.sh', 'ensure',
+              playbook_dir ~ '/ai-models.env', 'http://' ~ nikos_ollama_host] + ai_stack_model_modules.vision }}"
+  register: ai_stack_models_vision
+  changed_when: "'pulling' in (ai_stack_models_vision.stdout + ai_stack_models_vision.stderr) | lower"
+  failed_when: false
+  environment:
+    OLLAMA_PULL_MISSING: "1"
+    AI_MODEL_TIER: "{{ nikos_ai_model_tier | default('') }}"
   when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-vision]
 
-- name: Pull embedding Ollama models when requested - about 1.3 GB
-  ansible.builtin.command: ollama pull {{ item }}
-  loop: "{{ ollama_models_embedding }}"
-  register: ai_stack_embedding_ollama_pull
-  changed_when: >-
-    'pulling' in ai_stack_embedding_ollama_pull.stdout or
-    'success' in ai_stack_embedding_ollama_pull.stdout
-  until: ai_stack_embedding_ollama_pull.rc == 0
-  retries: 3
-  delay: 10
-  ignore_errors: true
+- name: Say which of the image analysis models were not pulled
+  ansible.builtin.debug:
+    msg: "{{ (ai_stack_models_vision.stderr_lines | default([]))[-6:] }}"
+  when:
+    - nikos_ollama_mode == 'local'
+    - (ai_stack_models_vision.rc | default(0)) != 0
+  tags: [never, ollama-models, ollama-vision]
+
+- name: Pull this machine's embedding Ollama models
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/script-helpers/scripts/ollama_models.sh', 'ensure',
+              playbook_dir ~ '/ai-models.env', 'http://' ~ nikos_ollama_host] + ai_stack_model_modules.embedding }}"
+  register: ai_stack_models_embedding
+  changed_when: "'pulling' in (ai_stack_models_embedding.stdout + ai_stack_models_embedding.stderr) | lower"
+  failed_when: false
   environment:
-    OLLAMA_HOST: "{{ nikos_ollama_host }}"
+    OLLAMA_PULL_MISSING: "1"
+    AI_MODEL_TIER: "{{ nikos_ai_model_tier | default('') }}"
   when: nikos_ollama_mode == 'local'
   tags: [never, ollama-models, ollama-embedding]
 
+- name: Say which of the embedding models were not pulled
+  ansible.builtin.debug:
+    msg: "{{ (ai_stack_models_embedding.stderr_lines | default([]))[-6:] }}"
+  when:
+    - nikos_ollama_mode == 'local'
+    - (ai_stack_models_embedding.rc | default(0)) != 0
+  tags: [never, ollama-models, ollama-embedding]
+
+- name: Pull this machine's every module Ollama models
+  ansible.builtin.command:
+    argv: "{{ [playbook_dir ~ '/scripts/script-helpers/scripts/ollama_models.sh', 'ensure',
+              playbook_dir ~ '/ai-models.env', 'http://' ~ nikos_ollama_host] + ai_stack_model_modules.models }}"
+  register: ai_stack_models_models
+  changed_when: "'pulling' in (ai_stack_models_models.stdout + ai_stack_models_models.stderr) | lower"
+  failed_when: false
+  environment:
+    OLLAMA_PULL_MISSING: "1"
+    AI_MODEL_TIER: "{{ nikos_ai_model_tier | default('') }}"
+  when: nikos_ollama_mode == 'local'
+  tags: [never, ollama-models]
+
+- name: Say which of the every module models were not pulled
+  ansible.builtin.debug:
+    msg: "{{ (ai_stack_models_models.stderr_lines | default([]))[-6:] }}"
+  when:
+    - nikos_ollama_mode == 'local'
+    - (ai_stack_models_models.rc | default(0)) != 0
+  tags: [never, ollama-models]
 
 - name: Ensure local bin directory exists
   ansible.builtin.file:
