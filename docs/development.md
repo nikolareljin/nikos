@@ -136,6 +136,23 @@ ansible-lint roles/my-feature/
 - **Root-needing tasks**: explicit `become: true` per task, not assumed from play level
 - **Check mode**: add `when: not ansible_check_mode` to tasks that depend on files created by earlier tasks (unarchive, symlinks, cargo builds)
 
+## The website
+
+`site/` is the GitHub Pages site, hand-written HTML published as it stands
+(`.github/workflows/pages.yml`). Every page's search and share metadata comes from
+the `PAGES` table in `scripts/seo.py`: description (at most 160 characters, one per
+page), keywords, title, and the share image `site/assets/og-image.png` (1200x630).
+
+When you add a page or change a `<title>`, add or edit its entry in `PAGES`, then:
+
+```bash
+python3 scripts/seo.py --write   # rewrites each page's <!-- seo --> block and site/sitemap.xml
+python3 scripts/seo.py --check   # what tests/test_seo.py checks
+```
+
+After the first deploy, submit https://nikolareljin.github.io/nikos/sitemap.xml in
+Google Search Console; a project site's robots.txt is never read.
+
 ## Branching strategy
 
 ```
