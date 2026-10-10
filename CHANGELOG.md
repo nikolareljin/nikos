@@ -10,6 +10,12 @@ All notable changes to NikOS are documented here.
   at its unpacked packages. It is downloads; environments keep their files. When a uv
   process holds the cache (a `uvx` tool such as an MCP server holds it while it runs), the
   step is skipped after 10 seconds, naming the processes; `--uv-force` clears it anyway.
+- The open browser tab is easier to see. Firefox paints it in the NikOS accent, Nord
+  frost `#88C0D0` (as GRUB's selected entry), with dark text, against the `#2E3440`
+  strip; before, it was one step lighter (`#3B4252`), too close to tell. Chromium and
+  Google Chrome are seeded with the same accent, from which they derive their tab and
+  frame colours. A profile on the earlier seed gets the accent at `nikos update`, and
+  only the seed changes; a colour picked in "Customize Chromium" is kept.
 
 ### Fixed
 - `nikos clean` reported "Freed on /: 0 GB" after freeing about 10 GB: one rounded-down
