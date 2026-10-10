@@ -2,7 +2,7 @@
 
 All notable changes to NikOS are documented here.
 
-## [Unreleased]
+## [1.3.0] - 2026-10-10
 
 ### Added
 - Search and share metadata on every page of the site: description, keywords, canonical
