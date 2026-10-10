@@ -72,12 +72,18 @@ whichever set you pick.
 Browsers are dark in the desktop colour (#2E3440):
 
 - Firefox: the built-in Dark theme plus a `userChrome.css` / `userContent.css`
-  that paint the tab strip, toolbar, URL bar and new tab page one colour.
+  that paint the tab strip, toolbar, URL bar and new tab page one colour. The
+  open tab is the NikOS accent, Nord frost `#88C0D0`, with dark text, so it
+  stands out from the strip.
   Written as `NikOS dark Firefox` blocks, so your own lines in those files stay.
   `user.js` is read at every Firefox start, so the theme stays while this is
   on; `nikos_firefox_dark: false` and `nikos update` remove the blocks.
 - Chromium (snap or deb) and Google Chrome: Classic mode, dark, seeded with the
-  desktop colour, set in each profile's Preferences. The Chromium snap cannot
+  NikOS accent `#88C0D0`, set in each profile's Preferences. Chromium derives
+  the frame and tab colours from the seed, so the open tab takes the accent's
+  hue; one tab's exact colour cannot be set from Preferences. A profile still on
+  the earlier seed (`#2E3440`) gets the new one at `nikos update`, and nothing
+  else of its theme changes. The Chromium snap cannot
   read the host GTK theme, so GTK mode would fall back to light Adwaita. A
   browser that is running is skipped; close it and run `nikos-chromium-theme`.
   Each profile is set once (recorded in `~/.local/state/nikos/chromium-themed`),

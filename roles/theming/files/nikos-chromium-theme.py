@@ -5,12 +5,18 @@ Sets, in every existing profile's Preferences:
   - Classic theme mode instead of GTK: the Chromium snap cannot read the host
     GTK theme (Nordic), so in GTK mode it falls back to light Adwaita;
   - dark colour scheme;
-  - #2E3440 (the desktop colour) as the theme seed colour.
+  - #88C0D0 (the NikOS accent, Nord frost) as the theme seed colour. Chromium
+    derives the whole palette from the seed, so the open tab and the frame take
+    the accent's hue; the exact colour of one tab cannot be set from Preferences
+    (only a theme extension can, and that needs a store or developer mode).
 These are the values the "Customize Chromium" panel writes, so the user can
 change them there afterwards. Each profile is set once, recorded in
 ~/.local/state/nikos/chromium-themed, so `nikos update` does not undo a theme
-the user picked later; --force sets it again. A browser that is running is
-skipped: it rewrites Preferences on exit and would undo the edit.
+the user picked later; --force sets it again. A profile still on an earlier
+NikOS seed (OLD_SEEDS) gets the current seed, and nothing else changes: nobody
+picked that colour, but light mode or another setting may have been picked. A
+browser that is running is skipped: it rewrites Preferences on exit and would
+undo the edit.
 
 Exit 0; prints one line per profile: "changed", "ok", "kept" or "skipped: <why>".
 """
@@ -23,7 +29,14 @@ import stat
 import sys
 from pathlib import Path
 
-SEED = 0xFF2E3440 - (1 << 32)  # ARGB as Chromium stores it: a signed 32-bit int
+def _argb(rgb: int) -> int:
+    """ARGB as Chromium stores it: opaque, as a signed 32-bit int."""
+    return (0xFF000000 | rgb) - (1 << 32)
+
+
+SEED = _argb(0x88C0D0)
+# Seeds NikOS set before; a profile still on one gets the current seed.
+OLD_SEEDS = {_argb(0x2E3440)}
 DARK = 2
 TONAL_SPOT = 1
 
@@ -66,17 +79,21 @@ def running(user_data_dir: Path) -> bool:
     return True
 
 
-def apply(prefs_path: Path) -> str:
+def apply(prefs_path: Path, seed_only: bool = False) -> str:
     try:
         data = json.loads(prefs_path.read_text())
     except (OSError, ValueError) as exc:
         return f"skipped: unreadable ({exc.__class__.__name__})"
     theme = data.setdefault("browser", {}).setdefault("theme", {})
     ext_theme = data.setdefault("extensions", {}).setdefault("theme", {})
-    if all(theme.get(k) == v for k, v in THEME.items()) and ext_theme.get("system_theme") == 0:
-        return "ok"
-    theme.update(THEME)
-    ext_theme["system_theme"] = 0  # Classic, not GTK
+    if seed_only:
+        # An earlier NikOS seed: only the seed moves on.
+        theme.update({"user_color": SEED, "user_color2": SEED})
+    else:
+        if all(theme.get(k) == v for k, v in THEME.items()) and ext_theme.get("system_theme") == 0:
+            return "ok"
+        theme.update(THEME)
+        ext_theme["system_theme"] = 0  # Classic, not GTK
     # Keep Chromium's mode (0600): a temp file made with the default umask
     # would leave the profile's Preferences readable by other users.
     tmp = prefs_path.with_suffix(".nikos-tmp")
@@ -88,6 +105,15 @@ def apply(prefs_path: Path) -> str:
     return "changed"
 
 
+def on_old_seed(prefs_path: Path) -> bool:
+    """True when the profile still has a seed NikOS set before: nobody chose it."""
+    try:
+        theme = json.loads(prefs_path.read_text()).get("browser", {}).get("theme", {})
+    except (OSError, ValueError):
+        return False
+    return theme.get("user_color") in OLD_SEEDS
+
+
 def main(home: Path, force: bool = False) -> int:
     state = home / ".local" / "state" / "nikos" / "chromium-themed"
     done = set(state.read_text().splitlines()) if state.exists() else set()
@@ -97,12 +123,13 @@ def main(home: Path, force: bool = False) -> int:
             continue
         for prefs in sorted(udd.glob("*/Preferences")):
             profile = str(prefs.parent)
-            if profile in done and not force:
+            reseed = profile in done and not force and on_old_seed(prefs)
+            if profile in done and not force and not reseed:
                 status = "kept (set once already; --force sets it again)"
             elif running(udd):
                 status = "skipped: browser running; close it and run nikos-chromium-theme"
             else:
-                status = apply(prefs)
+                status = apply(prefs, seed_only=reseed)
                 if status in ("changed", "ok"):
                     done.add(profile)
             print(f"{profile}: {status}")
