@@ -254,7 +254,7 @@ for item in "${PLAN[@]}"; do
     if ! err="$($action 2>&1 >/dev/null)"; then
       if [[ "$action" == *"uv cache clean"* && "$err" == *"lock"* ]]; then
         echo "   skipped: a uv process holds its cache:"
-        { pgrep -a -x uv 2>/dev/null || true; } | sed 's/^/     /' | head -5
+        { pgrep -a -x 'uvx?' 2>/dev/null || true; } | sed 's/^/     /' | head -5
         echo "   uvx tools (MCP servers, for one) hold it while they run. Stop them, or run"
         echo "   nikos clean --apply --only packages --uv-force (then restart them)."
       else
