@@ -356,6 +356,7 @@ def _run_cmd_update(tmp_path: Path, continuation: bool, optional_tags: str):
         '_resolve_update_ref() { printf "0.6.5\\n"; }\n'
         '_sync_repo_to_ref() { echo "sync:$*" >> "${CALLS}"; }\n'
         '_playbook() { echo "playbook:$*" >> "${CALLS}"; }\n'
+        '_models_offer_removal() { echo "models:offer-removal" >> "${CALLS}"; }\n'
         '_exec_update_continuation() { echo "continuation" >> "${CALLS}"; }\n'
         f'_get_saved_optional_tags() {{ printf "%s\\n" {optional_tags!r}; }}\n'
         + extract_helper("cmd_update")
@@ -380,7 +381,9 @@ def test_update_syncs_then_runs_both_playbook_passes(tmp_path):
     # The continuation check belongs to the sync branch: only a run that
     # actually re-synced the checkout can be running a CLI the update replaced.
     assert calls[1] == "continuation", calls
-    assert calls[-2:] == [
+    # Removal is offered before anything is pulled, so the space is free first.
+    assert calls[-3:] == [
+        "models:offer-removal",
         "playbook:-e nikos_update_mode=true",
         # No saved skip tags on the replay: Ansible gives skip tags precedence
         # over selected tags, so a saved skip would defeat the selection.
@@ -404,6 +407,7 @@ def test_continuation_does_not_re_sync_the_checkout(tmp_path):
     assert not [c for c in calls if c.startswith("sync:")], calls
     assert "continuation" not in calls, "must not recurse into another continuation"
     assert calls == [
+        "models:offer-removal",
         "playbook:-e nikos_update_mode=true",
         "playbook:--no-saved-skip-tags -e nikos_update_mode=true --tags redis",
     ], calls

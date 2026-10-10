@@ -28,12 +28,7 @@ nikos_firefox_dark: true                 # false leaves Firefox alone
 nikos_chromium_dark: true                # false leaves Chromium / Chrome alone
 
 # ── Ollama ────────────────────────────────────────────
-ollama_default_model: "qwen3.5:4b"
-ollama_optional_models:
-  - "qwen3-coder:30b"
-  - "qwen2.5-coder:7b"
-  - "deepseek-r1:8b"
-# Other good choices: qwen3.5, devstral, ministral-3, granite4
+nikos_ai_model_tier: ""                  # small|standard|large|xlarge; empty measures
 
 # ── Python ────────────────────────────────────────────
 # Versions (Miniforge, llama.cpp, the pip packages) are pins: see "Pinned
@@ -111,55 +106,54 @@ without reinstalling those packages.
 
 ## Changing the Ollama models
 
-Edit `vars/local.yml`:
-
-```yaml
-ollama_default_model: "qwen3:8b"
-```
-
-Then run `nikos update`. The new model is pulled on the next playbook run.
-
-### The default
-
-`qwen3.5:4b` (3.4 GB), a general model with a thinking mode. It replaced
-`qwen2.5-coder:7b`, which is now the small end of the `ollama-coding` group:
-`qwen3-coder` publishes no tag below `30b` (19 GB), too large to pull onto
-every machine by default.
-
-### The optional bundles
-
-Models are grouped by what they are for, and each group has its own tag, so a
-laptop can take one capability without pulling all of them:
+Models come in modules, and each module pulls **one model per role, the one this
+machine can run**. The model per role and class of machine is the fleet's approved set,
+in `ai-models.env` (ADR-0058). The default module is always pulled; the others when
+you ask:
 
 ```bash
-nikos add ollama-reasoning   # ~24 GB  general purpose reasoning
-nikos add ollama-coding      # ~24 GB  code models
-nikos add ollama-text        # ~16 GB  text generation and chat
-nikos add ollama-vision      # ~9.4 GB image analysis
-nikos add ollama-embedding   # ~1.3 GB embeddings for the RAG stack
-nikos add ollama-models      # ~75 GB  every group
+nikos add ollama-text        # general, creative, extract, classify
+nikos add ollama-reasoning
+nikos add ollama-coding
+nikos add ollama-vision
+nikos add ollama-embedding
+nikos add ollama-models      # every role
+nikos add model qwen3:14b    # any other model, on purpose; updates keep it
 ```
 
-Nothing here is pulled unless you ask for the tag. Override any group in
-`vars/local.yml` to take a subset.
+| Module | Role | small | standard | large | xlarge |
+|---|---|---|---|---|---|
+| default, text | general | `qwen3.5:2b` | `qwen3.5:4b` | `qwen3.5:9b` | `qwen3.5:9b` |
+| text | creative | `qwen3.5:4b` | `gemma4:latest` | `gemma4:latest` | `gemma4:latest` |
+| text | extract | `qwen3.5:2b` | `qwen3.5:4b` | `qwen3.5:9b` | `qwen3.5:9b` |
+| text | classify | `qwen3:1.7b` | `qwen3:1.7b` | `qwen3:1.7b` | `qwen3:1.7b` |
+| reasoning | reasoning | `qwen3.5:4b` | `qwen3:8b` | `qwen3:8b` | `gpt-oss:20b` |
+| coding | code | `qwen3.5:4b` | `qwen2.5-coder:7b` | `qwen2.5-coder:7b` | `qwen3-coder:30b` |
+| vision | vision | `qwen3-vl:4b` | `qwen3-vl:4b` | `qwen3-vl:8b` | `qwen3-vl:8b` |
+| embedding | embed | `nomic-embed-text` | `nomic-embed-text` | `nomic-embed-text` | `nomic-embed-text` |
 
-| Group | Model | Size | Notes |
-|---|---|---|---|
-| reasoning | `deepseek-r1:8b` | 5.2 GB | |
-| reasoning | `qwen3:8b` | 5.2 GB | Thinking mode |
-| reasoning | `gpt-oss:20b` | 14 GB | Desktop-class, open-weight reasoning |
-| coding | `qwen2.5-coder:7b` | 4.7 GB | Fill-in-the-middle, laptop-sized |
-| coding | `qwen3-coder:30b` | 19 GB | Current generation, workstation-class |
-| text | `granite4:micro` | 2.1 GB | Small enough to keep resident |
-| text | `qwen3.5:9b` | 6.6 GB | |
-| text | `gemma4:12b` | 7.7 GB | Multimodal |
-| vision | `qwen3-vl:4b` | 3.3 GB | Laptop-friendly |
-| vision | `qwen3-vl:8b` | 6.1 GB | Vision and document understanding |
-| embedding | `embeddinggemma:300m` | 622 MB | |
-| embedding | `qwen3-embedding:0.6b` | 639 MB | |
+Class of machine, measured by script-helpers (whole GiB):
 
-Models load on demand, so none of this counts against the idle RAM target — it
-is disk and bandwidth only.
+- small: less than 11 GiB of memory and of GPU memory
+- standard: the default
+- large: a GPU with the role's large figure (11 GiB), or 30 GiB of memory
+- xlarge: a GPU with the role's xlarge figure (15 GiB for reasoning, 23 for code)
+
+A role with no model for a class uses the next one down.
+
+Before each pull, script-helpers checks disk and memory; a model that does not fit
+falls back one class. `nikos_ai_model_tier: small|standard|large|xlarge` in
+`vars/local.yml` names the class instead of measuring it. `nikos models` shows the
+class and the model per role.
+
+`nikos update` pulls the default and the selected modules, so a machine moves to
+the current approved set. Before it pulls, it offers to remove installed models
+that are not approved for this machine, one question per model (`[y/N]`). Without
+a terminal it lists them and removes nothing; `nikos models prune` asks again.
+Models load on demand, so all of this is disk and bandwidth, not idle memory.
+
+To use a model outside the set, `nikos add model <name>`. The set itself changes
+in the fleet registry, which regenerates `ai-models.env`; it is not edited here.
 
 ### Models replaced in the next release
 
@@ -176,7 +170,7 @@ years old and are no longer pulled. Each capability is covered by a newer model
 above; Code Llama in particular has no successor, because Meta discontinued the
 line, so its role passes to Qwen2.5-Coder and DeepSeek-Coder-V2. Any of them can
 still be pulled by hand with `ollama pull`, or added back through
-`ollama_models_coding` / `ollama_models_vision` in `vars/local.yml`.
+`nikos add model <name>`.
 
 ## Image analysis and OCR
 
@@ -278,7 +272,7 @@ nikos add bitnet     # BitNet.cpp 1-bit LLM inference (bitnet-cli)
 nikos add mistral-rs # mistral.rs Rust LLM server
 nikos add monitoring # Netdata monitoring dashboard
 nikos add openclaw   # OpenClaw LLM gateway CLI
-nikos add ollama-models # Pull every optional Ollama model; about 75 GB
+nikos add ollama-models # Every module: this machine's model per role (12 GB small, 28 GB standard, 34 GB large, 57 GB xlarge)
 ```
 
 ### MongoDB

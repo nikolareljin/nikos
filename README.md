@@ -94,21 +94,51 @@ At the end, you should end up with something like:
 
 ### Local models
 
-One model is pulled by default: `qwen3.5:4b` (3.4 GB). The rest are
-grouped by what they are for, each with its own tag, so a laptop can take one
-group without the others:
+Models come in modules, and each module pulls **one model per role, the one this
+machine can run**. The model per role and class of machine is the fleet's approved set,
+in `ai-models.env` (ADR-0058). The default module is always pulled; the others when
+you ask:
 
 ```bash
-nikos add ollama-reasoning   # ~24 GB  deepseek-r1, qwen3, gpt-oss
-nikos add ollama-coding      # ~24 GB  qwen2.5-coder, qwen3-coder
-nikos add ollama-text        # ~16 GB  granite4, qwen3.5, gemma4
-nikos add ollama-vision      # ~9.4 GB qwen3-vl
-nikos add ollama-embedding   # ~1.3 GB embeddinggemma, qwen3-embedding
-nikos add ollama-models      # ~75 GB  every group
+nikos add ollama-text        # general, creative, extract, classify
+nikos add ollama-reasoning
+nikos add ollama-coding
+nikos add ollama-vision
+nikos add ollama-embedding
+nikos add ollama-models      # every role
+nikos add model qwen3:14b    # any other model, on purpose; updates keep it
 ```
 
-Nothing is pulled unless you ask for the tag. Models load on demand, so this is
-disk and bandwidth rather than idle memory.
+| Module | Role | small | standard | large | xlarge |
+|---|---|---|---|---|---|
+| default, text | general | `qwen3.5:2b` | `qwen3.5:4b` | `qwen3.5:9b` | `qwen3.5:9b` |
+| text | creative | `qwen3.5:4b` | `gemma4:latest` | `gemma4:latest` | `gemma4:latest` |
+| text | extract | `qwen3.5:2b` | `qwen3.5:4b` | `qwen3.5:9b` | `qwen3.5:9b` |
+| text | classify | `qwen3:1.7b` | `qwen3:1.7b` | `qwen3:1.7b` | `qwen3:1.7b` |
+| reasoning | reasoning | `qwen3.5:4b` | `qwen3:8b` | `qwen3:8b` | `gpt-oss:20b` |
+| coding | code | `qwen3.5:4b` | `qwen2.5-coder:7b` | `qwen2.5-coder:7b` | `qwen3-coder:30b` |
+| vision | vision | `qwen3-vl:4b` | `qwen3-vl:4b` | `qwen3-vl:8b` | `qwen3-vl:8b` |
+| embedding | embed | `nomic-embed-text` | `nomic-embed-text` | `nomic-embed-text` | `nomic-embed-text` |
+
+Class of machine, measured by script-helpers (whole GiB):
+
+- small: less than 11 GiB of memory and of GPU memory
+- standard: the default
+- large: a GPU with the role's large figure (11 GiB), or 30 GiB of memory
+- xlarge: a GPU with the role's xlarge figure (15 GiB for reasoning, 23 for code)
+
+A role with no model for a class uses the next one down.
+
+Before each pull, script-helpers checks disk and memory; a model that does not fit
+falls back one class. `nikos_ai_model_tier: small|standard|large|xlarge` in
+`vars/local.yml` names the class instead of measuring it. `nikos models` shows the
+class and the model per role.
+
+`nikos update` pulls the default and the selected modules, so a machine moves to
+the current approved set. Before it pulls, it offers to remove installed models
+that are not approved for this machine, one question per model (`[y/N]`). Without
+a terminal it lists them and removes nothing; `nikos models prune` asks again.
+Models load on demand, so all of this is disk and bandwidth, not idle memory.
 
 ### IDE
 | Tool | Detail |
@@ -212,7 +242,7 @@ editing tracked files:
 
 ```yaml
 nikos_timezone: "Europe/London"     # override this for your timezone
-ollama_default_model: "qwen3.5:4b"  # model to pre-pull
+nikos_ai_model_tier: ""            # small|standard|large|xlarge; empty measures the machine
 nikos_desktop_flavor: "xubuntu-minimal"   # or xubuntu-full / xfce
 nikos_remove_gnome: false           # true purges GNOME instead of keeping it selectable
 nikos_vscode_extensions:            # add/remove VS Code extensions

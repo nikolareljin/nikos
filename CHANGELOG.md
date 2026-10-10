@@ -16,6 +16,19 @@ All notable changes to NikOS are documented here.
   Google Chrome are seeded with the same accent, from which they derive their tab and
   frame colours. A profile on the earlier seed gets the accent at `nikos update`, and
   only the seed changes; a colour picked in "Customize Chromium" is kept.
+- Ollama models are one per role, this machine's model. The modules stay
+  (`ollama-text`, `-reasoning`, `-coding`, `-vision`, `-embedding`, `-models`), and each
+  pulls its roles' model from `ai-models.env`, the fleet's approved set (ADR-0058), in the
+  column for this machine's class: script-helpers 0.48.0 measures memory and the largest GPU
+  (small, standard, large, xlarge), checks disk and memory before each pull, and falls back
+  one class when a model does not fit. Before, a module pulled a fixed list for any machine:
+  `ollama-coding` pulled `qwen3-coder:30b` (19 GB) onto laptops, and on 2026-10-09 an update
+  filled a 96%-full disk. `nikos_ai_model_tier` in `vars/local.yml` names the class instead.
+  Replaces `ollama_default_model` and the `ollama_models_*` lists.
+- `nikos update` offers to remove installed models that are not approved for this machine,
+  one question per model, before it pulls; without a terminal it lists them and removes
+  nothing. `nikos models` shows the class and the model per role, `nikos models prune`
+  asks again, and `nikos add model <name>` installs any other model and keeps it.
 
 ### Fixed
 - `nikos clean` reported "Freed on /: 0 GB" after freeing about 10 GB: one rounded-down

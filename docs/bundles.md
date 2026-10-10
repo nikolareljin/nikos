@@ -100,8 +100,9 @@ for by name: `neovim`, `java`, `podman`, `openclaw`, `bun`, `redis`,
 `mistral-rs` and `monitoring` on roles in `site.yml`, and `ollama-models` plus
 the five per-family tags `ollama-reasoning`, `ollama-coding`, `ollama-text`,
 `ollama-vision` and `ollama-embedding` on tasks inside `roles/ai-stack`. Each
-model task carries `ollama-models` and its own family tag, so `--tags
-ollama-models` pulls every model and `--tags ollama-coding` pulls one family.
+module's task carries `ollama-models` and its own tag, so `--tags
+ollama-models` pulls every role and `--tags ollama-coding` pulls one module,
+each as this machine's model for the role (ai-models.env).
 Accepting one puts it in `--tags` on a **second** playbook run, because
 `--tags` restricts a run to tagged tasks and a single run carrying it would
 skip everything untagged — which is to say, the whole system.
@@ -186,7 +187,7 @@ read them instead of keeping a fifth copy.
 
 - tag: ollama-models
   name: Local Ollama models
-  description: Downloads model weights. Several gigabytes.
+  description: Every module, this machine's model per role. Several gigabytes.
   playbook: named-to-run
   offered: false
   weight: heavy
