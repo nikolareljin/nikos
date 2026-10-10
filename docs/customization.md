@@ -272,7 +272,7 @@ nikos add bitnet     # BitNet.cpp 1-bit LLM inference (bitnet-cli)
 nikos add mistral-rs # mistral.rs Rust LLM server
 nikos add monitoring # Netdata monitoring dashboard
 nikos add openclaw   # OpenClaw LLM gateway CLI
-nikos add ollama-models # Every module: this machine's model per role (about 30 GB on a standard machine)
+nikos add ollama-models # Every module: this machine's model per role (12 GB small, 28 GB standard, 34 GB large, 57 GB xlarge)
 ```
 
 ### MongoDB

@@ -1377,7 +1377,7 @@ _select_bundles_plain() {
   _say_tty ""
   _say_tty "LLM tools:"
   _ask_tty opt_openclaw "  Install OpenClaw? [y/N] "
-  _ask_tty opt_ollama_models "  Pull every Ollama module, this machine's model per role? (~30 GB) [y/N] "
+  _ask_tty opt_ollama_models "  Pull every Ollama module, this machine's model per role? (12-57 GB by machine, 28 GB on a standard one) [y/N] "
   _ask_tty opt_bitnet "  Install BitNet.cpp? [y/N] "
   _ask_tty opt_mistral_rs "  Install mistral.rs? [y/N] "
   _say_tty ""
