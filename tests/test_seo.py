@@ -85,3 +85,9 @@ def test_the_share_image_is_the_card_size():
     head = (ROOT / "site/assets/og-image.png").read_bytes()[:24]
     assert head[:8] == b"\x89PNG\r\n\x1a\n"
     assert (int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")) == seo.IMAGE_SIZE
+
+
+def test_the_search_console_file_is_not_a_page(site):
+    assert any(p.name.startswith("google") for p in site.glob("google*.html"))
+    assert seo.problems(site) == []
+    assert "google" not in seo.sitemap()
