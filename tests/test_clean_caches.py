@@ -37,7 +37,8 @@ def env(tmp_path):
             'case "$*" in "system df"*) echo "Build Cache|1.5GB" ;; "cache dir") echo /nonexistent ;;\n'
             '  "ps -q") [ -n "$FAKE_MOUNT" ] && echo c1 ;; inspect*) [ -n "$FAKE_MOUNT" ] && echo "$FAKE_MOUNT" ;;\n'
             '  "buildx ls"*) [ -n "$FAKE_BUILDERS" ] && printf "%b\\n" "$FAKE_BUILDERS" ;;\n'
-            '  "-a -d cwd"*) [ -n "$FAKE_CWD" ] && echo "n$FAKE_CWD" ;; esac\n'
+            '  "-a -d cwd"*) [ -n "$FAKE_CWD" ] && echo "n$FAKE_CWD" ;;\n'
+            '  "cache prune") [ -n "$FAKE_UV_LOCK" ] && { echo "error: Timeout (10s) when waiting for lock on cache" >&2; exit 2; } ;; esac\n'
             "exit 0\n"
         )
         (bindir / name).chmod(0o755)
@@ -228,4 +229,28 @@ def test_npm_and_pnpm_wait_for_a_running_install(env, tmp_path):
     assert "skipped, an npm, pnpm or yarn process is running" in r.stdout
     assert "npm cache verify" not in calls and "pnpm store prune" not in calls
     assert "uv cache prune" in calls
+
+
+def test_keep_days_zero_is_all_build_cache_with_no_age_filter(env):
+    r, calls = run(env, "--apply", "--yes", "--only", "docker", "--keep-days", "0", "--unused-images")
+    assert r.returncode == 0, r.stderr
+    assert "docker builder prune -f\n" in calls
+    assert "docker image prune -a -f\n" in calls
+    assert "until=0h" not in calls
+
+
+def test_a_held_uv_lock_is_a_skip_not_a_failure(env):
+    """Another uv process (an install) holds the cache; waiting minutes or
+    forcing it are both wrong."""
+    env["env"]["FAKE_UV_LOCK"] = "1"
+    r, calls = run(env, "--apply", "--yes", "--only", "packages")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "skipped: another uv process holds its cache" in r.stdout
+    assert "uv cache prune" in calls
+
+
+def test_each_step_and_the_total_report_free_space(env):
+    r, _ = run(env, "--apply", "--yes", "--only", "docker")
+    assert r.returncode == 0, r.stderr
+    assert "   freed " in r.stdout and " GB before, " in r.stdout
 

@@ -333,7 +333,13 @@ read from `/proc`, or from `lsof` where there is no `/proc` (macOS); with neithe
 ```bash
 nikos clean                 # what would go, and how much
 nikos clean --apply         # remove it, after a yes
+nikos clean --apply --keep-days 0 --unused-images   # all build cache, and images no container uses
 ```
+
+`--keep-days 0` removes the whole build cache (the next build of each image is
+slower). A uv cache another uv process holds is skipped, not waited for. Each step
+reports what it freed; other programs write at the same time, so the figures are
+approximate.
 
 ## Ansible logs
 
