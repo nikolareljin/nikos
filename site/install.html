@@ -132,6 +132,10 @@ nikos add ollama-vision
 nikos status
 nikos doctor
 
+<span class="c"># this machine's class and approved model per role; offer to remove the rest</span>
+nikos models
+nikos models prune
+
 <span class="c"># free disk from caches nothing uses (a dry run; --apply removes, after a yes)</span>
 nikos clean
 nikos clean --apply
@@ -141,7 +145,10 @@ nikos log 100</code></pre>
 
   <p>Every role is idempotent, so re-running changes only what has drifted. <code>nikos update</code> reads
   its target from what is checked out: a release install advances to the newest release only when that
-  release is genuinely newer, and a branch install stays on its branch. An update never downgrades.</p>
+  release is genuinely newer, and a branch install stays on its branch. An update never downgrades.
+  From 1.3.0 it also keeps the Ollama models on this machine's approved set: it asks, one model at a
+  time, before removing a model not approved for this machine, then pulls what the selected modules
+  lack (details: <a href="included.html">What's included</a>).</p>
 
   <p><code>nikos clean</code> lists, with sizes, what nothing uses: Docker build cache unused for a
   week (every builder), untagged images, <code>node_modules</code> in git repositories with no commit

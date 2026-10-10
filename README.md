@@ -8,7 +8,7 @@
 A curated Xubuntu / Ubuntu 22.04, 24.04 and 26.04 LTS setup for AI coding and development.  
 One command turns a fresh Ubuntu install into a fully configured AI workstation — Xubuntu desktop with Nordic theme, local and cloud AI stack, developer tools, and GitHub integration all pre-configured.
 
-**Version:** 1.2.0 · **License:** MIT · **Author:** Nikola Reljin
+**Version:** 1.3.0 · **License:** MIT · **Author:** Nikola Reljin
 
 > One file, the Plymouth boot splash, is GPL-3.0-or-later rather than MIT, because it is derived from Xubuntu's theme. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
@@ -197,7 +197,9 @@ nikos add openclaw   # install optional: OpenClaw LLM gateway CLI
 nikos add monitoring # install optional: Netdata
 nikos add bitnet     # install optional: BitNet.cpp 1-bit inference (bitnet-cli)
 nikos add mistral-rs # install optional: mistral.rs Rust LLM server
-nikos add ollama-*   # install optional: a model group (see Local models above)
+nikos add ollama-*   # install optional: a model module, this machine's model per role (see Local models)
+nikos add model <m>  # install any other Ollama model; updates keep it
+nikos models         # class of machine and approved model per role; `prune` offers removals
 nikos status         # show version, Ollama models, conda envs
 nikos doctor         # check for broken configs and missing tools
 nikos clean          # list unused caches to free disk; --apply removes them (never volumes)
@@ -211,7 +213,9 @@ the pinned `script-helpers` submodule, NikOS-managed tool repositories
 (`distrodeck`, `image-view`, `git-lantern`, and `ai-runner`), Python/pipx
 packages, VS Code extensions, Ollama models, and installed system packages
 (apt, snap, and flatpak). The optional bundles selected during installation
-remain selected.
+remain selected. For Ollama, it first asks, one model at a time, before removing
+a model not approved for this machine, then pulls this machine's model for the
+default and the selected modules.
 
 Developer tools installed through distrodeck are refreshed by their package
 manager, not by distrodeck: `distrodeck install-tools` has no upgrade mode and

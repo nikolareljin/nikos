@@ -155,7 +155,7 @@ Models load on demand, so all of this is disk and bandwidth, not idle memory.
 To use a model outside the set, `nikos add model <name>`. The set itself changes
 in the fleet registry, which regenerates `ai-models.env`; it is not edited here.
 
-### Models replaced in the next release
+### Models replaced in 0.7.0
 
 `deepseek-r1:1.5b`, `qwen3:4b`, `phi4`, `deepseek-coder-v2`, `qwen2.5-coder:14b`,
 `llama3.1`, `gemma3`, `mistral:7b`, `granite3.2-vision`, `minicpm-v` and

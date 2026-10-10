@@ -2,7 +2,7 @@
 
 All notable changes to NikOS are documented here.
 
-## [Unreleased]
+## [1.3.0] - 2026-10-10
 
 ### Changed
 - `nikos clean` clears the whole uv cache (`uv cache clean`), not only what `uv cache prune`
