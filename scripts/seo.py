@@ -31,6 +31,7 @@ IMAGE = SITE + "assets/og-image.png"
 IMAGE_SIZE = (1200, 630)
 IMAGE_ALT = "The NikOS desktop: Xfce in Nord colours on Ubuntu LTS"
 DESCRIPTION_MAX = 160
+VERIFICATION = re.compile(r"google[0-9a-f]+\.html")
 BLOCK = re.compile(r"[ \t]*<!-- seo -->.*?<!-- /seo -->\n?", re.S)
 
 SITE_KEYWORDS = ["NikOS", "AI workstation", "Ubuntu", "Ansible", "Ollama", "local AI"]
@@ -172,7 +173,8 @@ def problems(site_dir: Path = SITE_DIR) -> list[str]:
                 found.append(f"site/{name}: expected exactly one {tag} tag")
     # A page on the site that is not described here gets no metadata and no sitemap entry.
     for path in sorted(site_dir.glob("*.html")):
-        if path.name not in PAGES:
+        # Search Console's ownership file is not a page: no metadata, no sitemap entry.
+        if path.name not in PAGES and not VERIFICATION.fullmatch(path.name):
             found.append(f"site/{path.name} is not in PAGES (scripts/seo.py)")
     sm = site_dir / "sitemap.xml"
     if not sm.is_file() or sm.read_text(encoding="utf-8") != sitemap():
