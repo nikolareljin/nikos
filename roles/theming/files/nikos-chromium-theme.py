@@ -14,8 +14,9 @@ change them there afterwards. Each profile is set once, recorded in
 ~/.local/state/nikos/chromium-themed, so `nikos update` does not undo a theme
 the user picked later; --force sets it again. A profile still on an earlier
 NikOS seed (OLD_SEEDS) gets the current seed, and nothing else changes: nobody
-picked that colour, but light mode or another setting may have been picked. A browser that is running is
-skipped: it rewrites Preferences on exit and would undo the edit.
+picked that colour, but light mode or another setting may have been picked. A
+browser that is running is skipped: it rewrites Preferences on exit and would
+undo the edit.
 
 Exit 0; prints one line per profile: "changed", "ok", "kept" or "skipped: <why>".
 """
