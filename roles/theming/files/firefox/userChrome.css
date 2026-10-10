@@ -1,11 +1,15 @@
 /* One background for the whole window chrome: Nord polar night 0 (#2E3440),
    the NikOS desktop colour. The built-in Dark theme paints the tab strip,
    toolbars, URL bar and sidebar in different greys; these variables make them
-   one colour, with fields and the selected tab one step lighter (#3B4252). */
+   one colour, with fields one step lighter (#3B4252). The open tab is the
+   NikOS accent, Nord frost (#88C0D0, as GRUB's selected entry), with dark text:
+   one step lighter was too close to the strip to see which tab is open. */
 :root {
   --nikos-bg: #2E3440;
   --nikos-raised: #3B4252;
   --nikos-text: #ECEFF4;
+  --nikos-accent: #88C0D0;
+  --nikos-on-accent: #2E3440;
 
   --lwt-accent-color: var(--nikos-bg) !important;
   --lwt-accent-color-inactive: var(--nikos-bg) !important;
@@ -17,7 +21,8 @@
   --tabs-navbar-separator-color: transparent !important;
   --toolbarseparator-color: transparent !important;
   --chrome-content-separator-color: var(--nikos-bg) !important;
-  --tab-selected-bgcolor: var(--nikos-raised) !important;
+  --tab-selected-bgcolor: var(--nikos-accent) !important;
+  --tab-selected-textcolor: var(--nikos-on-accent) !important;
   --toolbar-field-background-color: var(--nikos-raised) !important;
   --toolbar-field-focus-background-color: var(--nikos-raised) !important;
   --urlbar-box-bgcolor: var(--nikos-raised) !important;
@@ -53,8 +58,18 @@
   background-color: var(--nikos-raised) !important;
 }
 .tab-background:is([selected], [multiselected]) {
-  background-color: var(--nikos-raised) !important;
+  background-color: var(--nikos-accent) !important;
   background-image: none !important;
+}
+/* Dark text and icons on the accent: label, close button, audio and sharing
+   indicators. */
+.tabbrowser-tab:is([selected], [multiselected]) :is(.tab-label, .tab-close-button, .tab-icon-overlay, .tab-sharing-icon-overlay) {
+  color: var(--nikos-on-accent) !important;
+  fill: var(--nikos-on-accent) !important;
+}
+/* Other tabs: lighter on hover, so the pointer is visible without looking open. */
+.tabbrowser-tab:not([selected], [multiselected]):hover .tab-background {
+  background-color: var(--nikos-raised) !important;
 }
 #tabbrowser-tabpanels,
 #tabbrowser-tabbox,

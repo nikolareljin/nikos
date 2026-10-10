@@ -81,7 +81,7 @@ def test_chromium_profile_gets_dark_classic_seeded_theme(tmp_path, capsys):
     data = json.loads(prefs.read_text())
     theme = data["browser"]["theme"]
     assert theme["color_scheme"] == 2 and theme["follows_system_colors"] is False
-    assert theme["user_color"] & 0xFFFFFFFF == 0xFF2E3440
+    assert theme["user_color"] & 0xFFFFFFFF == 0xFF88C0D0  # the NikOS accent
     assert data["extensions"]["theme"]["system_theme"] == 0
     assert data["other"] == {"kept": True}
     assert ": changed" in capsys.readouterr().out
@@ -99,6 +99,31 @@ def test_chromium_is_set_once_so_a_later_user_choice_survives(tmp_path, capsys):
     assert json.loads(prefs.read_text())["browser"]["theme"]["color_scheme"] == 1
     chromium.main(tmp_path, force=True)
     assert json.loads(prefs.read_text())["browser"]["theme"]["color_scheme"] == 2
+
+
+def test_a_profile_on_the_old_nikos_seed_gets_the_accent_and_keeps_the_rest(tmp_path, capsys):
+    """Themed by an earlier NikOS (#2E3440 seed), then the user picked light."""
+    prefs = _profile(tmp_path)
+    chromium.main(tmp_path)
+    data = json.loads(prefs.read_text())
+    data["browser"]["theme"].update(user_color=0xFF2E3440 - (1 << 32), user_color2=0xFF2E3440 - (1 << 32), color_scheme=1)
+    prefs.write_text(json.dumps(data))
+    chromium.main(tmp_path)
+    theme = json.loads(prefs.read_text())["browser"]["theme"]
+    assert theme["user_color"] & 0xFFFFFFFF == 0xFF88C0D0
+    assert theme["color_scheme"] == 1, "only the seed moves on"
+
+
+def test_a_colour_the_user_picked_is_kept(tmp_path, capsys):
+    prefs = _profile(tmp_path)
+    chromium.main(tmp_path)
+    data = json.loads(prefs.read_text())
+    data["browser"]["theme"]["user_color"] = 0xFFAA0000 - (1 << 32)
+    prefs.write_text(json.dumps(data))
+    capsys.readouterr()
+    chromium.main(tmp_path)
+    assert "kept" in capsys.readouterr().out
+    assert json.loads(prefs.read_text())["browser"]["theme"]["user_color"] & 0xFFFFFFFF == 0xFFAA0000
 
 
 def test_chromium_running_is_skipped_but_a_stale_lock_is_not(tmp_path, capsys):
