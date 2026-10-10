@@ -13,6 +13,9 @@
 #                      commit for N days and no uncommitted change (default 30).
 #   --projects DIR     Where the repositories are (default ~/Projects).
 #   --only LIST        Comma list of: docker, node, packages (default all).
+#   --uv-force         Clear the uv cache even while a uv process holds it (uvx
+#                      tools such as MCP servers hold it for as long as they run).
+#                      They keep running from files already open; restart them.
 #   --unused-images    Also remove tagged Docker images no container uses and
 #                      created more than --keep-days ago. Off by default: they
 #                      are downloaded again on the next start.
@@ -31,6 +34,7 @@ IDLE_DAYS=30
 PROJECTS="${HOME}/Projects"
 ONLY="docker,node,packages"
 UNUSED_IMAGES=false
+UV_FORCE=false
 
 # The comment block at the top, up to the first line that is not a comment.
 usage() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; }
@@ -46,6 +50,7 @@ while [[ $# -gt 0 ]]; do
     --projects) [[ -d "${2:-}" ]] || { echo "--projects needs a directory" >&2; exit 2; }; PROJECTS="$2"; shift ;;
     --only) need_value "$1" "${2:-}"; ONLY="$2"; shift ;;
     --unused-images) UNUSED_IMAGES=true ;;
+    --uv-force) UV_FORCE=true ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
   esac
@@ -172,9 +177,18 @@ installing() { # installing <name>...: a process with that exact name runs
 }
 if wants packages; then
   if command -v uv >/dev/null 2>&1; then
-    # A short lock wait: another uv process (an install) holds the lock, and the
-    # prune is skipped rather than waiting minutes or forcing it.
-    plan "uv cache: entries no environment uses" "of $(human "$(uv cache dir 2>/dev/null)")" "env UV_LOCK_TIMEOUT=10 uv cache prune"
+    # All of it: uv's cache is downloads and unpacked packages (archive-v0 held
+    # 21 of 22 GB here), fetched again when needed. Environments keep their
+    # files: uv hard-links or copies into them. `uv cache prune` keeps whatever
+    # uv's index still points to, which is nearly all of it, so it freed little.
+    # A short lock wait: a uv process (an install, or a uvx tool that runs for
+    # hours) holds the lock, and the step is skipped, not forced, unless
+    # --uv-force.
+    if $UV_FORCE; then
+      plan "uv cache: all of it, forced past running uv processes" "$(human "$(uv cache dir 2>/dev/null)")" "uv cache clean --force"
+    else
+      plan "uv cache: all of it (downloads, fetched again when needed)" "$(human "$(uv cache dir 2>/dev/null)")" "env UV_LOCK_TIMEOUT=10 uv cache clean"
+    fi
   fi
   if installing npm pnpm yarn; then
     echo "npm and pnpm caches: skipped, an npm, pnpm or yarn process is running."
@@ -238,8 +252,11 @@ for item in "${PLAN[@]}"; do
   else
     # shellcheck disable=SC2086  # the planned command, split into words on purpose
     if ! err="$($action 2>&1 >/dev/null)"; then
-      if [[ "$action" == *"uv cache prune"* && "$err" == *"lock"* ]]; then
-        echo "   skipped: another uv process holds its cache; run again when it is done"
+      if [[ "$action" == *"uv cache clean"* && "$err" == *"lock"* ]]; then
+        echo "   skipped: a uv process holds its cache:"
+        { pgrep -a -x uv 2>/dev/null || true; } | sed 's/^/     /' | head -5
+        echo "   uvx tools (MCP servers, for one) hold it while they run. Stop them, or run"
+        echo "   nikos clean --apply --only packages --uv-force (then restart them)."
       else
         printf '   failed: %s\n%s\n' "$action" "$err" >&2
         failed=1

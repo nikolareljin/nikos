@@ -4,6 +4,13 @@ All notable changes to NikOS are documented here.
 
 ## [Unreleased]
 
+### Changed
+- `nikos clean` clears the whole uv cache (`uv cache clean`), not only what `uv cache prune`
+  calls unreachable: prune kept nearly all of a 22 GB cache, because uv's index still points
+  at its unpacked packages. It is downloads; environments keep their files. When a uv
+  process holds the cache (a `uvx` tool such as an MCP server holds it while it runs), the
+  step is skipped after 10 seconds, naming the processes; `--uv-force` clears it anyway.
+
 ### Fixed
 - `nikos clean` reported "Freed on /: 0 GB" after freeing about 10 GB: one rounded-down
   difference measured around the confirmation prompt. Each step now reports what it freed,

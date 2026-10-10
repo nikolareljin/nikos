@@ -145,7 +145,7 @@ nikos log 100</code></pre>
 
   <p><code>nikos clean</code> lists, with sizes, what nothing uses: Docker build cache unused for a
   week (every builder), untagged images, <code>node_modules</code> in git repositories with no commit
-  for 30 days, nothing uncommitted and nothing running from them, and unused uv, pnpm, npm and pip
+  for 30 days, nothing uncommitted and nothing running from them, the uv cache, and unused pnpm, npm and pip
   cache entries. It removes them only with <code>--apply</code>. It never removes Docker volumes,
   containers, virtual environments, build output or tracked files. It is in NikOS 1.2.0 and
   later (<code>nikos update</code> brings it). Details:

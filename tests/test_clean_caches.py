@@ -38,7 +38,7 @@ def env(tmp_path):
             '  "ps -q") [ -n "$FAKE_MOUNT" ] && echo c1 ;; inspect*) [ -n "$FAKE_MOUNT" ] && echo "$FAKE_MOUNT" ;;\n'
             '  "buildx ls"*) [ -n "$FAKE_BUILDERS" ] && printf "%b\\n" "$FAKE_BUILDERS" ;;\n'
             '  "-a -d cwd"*) [ -n "$FAKE_CWD" ] && echo "n$FAKE_CWD" ;;\n'
-            '  "cache prune") [ -n "$FAKE_UV_LOCK" ] && { echo "error: Timeout (10s) when waiting for lock on cache" >&2; exit 2; } ;; esac\n'
+            '  "cache clean") [ -n "$FAKE_UV_LOCK" ] && { echo "error: Timeout (10s) when waiting for lock on cache" >&2; exit 2; } ;; esac\n'
             "exit 0\n"
         )
         (bindir / name).chmod(0o755)
@@ -97,7 +97,7 @@ def test_apply_runs_only_the_unused_cleanups(env):
     assert "docker builder prune -f --filter until=168h" in calls
     assert "docker image prune -f\n" in calls          # dangling only: no -a
     assert "image prune -a" not in calls
-    assert "uv cache prune" in calls and "pnpm store prune" in calls and "npm cache verify" in calls
+    assert "uv cache clean\n" in calls and "pnpm store prune" in calls and "npm cache verify" in calls
     assert "volume" not in calls
 
 
@@ -228,7 +228,7 @@ def test_npm_and_pnpm_wait_for_a_running_install(env, tmp_path):
     assert r.returncode == 0, r.stderr
     assert "skipped, an npm, pnpm or yarn process is running" in r.stdout
     assert "npm cache verify" not in calls and "pnpm store prune" not in calls
-    assert "uv cache prune" in calls
+    assert "uv cache clean" in calls
 
 
 def test_keep_days_zero_is_all_build_cache_with_no_age_filter(env):
@@ -245,12 +245,25 @@ def test_a_held_uv_lock_is_a_skip_not_a_failure(env):
     env["env"]["FAKE_UV_LOCK"] = "1"
     r, calls = run(env, "--apply", "--yes", "--only", "packages")
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "skipped: another uv process holds its cache" in r.stdout
-    assert "uv cache prune" in calls
+    assert "skipped: a uv process holds its cache" in r.stdout and "--uv-force" in r.stdout
+    assert "uv cache clean" in calls and "--force" not in calls
 
 
 def test_each_step_and_the_total_report_free_space(env):
     r, _ = run(env, "--apply", "--yes", "--only", "docker")
     assert r.returncode == 0, r.stderr
     assert "   freed " in r.stdout and " GB before, " in r.stdout
+
+
+def test_uv_force_clears_past_a_held_lock(env):
+    """uvx tools (MCP servers) hold uv's lock for as long as they run."""
+    r, calls = run(env, "--apply", "--yes", "--only", "packages", "--uv-force")
+    assert r.returncode == 0, r.stderr
+    assert "uv cache clean --force" in calls
+
+
+def test_the_whole_uv_cache_is_cleared_not_pruned(env):
+    """prune keeps what uv's index points to, nearly all of it; 22 GB stayed."""
+    _, calls = run(env, "--apply", "--yes", "--only", "packages")
+    assert "uv cache clean" in calls and "uv cache prune" not in calls
 
