@@ -85,19 +85,22 @@ bridge, not on loopback. So `local` also installs a forwarder:
 `host.docker.internal` resolves to with `extra_hosts:
 ["host.docker.internal:host-gateway"]`; `172.17.0.1` on a default Docker Engine)
 and `nikos-ollama-bridge.service` runs `systemd-socket-proxyd` to the loopback
-endpoint. Only loopback and `172.16.0.0/12` may connect, so another machine on
-the network is refused, and Ollama itself stays on loopback.
+endpoint. Only loopback and Docker's pool ranges (`172.16.0.0/12`,
+`192.168.0.0/16`, `10.0.0.0/8`) may connect, and only through Docker's own
+bridges (the interface filter below), so another machine on the network is
+refused, and Ollama itself stays on loopback.
 
 `nikos_ollama_bridge: auto` uses the bridge of a rootful Docker Engine and
 installs nothing without Docker or with rootless Docker, whose bridge lives in
 another network namespace. `off` removes a forwarder installed earlier. An
-explicit address must be in `172.16.0.0/12`; the play refuses any other. The
-play also refuses the forwarder when a network that is not Docker's (a LAN, a
-VPN) reaches into `172.16.0.0/12` on this machine, by an address or by a route
-(a VPN can route `172.20.0.0/16` without an address there): the filter could not tell its
-machines from containers. Set `off`, or move Docker's `default-address-pools`
-out of that range. Docker says which interfaces are its own bridges; any other
-interface counts, whatever its name. Every check fails closed: when the
+explicit address must be in `172.16.0.0/12`; the play refuses any other. A
+network that is not Docker's (a LAN, a VPN routing
+`172.16.99.9`) in `172.16.0.0/12`, by an address or a route, is reported as a
+warning when the interface filter below is loaded, since it drops that
+traffic; with the filter not loaded the forwarder refuses to start. It is also
+refused when an interface that is not Docker's would pass that filter, or when
+Docker's networks cannot be read.
+Docker says which interfaces are its own bridges. Every check fails closed: when the
 interfaces cannot be read, the forwarder is refused. Wherever the forwarder must
 not run (`off`, remote mode, no Docker, a shared range) an installed one is
 stopped and removed before the play reports anything, and the role runs again
@@ -111,9 +114,12 @@ The address filter decides by source address, which says nothing about where a
 packet came in. So the forwarder also has an interface filter: an nftables table
 of its own (`/etc/nikos/ollama-bridge.nft`, loaded by
 `nikos-ollama-bridge-filter.service`) lets the bridge address's Ollama port answer
-only `lo`, `docker0` and `br-*`, and the socket requires it: no filter, no
-forwarder. Because it trusts the name pattern `br-*`, the network check also
-refuses any interface named `br-*` that Docker did not create, whatever its
+only `lo` and Docker's bridges by exact name (set `docker_ifs`), and the socket
+requires it: no filter, no forwarder. `nikos-ollama-bridge-refresh` fills the set
+when the filter loads, and `nikos-ollama-bridge-watch.service` refreshes it on
+every Docker network create or destroy, so a libvirt or LXC `br-*` is not let in.
+The network check refuses an interface that passes the filter, by a stale set
+entry or by an older `br-*` filter, when Docker did not create it, whatever its
 address. It never flushes or edits Docker's rules. `tests/machine/ollama_bridge_filter.sh`
 proves it in a privileged container: a machine behind another interface with an
 address inside `172.16.0.0/12` is refused, a container is answered

@@ -340,7 +340,7 @@ def test_continuation_is_a_no_op_without_a_checked_out_cli(tmp_path):
 # ── cmd_update: sync, then the two playbook passes ───────────────────────────
 
 
-def _run_cmd_update(tmp_path: Path, continuation: bool, optional_tags: str):
+def _run_cmd_update(tmp_path: Path, continuation: bool, optional_tags: str, playbook_rc: int = 0):
     home = tmp_path / "nikos-home"
     (home / ".git").mkdir(parents=True)
     calls = tmp_path / "calls.log"
@@ -355,7 +355,8 @@ def _run_cmd_update(tmp_path: Path, continuation: bool, optional_tags: str):
         "print_error() { echo \"ERROR:$*\" >&2; }\n"
         '_resolve_update_ref() { printf "0.6.5\\n"; }\n'
         '_sync_repo_to_ref() { echo "sync:$*" >> "${CALLS}"; }\n'
-        '_playbook() { echo "playbook:$*" >> "${CALLS}"; }\n'
+        '_playbook() { echo "playbook:$*" >> "${CALLS}"; NIKOS_LAST_RUN_LOG=/logs/run.log; '
+        f'return {playbook_rc}; }}\n'
         '_models_offer_removal() { echo "models:offer-removal" >> "${CALLS}"; }\n'
         '_exec_update_continuation() { echo "continuation" >> "${CALLS}"; }\n'
         f'_get_saved_optional_tags() {{ printf "%s\\n" {optional_tags!r}; }}\n'
@@ -411,3 +412,11 @@ def test_continuation_does_not_re_sync_the_checkout(tmp_path):
         "playbook:-e nikos_update_mode=true",
         "playbook:--no-saved-skip-tags -e nikos_update_mode=true --tags redis",
     ], calls
+
+
+def test_a_failed_playbook_is_reported_with_its_exit_code_and_skips_the_replay(tmp_path):
+    result, calls = _run_cmd_update(tmp_path, continuation=True, optional_tags="redis", playbook_rc=4)
+
+    assert result.returncode == 4, result.stderr
+    assert "nikos update failed (exit 4)" in result.stderr and "/logs/run.log" in result.stderr
+    assert not [c for c in calls if "--tags" in c], calls

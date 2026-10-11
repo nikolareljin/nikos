@@ -124,7 +124,17 @@
     name: "{{ nikos_locale }}"
     state: present
 
+# --if-not-exists prints nothing when the remote exists, so the old
+# "already exists" test reported a change on every run. Ask first.
+- name: List flatpak remotes
+  ansible.builtin.command: flatpak remotes --system --columns=name
+  register: base_flatpak_remotes
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Add Flathub remote
   ansible.builtin.command: flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
   register: base_flathub_result
-  changed_when: "'already exists' not in (base_flathub_result.stderr | default(''))"
+  changed_when: true
+  when: "'flathub' not in (base_flatpak_remotes.stdout_lines | default([]) | map('trim') | list)"

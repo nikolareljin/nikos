@@ -46,6 +46,7 @@
     remote_src: true
     dest: /usr/share/keyrings/microsoft.gpg
     mode: "0644"
+  register: editors_vscode_key
   become: true
 
 - name: Remove temporary Microsoft VS Code apt key files
@@ -67,17 +68,31 @@
     architectures: amd64
     signed_by: /usr/share/keyrings/microsoft.gpg
     state: present
+  register: editors_vscode_repo
   become: true
+
+- name: Check whether VS Code is installed
+  ansible.builtin.command: dpkg-query -W -f=${Status} code
+  register: editors_vscode_pkg
+  changed_when: false
+  failed_when: false
+  check_mode: false
 
 # No cache_valid_time here. The base role refreshes the apt cache at the start
 # of the play, so any window would consider the cache fresh and skip the update
 # that first fetches the repository added just above, leaving the install to
 # fail with "No package matching 'code' is available".
+# Only when the key or repository changed, or code is not installed yet: the
+# cache from the base role already covers an unchanged repository. The key
+# download and fingerprint check above always run (a rotated key must be seen).
 - name: Refresh the apt cache for the VS Code repository
   ansible.builtin.apt:
     update_cache: true
   become: true
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - editors_vscode_key is changed or editors_vscode_repo is changed
+      or 'install ok installed' not in (editors_vscode_pkg.stdout | default(''))
 
 - name: Install VS Code
   ansible.builtin.apt:
