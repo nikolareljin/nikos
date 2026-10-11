@@ -290,6 +290,7 @@
     # existing clone to it.
     version: "{{ image_view_commit }}"
     update: "{{ nikos_update_mode | bool }}"
+  register: dev_tools_image_view_clone
   when: not pin_gate_clone_current | bool
 
 - name: Resolve cargo binary for image-view build
@@ -354,9 +355,36 @@
     path: "{{ nikos_home }}/.local/bin/image-view"
   register: dev_tools_image_view_bin
 
+- name: Read the commit of the image-view checkout
+  ansible.builtin.command:
+    argv: [git, -C, "{{ nikos_tools_dir }}/image-view", rev-parse, HEAD]
+  register: dev_tools_image_view_head
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Read the commit image-view was last built from
+  ansible.builtin.command:
+    argv: [cat, "{{ nikos_tools_dir }}/.nikos-built/image-view"]
+  register: dev_tools_image_view_built
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# A cargo release build takes minutes; it used to rerun on every update.
+# Rebuild when the binary is missing, the clone moved this run, or the last
+# successful build was from another commit (no marker yet: the binary counts).
+- name: Decide whether image-view has to be built
+  ansible.builtin.set_fact:
+    dev_tools_image_view_needs_build: >-
+      {{ not dev_tools_image_view_bin.stat.exists
+         or (dev_tools_image_view_clone is changed)
+         or (dev_tools_image_view_built.rc == 0
+             and (dev_tools_image_view_built.stdout | trim) != (dev_tools_image_view_head.stdout | trim)) }}
+
 - name: Build and install image-view
   ansible.builtin.command: "{{ nikos_tools_dir }}/image-view/setup"
-  changed_when: false
+  changed_when: true
   environment:
     HOME: "{{ nikos_home }}"
     INSTALL_DIR: "{{ nikos_home }}/.local/bin"
@@ -368,7 +396,29 @@
     - not ansible_check_mode
     - dev_tools_cargo_bin | length > 0
     - dev_tools_cargo_version_number is version('1.85.0', '>=')
-    - nikos_update_mode | bool or not dev_tools_image_view_bin.stat.exists
+    - dev_tools_image_view_needs_build | bool
+
+# Markers live outside the clones so they never show in their git status.
+- name: Create the directory for build markers
+  ansible.builtin.file:
+    path: "{{ nikos_tools_dir }}/.nikos-built"
+    state: directory
+    mode: "0755"
+  when: not ansible_check_mode
+
+# Written after a build that succeeded, or once for a binary installed before
+# markers existed. Never after a failed build: the old binary would then
+# count as current and the build would not be retried.
+- name: Record the commit image-view was built from
+  ansible.builtin.copy:
+    dest: "{{ nikos_tools_dir }}/.nikos-built/image-view"
+    content: "{{ dev_tools_image_view_head.stdout | trim }}\n"
+    mode: "0644"
+  when:
+    - not ansible_check_mode
+    - dev_tools_image_view_head.rc == 0
+    - (dev_tools_image_view_result is not skipped and dev_tools_image_view_result is succeeded)
+      or (not dev_tools_image_view_needs_build | bool and dev_tools_image_view_built.rc != 0)
 
 - name: Warn when image-view build failed
   ansible.builtin.debug:
@@ -392,7 +442,7 @@
     - not ansible_check_mode
     - dev_tools_cargo_bin | length > 0
     - dev_tools_cargo_version_number is version('1.85.0', '<')
-    - nikos_update_mode | bool or not dev_tools_image_view_bin.stat.exists
+    - dev_tools_image_view_needs_build | bool
 
 - name: Warn when cargo was not found for image-view
   ansible.builtin.debug:
@@ -420,12 +470,38 @@
     version: "{{ git_lantern_commit }}"
     update: "{{ nikos_update_mode | bool }}"
     recursive: false
+  register: dev_tools_git_lantern_clone
   when: not pin_gate_clone_current | bool
 
 - name: Check whether git-lantern is installed
   ansible.builtin.stat:
     path: "{{ nikos_home }}/.local/bin/lantern"
   register: dev_tools_git_lantern_bin
+
+- name: Read the commit of the git-lantern checkout
+  ansible.builtin.command:
+    argv: [git, -C, "{{ nikos_tools_dir }}/git-lantern", rev-parse, HEAD]
+  register: dev_tools_git_lantern_head
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Read the commit git-lantern was last built from
+  ansible.builtin.command:
+    argv: [cat, "{{ nikos_tools_dir }}/.nikos-built/git-lantern"]
+  register: dev_tools_git_lantern_built
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Same rule as image-view: install when missing, moved, or built from another commit.
+- name: Decide whether git-lantern has to be installed
+  ansible.builtin.set_fact:
+    dev_tools_git_lantern_needs_build: >-
+      {{ not dev_tools_git_lantern_bin.stat.exists
+         or (dev_tools_git_lantern_clone is changed)
+         or (dev_tools_git_lantern_built.rc == 0
+             and (dev_tools_git_lantern_built.stdout | trim) != (dev_tools_git_lantern_head.stdout | trim)) }}
 
 - name: Ensure user local bin directory exists for git-lantern
   ansible.builtin.file:
@@ -438,10 +514,20 @@
     {{ nikos_tools_dir }}/git-lantern/install
     --prefix {{ nikos_home }}/.local/opt/git-lantern
     --bin-link {{ nikos_home }}/.local/bin/lantern
-  changed_when: false
+  register: dev_tools_git_lantern_install
+  changed_when: true
   when:
     - not ansible_check_mode
-    - nikos_update_mode | bool or not dev_tools_git_lantern_bin.stat.exists
+    - dev_tools_git_lantern_needs_build | bool
+
+- name: Record the commit git-lantern was installed from
+  ansible.builtin.copy:
+    dest: "{{ nikos_tools_dir }}/.nikos-built/git-lantern"
+    content: "{{ dev_tools_git_lantern_head.stdout | trim }}\n"
+    mode: "0644"
+  when:
+    - not ansible_check_mode
+    - dev_tools_git_lantern_head.rc == 0
 
 # Pinned release (mkcert_version), checked against mkcert_sha256. Installed
 # when missing or older than the pin; never downgraded. Prints "v1.4.4".

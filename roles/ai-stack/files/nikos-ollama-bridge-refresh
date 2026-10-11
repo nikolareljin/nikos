@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Managed by NikOS (roles/ai-stack). Loads Docker's current bridges into the
+# forwarder's two allowlists, both exact:
+# - the nft filter (inet nikos_ollama_bridge): bridge names into set docker_ifs
+#   and their IPv4 subnets into set docker_nets, in one transaction;
+# - the socket: IPAddressAllow=localhost plus those subnets, in a drop-in. The
+#   socket restarts only when the drop-in changed.
+# No Docker network means empty sets and localhost only: nothing is let in.
+# Run when the filter loads and on every Docker network create or destroy
+# (nikos-ollama-bridge-watch.service).
+set -euo pipefail
+# Installed beside the check (both in /usr/local/libexec).
+check="$(dirname "$0")/nikos-ollama-bridge-check"
+dropin_dir="${NIKOS_OLLAMA_BRIDGE_DROPIN_DIR:-/etc/systemd/system/nikos-ollama-bridge.socket.d}"
+
+# --watch: refresh on every Docker network create or destroy until Docker's
+# event stream ends (the unit restarts it). A failed refresh is retried on the
+# next event; the sets and the drop-in keep their last good content.
+if [[ "${1:-}" == "--watch" ]]; then
+  docker events --filter type=network --filter event=create --filter event=destroy --format x \
+    | while read -r _; do "$0" || true; done
+  exit 1
+fi
+names="$("${check}" --docker-ifs)"
+subnets="$("${check}" --docker-subnets)"
+ifs=""
+for n in ${names}; do ifs="${ifs:+${ifs}, }\"${n}\""; done
+nets=""
+allow="localhost"
+for s in ${subnets}; do
+  # The check prints IPv4 CIDRs only; anything else is not written anywhere.
+  [[ "${s}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$ ]] || { echo "not an IPv4 subnet: ${s}" >&2; exit 2; }
+  nets="${nets:+${nets}, }${s}"
+  allow="${allow} ${s}"
+done
+{
+  echo "flush set inet nikos_ollama_bridge docker_ifs"
+  echo "flush set inet nikos_ollama_bridge docker_nets"
+  [[ -z "${ifs}" ]] || echo "add element inet nikos_ollama_bridge docker_ifs { ${ifs} }"
+  [[ -z "${nets}" ]] || echo "add element inet nikos_ollama_bridge docker_nets { ${nets} }"
+} | nft -f -
+
+# The empty assignment clears the socket's own list before this one is set.
+want="$(printf '%s\n' "# Managed by NikOS (nikos-ollama-bridge-refresh). Docker's bridge subnets." \
+  "[Socket]" "IPAddressAllow=" "IPAddressAllow=${allow}")"
+dropin="${dropin_dir}/docker-subnets.conf"
+if [[ "$(cat "${dropin}" 2>/dev/null || true)" != "${want}" ]]; then
+  mkdir -p "${dropin_dir}"
+  printf '%s\n' "${want}" > "${dropin}.tmp"
+  mv -f "${dropin}.tmp" "${dropin}"
+  systemctl daemon-reload
+  # A listening socket keeps the list it was created with.
+  # --no-block: run from the filter's ExecStartPost, a waiting restart would
+  # wait on the socket's start, which waits on the filter.
+  systemctl --no-block try-restart nikos-ollama-bridge.socket
+fi

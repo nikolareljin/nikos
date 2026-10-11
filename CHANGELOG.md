@@ -2,6 +2,25 @@
 
 All notable changes to NikOS are documented here.
 
+## Unreleased
+
+### Fixed
+- Ollama forwarder: a VPN or LAN in `172.16.0.0/12` (e.g. a VPN's `172.16.99.9` on
+  `wg0`) is a warning, not a refusal, while the interface filter is loaded; `nikos update` no longer removes the
+  forwarder while the VPN is up. The nftables filter accepts Docker's bridges by exact
+  name (set `docker_ifs`, refreshed on Docker network changes by
+  `nikos-ollama-bridge-watch.service`) instead of `br-*`, and only from Docker's bridge
+  subnets (set `docker_nets`). The socket's `IPAddressAllow` is loopback plus those
+  exact subnets (a drop-in the refresh writes), so a compose network on
+  `192.168.16.0/20` reaches Ollama and a LAN host on `192.168.1.0/24` is refused by both.
+- `nikos update` with the TUI: a failed playbook clears the dialog screen, shows the
+  summary and log path in a message box, and exits with the playbook's code; the
+  optional-bundle pass no longer runs after a failure.
+- `nikos update` skips finished work: BitNet.cpp rebuilds only when its pin moved, the
+  installed CLI fails `--version`, or it was built from another commit; image-view and
+  git-lantern likewise; Flathub and the VS Code apt refresh no longer report a change on
+  every run.
+
 ## [1.3.0] - 2026-10-10
 
 ### Added

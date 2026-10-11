@@ -2,31 +2,30 @@
 # Managed by NikOS (roles/ai-stack). Run by the play, by nikos-ollama-bridge.service
 # before every start (ExecCondition), and by `nikos doctor`.
 #
-# The Ollama forwarder admits any source in 172.16.0.0/12. That is Docker's
-# range only while no other network on this machine reaches into it: a LAN or
-# VPN with an address there, or a route there (a VPN can route 172.20.0.0/16
-# without holding an address in it), would let its machines reach an Ollama
-# that has no authentication. Docker names its own bridge interfaces; every
-# other interface counts, whatever it is called. The default route is not
-# counted: it covers every address and says nothing about this range.
+# The Ollama forwarder admits loopback and Docker's bridge subnets, and only on
+# the interfaces its nftables filter accepts: lo and Docker's own bridges, by
+# exact name (set docker_ifs, with source addresses in set docker_nets; both
+# kept current by nikos-ollama-bridge-refresh). A packet from any other
+# interface is dropped, whatever its source address.
 #
-# The forwarder's interface filter trusts the names lo, docker0 and br-*; an
-# interface named br-* that Docker did not create is refused for that reason.
+# So:
+# - refused: an interface the filter accepts that Docker did not create (a
+#   stale set entry reused by a libvirt/LXC bridge, or an old br-* filter);
+# - warned: another network in 172.16.0.0/12 (a LAN or VPN address or route,
+#   e.g. a VPN's 172.16.99.9 on wg0), when the filter is loaded:
+#   it drops that traffic, so the forwarder keeps running. With the filter
+#   not loaded, refused.
 #
-# Prints each such interface address, route or name.
-# Exit: 0 none (the forwarder may run); 1 one or more (it must not);
+# Usage: nikos-ollama-bridge-check            check, as above
+#        nikos-ollama-bridge-check --docker-ifs  print Docker's bridge names
+#        nikos-ollama-bridge-check --docker-subnets  print their IPv4 subnets
+# Exit: 0 the forwarder may run (warnings, if any, on stderr as "warning: ...");
+#       1 it must not (each reason on stdout);
 #       2 something could not be read (it must not: no answer is not "none").
 set -uo pipefail
 
-addrs="$(ip -4 -o addr show 2>/dev/null)" || { echo "cannot read the network interfaces (ip -4 addr)" >&2; exit 2; }
-[[ -n "${addrs}" ]] || { echo "no network interfaces listed (ip -4 addr)" >&2; exit 2; }
-routes="$(ip -4 route show table all 2>/dev/null)" || { echo "cannot read the routes (ip -4 route)" >&2; exit 2; }
-# Every interface by name, with or without an IPv4 address: the br-* rule is
-# about names, and a bridge with no IPv4 address is trusted by name too.
-links="$(ip -o link show 2>/dev/null)" || { echo "cannot read the interfaces (ip link)" >&2; exit 2; }
-[[ -n "${links}" ]] || { echo "no interfaces listed (ip link)" >&2; exit 2; }
-
 docker_ifs=""
+docker_subnets=""
 if command -v docker >/dev/null 2>&1; then
   ids="$(docker network ls -q --filter driver=bridge 2>/dev/null)" || { echo "cannot list Docker's networks" >&2; exit 2; }
   for id in ${ids}; do
@@ -34,15 +33,52 @@ if command -v docker >/dev/null 2>&1; then
     name="$(docker network inspect -f '{{index .Options "com.docker.network.bridge.name"}}' "${id}" 2>/dev/null)" \
       || { echo "cannot inspect Docker network ${id}" >&2; exit 2; }
     docker_ifs="${docker_ifs} ${name:-br-${id:0:12}}"
+    # shellcheck disable=SC2016  # a docker template, not a shell expansion
+    nets="$(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' "${id}" 2>/dev/null)" \
+      || { echo "cannot inspect Docker network ${id}" >&2; exit 2; }
+    # IPv4 only: the forwarder listens on an IPv4 address.
+    for n in ${nets}; do
+      [[ "${n}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$ ]] && docker_subnets="${docker_subnets} ${n}"
+    done
   done
 fi
 
-DOCKER_IFS="${docker_ifs}" ADDRS="${addrs}" ROUTES="${routes}" LINKS="${links}" python3 - <<'PY'
-import ipaddress, os, sys
+if [[ "${1:-}" == "--docker-subnets" ]]; then
+  for n in ${docker_subnets}; do echo "${n}"; done | sort -u
+  exit 0
+fi
+
+if [[ "${1:-}" == "--docker-ifs" ]]; then
+  for n in ${docker_ifs}; do echo "${n}"; done
+  exit 0
+fi
+
+addrs="$(ip -4 -o addr show 2>/dev/null)" || { echo "cannot read the network interfaces (ip -4 addr)" >&2; exit 2; }
+[[ -n "${addrs}" ]] || { echo "no network interfaces listed (ip -4 addr)" >&2; exit 2; }
+routes="$(ip -4 route show table all 2>/dev/null)" || { echo "cannot read the routes (ip -4 route)" >&2; exit 2; }
+links="$(ip -o link show 2>/dev/null)" || { echo "cannot read the interfaces (ip link)" >&2; exit 2; }
+[[ -n "${links}" ]] || { echo "no interfaces listed (ip link)" >&2; exit 2; }
+# The filter as loaded now, when this runs as root and it is loaded; empty
+# otherwise (first install, or a user without nft access, e.g. nikos doctor).
+# NIKOS_BRIDGE_CHECK_IGNORE_LOADED=1: the caller vouches for the filter (the
+# play, which writes and loads it next; nikos doctor, after seeing its unit
+# active). The forwarder's own ExecCondition never sets it.
+loaded=""
+ignore_loaded="${NIKOS_BRIDGE_CHECK_IGNORE_LOADED:-}"
+if [[ -z "${ignore_loaded}" ]]; then
+  loaded="$(nft list table inet nikos_ollama_bridge 2>/dev/null || true)"
+fi
+
+IGNORE_LOADED="${ignore_loaded}" DOCKER_IFS="${docker_ifs}" ADDRS="${addrs}" ROUTES="${routes}" LINKS="${links}" LOADED="${loaded}" python3 - <<'PY'
+import fnmatch, ipaddress, os, re, sys
 
 docker = set(os.environ["DOCKER_IFS"].split()) | {"lo"}
+# Names the filter accepts: Docker's (what the next refresh loads) plus every
+# quoted name in the loaded table (iifname "x", set elements; "br-*" in a
+# filter written before the exact-name set).
+accepted = set(docker) | set(re.findall(r'"([^"]+)"', os.environ["LOADED"]))
 rng = ipaddress.ip_network("172.16.0.0/12")
-found = []
+refuse, warn = [], []
 
 
 def unreadable(what, line):
@@ -51,6 +87,20 @@ def unreadable(what, line):
     sys.exit(2)
 
 
+def passes_filter(name):
+    return any(fnmatch.fnmatchcase(name, a) for a in accepted)
+
+
+for line in os.environ["LINKS"].splitlines():
+    f = line.split(": ")
+    if len(f) < 2:
+        unreadable("interface", line)
+    name = f[1].split("@")[0].strip()
+    if not name:
+        unreadable("interface", line)
+    if name not in docker and passes_filter(name):
+        refuse.append(f"{name} (passes the forwarder's filter, not Docker's)")
+
 for line in os.environ["ADDRS"].splitlines():
     f = line.split()
     if not f:
@@ -58,10 +108,9 @@ for line in os.environ["ADDRS"].splitlines():
     if len(f) < 4 or f[2] != "inet":
         unreadable("address", line)
     iface = f[1].split("@")[0]
-    if iface in docker or iface.startswith("br-"):
-        continue  # Docker's; and a foreign br-* is refused by name below
+    if iface in docker:
+        continue
     try:
-        # Each address as written, for the message, and its network, for the test.
         given = [f[3]]
         # A point-to-point address names its peer: that one counts too.
         if "peer" in f:
@@ -71,20 +120,7 @@ for line in os.environ["ADDRS"].splitlines():
         unreadable("address", line)
     for g, net in nets:
         if net.overlaps(rng):
-            found.append(f"{iface} {g}")
-
-# The forwarder's interface filter trusts the name pattern br-*: an interface
-# by that name that Docker did not create is refused, whatever its addresses,
-# including none.
-for line in os.environ["LINKS"].splitlines():
-    f = line.split(": ")
-    if len(f) < 2:
-        unreadable("interface", line)
-    name = f[1].split("@")[0].strip()
-    if not name:
-        unreadable("interface", line)
-    if name.startswith("br-") and name not in docker:
-        found.append(f"{name} (named like a Docker bridge, not Docker's)")
+            warn.append(f"{iface} {g}")
 
 # Route types that carry no traffic toward another network.
 QUIET = {"local", "broadcast", "multicast", "anycast", "unreachable", "blackhole", "prohibit", "throw"}
@@ -105,15 +141,23 @@ for line in os.environ["ROUTES"].splitlines():
         net = ipaddress.ip_network(f[0], strict=False)
     except ValueError:
         unreadable("route", line)
-    # A route with no device (via only, or a nexthop list) is not Docker's.
     dev = f[f.index("dev") + 1] if "dev" in f and f.index("dev") + 1 < len(f) else "(no device)"
     if dev in docker:
         continue
     if net.overlaps(rng):
-        found.append(f"{dev} route {f[0]}")
+        warn.append(f"{dev} route {f[0]}")
 
-if found:
-    print("\n".join(dict.fromkeys(found)))
+# A network in the range is only a warning when the filter that drops it is
+# confirmed loaded (or vouched for). Otherwise nothing proves it is dropped.
+filter_loaded = "nikos_ollama_bridge" in os.environ["LOADED"] and "from_docker_only" in os.environ["LOADED"]
+if warn and not filter_loaded and not os.environ["IGNORE_LOADED"]:
+    for w in dict.fromkeys(warn):
+        refuse.append(f"{w} (the forwarder's interface filter is not loaded)")
+    warn = []
+for w in dict.fromkeys(warn):
+    print(f"warning: {w} is in 172.16.0.0/12; the forwarder's filter drops it", file=sys.stderr)
+if refuse:
+    print("\n".join(dict.fromkeys(refuse)))
     sys.exit(1)
 sys.exit(0)
 PY

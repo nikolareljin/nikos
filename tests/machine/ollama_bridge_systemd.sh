@@ -7,8 +7,9 @@
 # The other checks write files or load the nftables rule by hand. This boots
 # the image with systemd as PID 1 and runs roles/ai-stack/tasks/bridge.yml as
 # the play does (apt, unit files, systemctl):
-#   A. with a LAN at 172.20.0.0/24 (inside 172.16.0.0/12) the play refuses,
-#      names it, and installs nothing;
+#   A. with a LAN at 172.20.0.0/24 (inside 172.16.0.0/12) the play installs,
+#      warns naming it, and the LAN gets nothing (not Docker's interface or
+#      subnet);
 #   B. with the LAN at 10.99.0.0/24 it installs; through the forwarder,
 #      from_docker (behind docker0) gets the stand-in Ollama and from_lan, with
 #      a route to the bridge address, gets nothing;
@@ -55,8 +56,8 @@ inside '
   ip -n from_docker addr add 172.17.0.2/16 dev d1; ip -n from_docker link set d1 up
   ip -n from_lan addr add 172.20.0.2/24 dev l1;   ip -n from_lan link set l1 up
   ip -n from_lan route add 172.17.0.1/32 via 172.20.0.1
-  # A stand-in docker CLI: one bridge network, named docker0.
-  printf "%s\n" "#!/bin/sh" "case \"\$*\" in *\"network ls\"*) echo aaaaaaaaaaaa ;; *\"network inspect\"*) echo docker0 ;; esac" > /usr/local/bin/docker
+  # A stand-in docker CLI: one bridge network, named docker0, on 172.17.0.0/16.
+  printf "%s\n" "#!/bin/sh" "case \"\$*\" in *\"network ls\"*) echo aaaaaaaaaaaa ;; *Subnet*) echo \"172.17.0.0/16 \" ;; *\"network inspect\"*) echo docker0 ;; esac" > /usr/local/bin/docker
   chmod +x /usr/local/bin/docker
   # The stand-in Ollama, on loopback only.
   systemd-run --unit fake-ollama python3 -m http.server 11434 --bind 127.0.0.1 >/dev/null
@@ -81,12 +82,13 @@ YML
 }
 ask() { inside "ip netns exec $1 curl -s -m 5 -o /dev/null -w '%{http_code}' http://172.17.0.1:11434/ || true"; }
 
-# A. A LAN inside the range: refused, nothing installed.
-if refused="$(play 172.17.0.1 2>&1)"; then echo "FAIL: a LAN in 172.16.0.0/12 did not refuse the forwarder"; exit 1; fi
-echo "${refused}" | grep -q "Not running the Ollama forwarder: lan0 172.20.0.1/24" \
-  || { echo "${refused}" | tail -10; echo "FAIL: the refusal did not name the LAN"; exit 1; }
-inside '[ ! -e /etc/systemd/system/nikos-ollama-bridge.socket ]' || { echo "FAIL: a refused run installed the socket"; exit 1; }
-echo "A: a LAN in the range refuses the forwarder, nothing installed"
+# A. A LAN inside the range: a warning; both filters keep it out.
+warned="$(play 172.17.0.1 2>&1)" || { echo "${warned}" | tail -30; echo "FAIL: a LAN in 172.16.0.0/12 failed the play"; exit 1; }
+echo "${warned}" | grep -q "warning: lan0 172.20.0.1/24" \
+  || { echo "${warned}" | tail -10; echo "FAIL: the warning did not name the LAN"; exit 1; }
+lan_code="$(ask from_lan)"
+[[ "${lan_code}" != 200 ]] || { echo "FAIL: a LAN machine in 172.16.0.0/12 got an answer"; exit 1; }
+echo "A: a LAN in the range is a warning and gets nothing (${lan_code:-000})"
 
 # B. The LAN moves outside the range; it keeps a route to the bridge address.
 inside '
@@ -98,6 +100,10 @@ out="$(play 172.17.0.1 2>&1)" || { echo "${out}" | tail -30; echo "FAIL: the ins
 echo "${out}" | grep -E "^localhost" || true
 inside 'systemctl is-active nikos-ollama-bridge.socket nikos-ollama-bridge-filter.service' \
   || { echo "FAIL: the forwarder units are not active"; exit 1; }
+# The socket admits loopback and Docker's exact subnet, nothing wider.
+allow="$(inside 'systemctl show -p IPAddressAllow --value nikos-ollama-bridge.socket' | tr ' ' '\n' | LC_ALL=C sort | xargs)"
+echo "B: socket IPAddressAllow: ${allow}"
+[[ "${allow}" == "127.0.0.0/8 172.17.0.0/16 ::1/128" ]] || { echo "FAIL: the socket does not admit exactly loopback and Docker's subnet"; exit 1; }
 docker_code="$(ask from_docker)"; lan_code="$(ask from_lan)"
 echo "B: through the forwarder: docker0 -> ${docker_code}, lan0 -> ${lan_code:-000}"
 [[ "${docker_code}" == 200 ]] || { inside 'journalctl -u nikos-ollama-bridge.service -n 20 --no-pager' || true; echo "FAIL: a container got no answer"; exit 1; }
@@ -116,9 +122,9 @@ off="$(play off 2>&1)" || { echo "${off}" | tail -20; echo "FAIL: the run with o
 # shellcheck disable=SC2016  # expanded inside the container
 inside 'for f in /etc/systemd/system/nikos-ollama-bridge.socket /etc/systemd/system/nikos-ollama-bridge.service \
            /etc/systemd/system/nikos-ollama-bridge-filter.service /etc/nikos/ollama-bridge.nft \
-           /usr/local/libexec/nikos-ollama-bridge-check; do [ ! -e "$f" ] || { echo "left: $f"; exit 1; }; done
+           /usr/local/libexec/nikos-ollama-bridge-check /etc/systemd/system/nikos-ollama-bridge.socket.d; do [ ! -e "$f" ] || { echo "left: $f"; exit 1; }; done
     ! ss -Hltn "( sport = :11434 )" | grep -q 172.17.0.1
     ! nft list table inet nikos_ollama_bridge >/dev/null 2>&1' \
   || { echo "FAIL: off left something behind"; exit 1; }
 echo "D: off removed every unit and file"
-echo "ok: refused a shared range, installed, answered a container, refused the LAN, idempotent, removed by off"
+echo "ok: warned about a shared range, installed, answered a container, refused the LAN, idempotent, removed by off"

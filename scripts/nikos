@@ -59,8 +59,19 @@ _recap_total() {
     | awk '{ total += $1 } END { print total + 0 }'
 }
 
+# Leaves dialog's screen: clears it and restores the normal screen, so the
+# summary prints on a clean terminal instead of under a dead gauge.
+_leave_tui() {
+  if [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null; then
+    { command -v dialog >/dev/null 2>&1 && dialog --clear; } >/dev/tty 2>/dev/null || true
+    { tput rmcup 2>/dev/null; tput cnorm 2>/dev/null || printf '\033[?25h'; clear 2>/dev/null; } >/dev/tty 2>/dev/null || true
+  fi
+}
+
+# Prints the summary. With use_tui=true and a failed run, also shows it in a
+# dialog box on the terminal, so a TUI run ends on the failure, not a blank screen.
 _playbook_summary() {
-  local log_file="$1" rc="${2:-0}"
+  local log_file="$1" rc="${2:-0}" use_tui="${3:-false}"
 
   _strip_ansi_from_log "${log_file}"
 
@@ -70,26 +81,40 @@ _playbook_summary() {
   failed=$(_recap_total failed "${log_file}")
   unreachable=$(_recap_total unreachable "${log_file}")
 
-  echo ""
-  echo "----------------------------------------"
-  echo "Playbook summary"
-  echo "  Tasks OK:       ${ok}"
-  echo "  Tasks changed:  ${changed}"
-  [[ "${failed}"      -gt 0 ]] && echo "  Tasks FAILED:   ${failed}"
-  [[ "${unreachable}" -gt 0 ]] && echo "  Unreachable:    ${unreachable}"
+  local text
+  text="$(
+    echo "Playbook summary"
+    echo "  Tasks OK:       ${ok}"
+    echo "  Tasks changed:  ${changed}"
+    [[ "${failed}"      -gt 0 ]] && echo "  Tasks FAILED:   ${failed}"
+    [[ "${unreachable}" -gt 0 ]] && echo "  Unreachable:    ${unreachable}"
+    [[ "${rc}" -ne 0 ]] && echo "  Exit code:      ${rc}"
 
-  if [[ "${failed}" -gt 0 || "${unreachable}" -gt 0 ]]; then
+    if [[ "${failed}" -gt 0 || "${unreachable}" -gt 0 ]]; then
+      echo ""
+      echo "Failed tasks:"
+      awk '/^TASK \[/{task=$0} /fatal: \[/{print task}' "${log_file}" 2>/dev/null \
+        | sed 's/^TASK \[//;s/\] \*.*$//' \
+        | sort -u \
+        | while IFS= read -r t; do echo "  - ${t}"; done
+    fi
+
     echo ""
-    echo "Failed tasks:"
-    awk '/^TASK \[/{task=$0} /fatal: \[/{print task}' "${log_file}" 2>/dev/null \
-      | sed 's/^TASK \[//;s/\] \*.*$//' \
-      | sort -u \
-      | while IFS= read -r t; do echo "  - ${t}"; done
-  fi
+    echo "Log: ${log_file}"
+  )"
 
   echo ""
-  echo "Log: ${log_file}"
   echo "----------------------------------------"
+  printf '%s\n' "${text}"
+  echo "----------------------------------------"
+
+  if [[ "${rc}" -ne 0 && "${use_tui}" == "true" ]] && command -v dialog >/dev/null 2>&1 \
+     && [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null; then
+    dialog --title "NikOS: playbook failed" --msgbox "${text}" 22 78 </dev/tty >/dev/tty 2>&1 || true
+    _leave_tui
+    # The box replaced the screen; print the summary again so it stays in scrollback.
+    printf '%s\n' "${text}"
+  fi
 
   _logfile "[SUMMARY] rc=${rc} ok=${ok} changed=${changed} failed=${failed} unreachable=${unreachable}"
 }
@@ -520,6 +545,7 @@ _playbook() {
       ansible_rc=0
     fi
     _restore_terminal_cursor
+    _leave_tui
   elif [[ "${ask_pass}" == "true" ]]; then
     (
       cd "${NIKOS_HOME}"
@@ -560,7 +586,8 @@ _playbook() {
     digest="$(nikos_log_digest "${run_log}" "${NIKOS_HOME}" 2>/dev/null)" || true
     [[ -z "${digest}" ]] || printf '%s\n' "${digest}" >>"${run_log}"
   fi
-  _playbook_summary "${run_log}" "${_rc}"
+  _playbook_summary "${run_log}" "${_rc}" "${use_gauge}"
+  NIKOS_LAST_RUN_LOG="${run_log}"
 
   return "${_rc}"
 }
@@ -685,12 +712,23 @@ cmd_update() {
   # Removal first: the space is free before the playbook pulls the set.
   _models_offer_removal
   print_info "Re-running playbook..."
-  _playbook -e nikos_update_mode=true
+  # Captured, not left to set -e: a failed playbook still gets its own message
+  # and exit code, and the optional replay is not run on top of a failure.
+  local rc=0
+  _playbook -e nikos_update_mode=true || rc=$?
+  if [[ "${rc}" -ne 0 ]]; then
+    print_error "nikos update failed (exit ${rc}); optional bundles were not refreshed. Log: ${NIKOS_LAST_RUN_LOG:-${NIKOS_LOG_DIR:-~/.config/nikos/logs}}"
+    exit "${rc}"
+  fi
   local optional_tags
   optional_tags="$(_get_saved_optional_tags)"
   if [[ -n "${optional_tags}" ]]; then
     print_info "Refreshing selected optional bundles: ${optional_tags}"
-    _playbook --no-saved-skip-tags -e nikos_update_mode=true --tags "${optional_tags}"
+    _playbook --no-saved-skip-tags -e nikos_update_mode=true --tags "${optional_tags}" || rc=$?
+    if [[ "${rc}" -ne 0 ]]; then
+      print_error "Refreshing optional bundles failed (exit ${rc}). Log: ${NIKOS_LAST_RUN_LOG:-${NIKOS_LOG_DIR:-~/.config/nikos/logs}}"
+      exit "${rc}"
+    fi
   fi
 }
 
@@ -982,9 +1020,9 @@ cmd_doctor() {
       # that address as source, and was seen dropped while containers got answers.
       check "Ollama forwarder answers on the Docker bridge (${listen})" \
         curl -fsS --max-time 5 --interface 127.0.0.1 -o /dev/null "http://${listen}/api/version"
-      # The play refuses the forwarder where a LAN or VPN uses 172.16.0.0/12,
-      # but a VPN can connect after the play ran; the filter would then let its
-      # machines through. Docker names its own bridges; every other counts.
+      # A LAN or VPN in 172.16.0.0/12 is dropped by the interface filter (a
+      # warning); an interface that is not Docker's but passes the filter is
+      # refused. Docker names its own bridges; every other counts.
       # Refused starts (a shared range, an unreadable check) count against the
       # socket's trigger limit, and a socket that hit it stays failed after the
       # cause is gone.
@@ -998,7 +1036,7 @@ cmd_doctor() {
       # ufw.service is a oneshot that stays "active" with the firewall off;
       # ENABLED= in ufw.conf is what says whether it filters.
       if grep -Eqs '^ENABLED=yes' "${NIKOS_UFW_CONF:-/etc/ufw/ufw.conf}"; then
-        print_warn "ufw is active: containers reach the forwarder only if it allows them, e.g. sudo ufw allow in on docker0 to any port ${listen##*:} proto tcp (and each br-* network)"
+        print_warn "ufw is active: containers reach the forwarder only if it allows them, e.g. sudo ufw allow in on docker0 to any port ${listen##*:} proto tcp (and each Docker br-* network)"
       fi
       # The same check the forwarder runs before every start (roles/ai-stack).
       local guard="${NIKOS_HOME}/roles/ai-stack/files/nikos-ollama-bridge-check" shared rc=0
@@ -1009,10 +1047,20 @@ cmd_doctor() {
       elif [[ ! -x "${guard}" ]]; then
         print_warn "Ollama forwarder: ${guard} is missing; the networks were not checked"
       else
-        shared="$("${guard}" 2>&1)" || rc=$?
+        local errf warns
+        errf="$(mktemp)"
+        # nft needs root; the filter unit being active is the proof here.
+        local vouch=""
+        systemctl is-active --quiet nikos-ollama-bridge-filter.service 2>/dev/null && vouch=1
+        shared="$(NIKOS_BRIDGE_CHECK_IGNORE_LOADED="${vouch}" "${guard}" 2>"${errf}")" || rc=$?
+        warns="$(grep '^warning: ' "${errf}" || true)"
+        shared="${shared:-$(grep -v '^warning: ' "${errf}" || true)}"
+        rm -f "${errf}"
+        # Another network in the range is dropped by the interface filter: a warning.
+        while IFS= read -r w; do [[ -n "${w}" ]] && print_warn "Ollama forwarder: ${w#warning: }"; done <<<"${warns}"
         case "${rc}" in
-          0) print_success "Ollama forwarder: no network outside Docker uses 172.16.0.0/12" ;;
-          1) print_error "Ollama forwarder: ${shared//$'\n'/, } shares 172.16.0.0/12, which the forwarder lets through. It refuses to start while that holds; nikos update removes it, or set nikos_ollama_bridge to off"
+          0) print_success "Ollama forwarder: only Docker's bridges pass its interface filter" ;;
+          1) print_error "Ollama forwarder: ${shared//$'\n'/, } would pass its interface filter. It refuses to start while that holds; nikos update removes it, or set nikos_ollama_bridge to off"
              issues=$((issues + 1)) ;;
           *) print_error "Ollama forwarder: the networks could not be checked (${shared}); it refuses to start"
              issues=$((issues + 1)) ;;

@@ -40,6 +40,10 @@ def _stub_docker(bindir: Path, rootless: bool, gateway: str, desktop: bool = Fal
         f'if [ "$1" = info ] && echo "$*" | grep -q OperatingSystem; then echo "{"Docker Desktop" if desktop else "Ubuntu 24.04 LTS"}"; exit 0; fi\n'
         f'if [ "$1" = info ]; then echo "[name=seccomp{",name=rootless" if rootless else ""}]"; exit 0; fi\n'
         'if [ "$2" = ls ]; then printf "%s\\n" aaaaaaaaaaaa 646c6b405144; exit 0; fi\n'
+        # Subnets: docker0 on 172.17.0.0/16; the compose one from the 192.168 pool,
+        # dual-stack (the IPv6 subnet is not the forwarder's).
+        'if [ "$2" = inspect ] && echo "$*" | grep -q Subnet; then [ "${@: -1}" = aaaaaaaaaaaa ]'
+        ' && echo "172.17.0.0/16 " || echo "192.168.16.0/20 fd00:db8::/64 "; exit 0; fi\n'
         f'if [ "$2" = inspect ] && [ "$3" = bridge ]; then echo "{gateway}"; exit 0; fi\n'
         'if [ "$2" = inspect ]; then [ "${@: -1}" = aaaaaaaaaaaa ] && echo docker0 || echo; exit 0; fi\n'
     )
@@ -154,7 +158,8 @@ def test_the_units_listen_on_the_bridge_and_forward_to_loopback(tmp_path, bindir
     assert "ListenStream=172.17.0.1:11500" in sock
     assert "FreeBind=yes" in sock
     assert "IPAddressDeny=any" in sock
-    assert "IPAddressAllow=localhost 172.16.0.0/12" in sock
+    # Loopback only: Docker's exact subnets come from the refresh's drop-in.
+    assert [l for l in sock.splitlines() if l.startswith("IPAddressAllow")] == ["IPAddressAllow=localhost"]
     assert "ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=60 127.0.0.1:11500" in svc
     # Checked before every start, as root, so a network that joined the range
     # after the play stops the forwarder; idle exit makes every start recheck.
@@ -252,7 +257,7 @@ DOCKER_ROUTES = ("default via 192.168.1.1 dev wlan0 proto dhcp\n"
                  "172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1\n"
                  "172.18.0.0/16 dev br-646c6b405144 proto kernel scope link src 172.18.0.1\n"
                  "local 172.17.0.1 dev docker0 table local proto kernel scope host src 172.17.0.1\n"
-                 "192.168.1.0/24 dev wlan0 proto kernel scope link src 192.168.1.162\n")
+                 "192.168.1.0/24 dev wlan0 proto kernel scope link src 192.168.1.50\n")
 
 
 def _stub_ip(bindir: Path, lines: str, routes: str = DOCKER_ROUTES, extra_links: str = "") -> None:
@@ -268,17 +273,18 @@ def _stub_ip(bindir: Path, lines: str, routes: str = DOCKER_ROUTES, extra_links:
 
 
 DOCKER_ONLY = ("1: lo    inet 127.0.0.1/8 scope host lo\n"
-               "2: wlan0    inet 192.168.1.162/24 brd 192.168.1.255 scope global wlan0\n"
+               "2: wlan0    inet 192.168.1.50/24 brd 192.168.1.255 scope global wlan0\n"
                "3: docker0    inet 172.17.0.1/16 scope global docker0\n"
                "4: br-646c6b405144    inet 172.18.0.1/16 scope global br-646c6b405144\n")
 
 
 DECIDE = task("Decide whether the Ollama forwarder may run")
+REPORT = task("Report networks in 172.16.0.0/12 that the forwarder's filter drops")
 
 
 def guard_run(tmp_path, bindir, **vars_):
     """CHOOSE, the checks and the decision, then the refusal; the decision is printed."""
-    tasks = [CHOOSE, REFUSE, OVERLAP, DECIDE,
+    tasks = [CHOOSE, REFUSE, OVERLAP, REPORT, DECIDE,
              {"ansible.builtin.debug": {"msg": "WANTED=[{{ ai_stack_bridge_wanted }}]"}}, GUARD]
     return run(tmp_path, tasks, [bindir], **vars_)
 
@@ -291,13 +297,13 @@ def test_docker_networks_alone_pass(tmp_path, bindir):
     assert "WANTED=[True]" in out.stdout, out.stdout
 
 
-def test_an_interface_is_trusted_because_docker_names_it_not_because_of_its_name(tmp_path, bindir):
-    """br-* not created by Docker is somebody else's network."""
+def test_a_foreign_br_bridge_in_range_is_a_warning_since_the_filter_names_dockers_only(tmp_path, bindir):
+    """A libvirt/LXC br-* is not in the exact-name set, so its traffic is dropped."""
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY + "5: br-lan    inet 172.16.9.1/24 scope global br-lan\n")
     out = guard_run(tmp_path, bindir, nikos_ollama_bridge="172.17.0.1")
-    assert out.returncode != 0
-    assert "br-lan (named like a Docker bridge, not Docker's)" in out.stdout, out.stdout
+    assert out.returncode == 0, out.stdout
+    assert "WANTED=[True]" in out.stdout and "br-lan 172.16.9.1/24" in out.stdout, out.stdout
 
 
 def test_interfaces_that_cannot_be_read_refuse_the_forwarder(tmp_path, bindir):
@@ -335,12 +341,33 @@ def test_bridge_yml_is_included_in_every_mode():
 
 
 @pytest.mark.parametrize("iface,addr", [("eth0", "172.16.4.20/24"), ("tun0", "172.31.0.7/16"), ("wg0", "172.20.1.1/24")])
-def test_a_lan_or_vpn_in_dockers_range_refuses_the_forwarder(tmp_path, bindir, iface, addr):
+def test_a_lan_or_vpn_in_dockers_range_is_a_warning_not_a_refusal(tmp_path, bindir, iface, addr):
+    """The interface filter drops it; the forwarder stays."""
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY + f"5: {iface}    inet {addr} scope global {iface}\n")
     out = guard_run(tmp_path, bindir, nikos_ollama_bridge="172.17.0.1")
-    assert out.returncode != 0
-    assert f"{iface} {addr}" in out.stdout and "could reach Ollama" in out.stdout, out.stdout
+    assert out.returncode == 0, out.stdout
+    assert "WANTED=[True]" in out.stdout and f"{iface} {addr}" in out.stdout, out.stdout
+
+
+VPN_ROUTE = "172.16.99.9 dev wg0 proto static scope link metric 50\n"
+
+
+def test_a_vpn_route_keeps_the_forwarder(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY + "5: wg0    inet 192.0.2.2/24 scope global wg0\n",
+             DOCKER_ROUTES + VPN_ROUTE)
+    out = guard_run(tmp_path, bindir, nikos_ollama_bridge="172.17.0.1")
+    assert out.returncode == 0, out.stdout
+    assert "WANTED=[True]" in out.stdout and "wg0 route 172.16.99.9" in out.stdout, out.stdout
+
+
+def test_the_play_ignores_an_old_br_wildcard_filter_it_is_about_to_replace(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_nft(bindir, OLD_FILTER)
+    _stub_ip(bindir, DOCKER_ONLY + "5: br-lan    inet 172.16.9.1/24 scope global br-lan\n")
+    out = guard_run(tmp_path, bindir, nikos_ollama_bridge="172.17.0.1")
+    assert out.returncode == 0 and "WANTED=[True]" in out.stdout, out.stdout
 
 
 def test_no_forwarder_means_no_overlap_check(tmp_path, bindir):
@@ -364,14 +391,31 @@ def test_the_forwarder_also_runs_after_every_role():
 
 
 
-def test_doctor_reports_a_network_that_joined_dockers_range_after_the_play(tmp_path, bindir):
+def test_doctor_warns_about_a_network_that_joined_dockers_range_after_the_play(tmp_path, bindir):
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    p = bindir / "systemctl"  # the filter unit is active: doctor vouches for it
+    p.write_text('#!/bin/sh\ncase "$*" in *is-active*nikos-ollama-bridge-filter*) exit 0 ;; esac\nexit 3\n')
+    p.chmod(0o755)
     _stub_ip(bindir, DOCKER_ONLY + "5: tun0    inet 172.20.8.2/24 scope global tun0\n")
     units = tmp_path / "units"
     _socket_unit(units, "127.0.0.1:9")
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
-    line = next(l for l in out.splitlines() if "shares 172.16.0.0/12" in l)
-    assert _is_error(line) and "tun0 172.20.8.2/24" in line, line
+    line = next(l for l in out.splitlines() if "tun0 172.20.8.2/24" in l)
+    assert not _is_error(line) and "filter drops it" in line, line
+    assert any("only Docker's bridges pass" in l for l in out.splitlines()), out
+
+
+def test_doctor_reports_a_foreign_interface_that_passes_the_loaded_filter(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_nft(bindir, OLD_FILTER)
+    (bindir / "systemctl").write_text("#!/bin/sh\nexit 3\n")  # never the host's units
+    (bindir / "systemctl").chmod(0o755)
+    _stub_ip(bindir, DOCKER_ONLY + "5: br-lan    inet 172.16.9.1/24 scope global br-lan\n")
+    units = tmp_path / "units"
+    _socket_unit(units, "127.0.0.1:9")
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
+    line = next(l for l in out.splitlines() if "would pass its interface filter" in l)
+    assert _is_error(line) and "br-lan" in line, line
 
 
 def test_doctor_is_quiet_about_dockers_own_networks(tmp_path, bindir):
@@ -380,7 +424,7 @@ def test_doctor_is_quiet_about_dockers_own_networks(tmp_path, bindir):
     units = tmp_path / "units"
     _socket_unit(units, "127.0.0.1:9")
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
-    assert "shares 172.16.0.0/12" not in out, out
+    assert "172.16.0.0/12" not in out and "would pass" not in out, out
 
 
 
@@ -388,7 +432,24 @@ def test_doctor_is_quiet_about_dockers_own_networks(tmp_path, bindir):
 CHECK = ROOT / "roles/ai-stack/files/nikos-ollama-bridge-check"
 
 
+OLD_FILTER = 'table inet nikos_ollama_bridge {\n chain from_docker_only {\n  iifname "lo" return\n  iifname "docker0" return\n  iifname "br-*" return\n  drop\n }\n}\n'
+
+
+def _stub_nft(bindir, table):
+    """`nft list table` prints the loaded filter, as root would see it."""
+    p = bindir / "nft"
+    p.write_text("#!/bin/sh\ncat <<'EOF'\n" + table + "EOF\n")
+    p.chmod(0o755)
+
+
+NEW_FILTER = ('table inet nikos_ollama_bridge {\n set docker_ifs {\n  type ifname\n'
+              '  elements = { "docker0", "br-646c6b405144" }\n }\n'
+              ' chain from_docker_only {\n  iifname "lo" return\n  iifname @docker_ifs ip saddr @docker_nets return\n  drop\n }\n}\n')
+
+
 def _check(bindir, path_extra=True):
+    if not (bindir / "nft").exists():
+        _stub_nft(bindir, NEW_FILTER)  # the filter is loaded; never the host's real nft
     env = {"PATH": f"{bindir}:/usr/bin:/bin" if path_extra else str(bindir)}
     return subprocess.run([str(CHECK)], capture_output=True, text=True, env=env, timeout=30)
 
@@ -400,11 +461,82 @@ def test_check_passes_dockers_own_networks(bindir):
     assert (r.returncode, r.stdout) == (0, ""), r
 
 
-def test_check_names_another_network_in_the_range(bindir):
+def test_check_warns_about_another_network_in_the_range(bindir):
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY + "5: tun0    inet 172.20.8.2/24 scope global tun0\n")
     r = _check(bindir)
-    assert r.returncode == 1 and r.stdout.strip() == "tun0 172.20.8.2/24", r
+    assert r.returncode == 0 and r.stdout == "" and "warning: tun0 172.20.8.2/24" in r.stderr, r
+
+
+def test_check_refuses_a_vpn_route_when_the_filter_is_not_loaded(bindir):
+    """Nothing proves the VPN's traffic is dropped: fail closed."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_nft(bindir, "")
+    _stub_ip(bindir, DOCKER_ONLY, DOCKER_ROUTES + VPN_ROUTE)
+    r = _check(bindir)
+    assert r.returncode == 1 and "wg0 route 172.16.99.9 (the forwarder's interface filter is not loaded)" in r.stdout, r
+
+
+def test_check_refuses_when_docker_is_unreadable_even_with_the_filter_loaded(bindir):
+    _stub_ip(bindir, DOCKER_ONLY, DOCKER_ROUTES + VPN_ROUTE)
+    (bindir / "docker").write_text("#!/bin/sh\nexit 1\n")
+    (bindir / "docker").chmod(0o755)
+    assert _check(bindir).returncode == 2
+
+
+def test_check_warns_on_a_vpn_route_in_range(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_ip(bindir, DOCKER_ONLY, DOCKER_ROUTES + VPN_ROUTE)
+    r = _check(bindir)
+    assert r.returncode == 0 and "warning: wg0 route 172.16.99.9" in r.stderr, r
+
+
+def test_check_without_docker_lists_no_bridges_and_only_warns(tmp_path, bindir):
+    """docker absent: --docker-ifs is empty (the refresh loads an empty set),
+    and docker0 in range is just a warning."""
+    _stub_ip(bindir, DOCKER_ONLY)
+    _stub_nft(bindir, NEW_FILTER.replace('"docker0", "br-646c6b405144"', ""))
+    # PATH without docker: the stubs plus links to the tools the check needs.
+    for tool in ("bash", "python3", "sh", "cat"):
+        (bindir / tool).symlink_to(shutil.which(tool))
+    env = {"PATH": str(bindir)}
+    r = subprocess.run([str(CHECK), "--docker-ifs"], capture_output=True, text=True, env=env, timeout=30)
+    assert (r.returncode, r.stdout) == (0, ""), r
+    r = subprocess.run([str(CHECK)], capture_output=True, text=True, env=env, timeout=30)
+    assert r.returncode == 0 and "warning: docker0 172.17.0.1/16" in r.stderr, r
+
+
+def test_check_lists_dockers_bridges(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    r = subprocess.run([str(CHECK), "--docker-ifs"], capture_output=True, text=True,
+                       env={"PATH": f"{bindir}:/usr/bin:/bin"}, timeout=30)
+    assert r.returncode == 0 and r.stdout.split() == ["docker0", "br-646c6b405144"], r
+
+
+def test_check_refuses_a_libvirt_br_that_the_old_wildcard_filter_lets_through(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_nft(bindir, OLD_FILTER)
+    _stub_ip(bindir, DOCKER_ONLY + "5: br-x    inet 172.16.50.1/24 scope global br-x\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and "br-x (passes the forwarder's filter, not Docker's)" in r.stdout, r
+
+
+def test_check_refuses_a_foreign_interface_reusing_a_name_in_the_loaded_set(bindir):
+    """A Docker network was removed and another bridge took its name before a refresh."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_nft(bindir, 'table inet nikos_ollama_bridge {\n set docker_ifs {\n  type ifname\n'
+                      '  elements = { "docker0", "br-0123456789ab" }\n }\n}\n')
+    _stub_ip(bindir, DOCKER_ONLY + "5: br-0123456789ab    inet 172.16.50.1/24 scope global br-0123456789ab\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and "br-0123456789ab" in r.stdout, r
+
+
+def test_check_warns_only_for_a_libvirt_br_with_the_exact_name_filter(bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_nft(bindir, NEW_FILTER)
+    _stub_ip(bindir, DOCKER_ONLY + "5: br-x    inet 172.16.50.1/24 scope global br-x\n")
+    r = _check(bindir)
+    assert r.returncode == 0 and "warning: br-x 172.16.50.1/24" in r.stderr, r
 
 
 def test_check_fails_closed_when_interfaces_cannot_be_read(bindir):
@@ -438,14 +570,14 @@ def test_check_names_a_vpn_route_into_the_range_without_an_address_there(bindir)
     _stub_ip(bindir, DOCKER_ONLY + "5: tun0    inet 10.8.0.2/24 scope global tun0\n",
              DOCKER_ROUTES + "172.20.0.0/16 via 10.8.0.1 dev tun0\n")
     r = _check(bindir)
-    assert r.returncode == 1 and r.stdout.strip() == "tun0 route 172.20.0.0/16", r
+    assert r.returncode == 0 and "warning: tun0 route 172.20.0.0/16" in r.stderr, r
 
 
 def test_check_names_a_route_that_covers_the_whole_range(bindir):
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY, DOCKER_ROUTES + "172.0.0.0/8 via 10.8.0.1 dev tun0\n")
     r = _check(bindir)
-    assert r.returncode == 1 and "tun0 route 172.0.0.0/8" in r.stdout, r
+    assert r.returncode == 0 and "warning: tun0 route 172.0.0.0/8" in r.stderr, r
 
 
 def test_check_ignores_the_default_route_and_dockers_own(bindir):
@@ -467,21 +599,21 @@ def test_check_reads_a_route_with_a_type_keyword(bindir):
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY, DOCKER_ROUTES + "unicast 172.20.0.0/16 via 10.8.0.1 dev tun0\n")
     r = _check(bindir)
-    assert r.returncode == 1 and "tun0 route 172.20.0.0/16" in r.stdout, r
+    assert r.returncode == 0 and "warning: tun0 route 172.20.0.0/16" in r.stderr, r
 
 
 def test_check_counts_a_route_without_a_device(bindir):
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY, DOCKER_ROUTES + "172.20.0.0/16 nhid 12 proto static\n")
     r = _check(bindir)
-    assert r.returncode == 1 and "(no device) route 172.20.0.0/16" in r.stdout, r
+    assert r.returncode == 0 and "warning: (no device) route 172.20.0.0/16" in r.stderr, r
 
 
 def test_check_counts_a_point_to_point_peer_in_the_range(bindir):
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY + "5: tun0    inet 10.8.0.2 peer 172.20.0.1/32 scope global tun0\n")
     r = _check(bindir)
-    assert r.returncode == 1 and "tun0 172.20.0.1/32" in r.stdout, r
+    assert r.returncode == 0 and "warning: tun0 172.20.0.1/32" in r.stderr, r
 
 
 @pytest.mark.parametrize("routes", ["garbage-destination dev tun0\n", "unicast\n"])
@@ -507,8 +639,14 @@ def test_the_socket_requires_the_interface_filter(tmp_path, bindir):
     assert "ip daddr 172.17.0.1 tcp dport 11500 jump from_docker_only" in nft
     # Its own table, replaced whole: never a flush of Docker's rules.
     assert "flush ruleset" not in nft and "delete table inet nikos_ollama_bridge" in nft
-    for allowed in ('iifname "lo" return', 'iifname "docker0" return', 'iifname "br-*" return'):
+    # Docker's bridges by exact name, from a set the refresh fills; no br-* pattern.
+    # And from Docker's subnets only: a LAN address spoofed onto a bridge is dropped.
+    for allowed in ('iifname "lo" return', 'iifname @docker_ifs ip saddr @docker_nets return', 'type ifname',
+                    'type ipv4_addr'):
         assert allowed in nft
+    assert '"br-*"' not in nft and '"docker0"' not in nft
+    # Both sets start empty: nothing is let in before the refresh fills them.
+    assert "elements" not in nft
     assert nft.rstrip().splitlines()[-3].strip() == "drop"
 
 
@@ -585,13 +723,21 @@ def test_any_leftover_piece_counts_as_an_installed_forwarder(tmp_path, bindir):
 
 
 
-def test_check_refuses_a_bridge_named_like_dockers_whatever_its_address(bindir):
-    """The interface filter trusts br-*: a VM bridge called br-vms must not exist
+def test_check_refuses_a_bridge_an_old_br_filter_trusts_whatever_its_address(bindir):
+    """An older filter trusts br-*: a VM bridge called br-vms must not exist
     beside it, even on 192.168.x where the address filter would not care."""
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_nft(bindir, OLD_FILTER)
+    _stub_ip(bindir, DOCKER_ONLY + "5: br-vms    inet 192.168.50.1/24 scope global br-vms\n")
+    r = _check(bindir)
+    assert r.returncode == 1 and "br-vms (passes the forwarder's filter, not Docker's)" in r.stdout, r
+
+
+def test_check_passes_a_br_bridge_outside_the_range_under_the_exact_name_filter(bindir):
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
     _stub_ip(bindir, DOCKER_ONLY + "5: br-vms    inet 192.168.50.1/24 scope global br-vms\n")
     r = _check(bindir)
-    assert r.returncode == 1 and "br-vms (named like a Docker bridge, not Docker's)" in r.stdout, r
+    assert (r.returncode, r.stdout, r.stderr) == (0, "", ""), r
 
 
 def test_the_forwarder_is_not_deleted_while_a_unit_still_runs(tmp_path, bindir):
@@ -614,9 +760,10 @@ def test_check_refuses_a_foreign_br_interface_with_no_ipv4_address(bindir):
     """The br-* rule is about names: an interface with no IPv4 address is
     still trusted by the interface filter by its name."""
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    _stub_nft(bindir, OLD_FILTER)
     _stub_ip(bindir, DOCKER_ONLY, extra_links="9: br-ghost: <BROADCAST,UP> mtu 1500 state UP\n")
     r = _check(bindir)
-    assert r.returncode == 1 and "br-ghost (named like a Docker bridge, not Docker's)" in r.stdout, r
+    assert r.returncode == 1 and "br-ghost (passes the forwarder's filter, not Docker's)" in r.stdout, r
 
 
 def test_check_fails_closed_when_interface_names_cannot_be_read(bindir):
@@ -696,7 +843,7 @@ def test_doctor_says_nothing_of_ufw_when_it_is_off(tmp_path, bindir, conf_text):
         conf.write_text(conf_text)
     out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin", ufw_conf=conf)
     # The network check runs after the ufw check: doctor got past it.
-    assert "no network outside Docker uses 172.16.0.0/12" in out, out
+    assert "only Docker's bridges pass its interface filter" in out, out
     assert "ufw is active" not in out, out
 
 
@@ -763,4 +910,120 @@ def test_the_forwarder_under_systemd_on_a_stock_ubuntu():
     r = subprocess.run(["bash", str(ROOT / "tests/machine/ollama_bridge_systemd.sh")],
                        capture_output=True, text=True, timeout=1200)
     assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-2000:]
-    assert "ok: refused a shared range, installed, answered a container" in r.stdout
+    assert "ok: warned about a shared range, installed, answered a container" in r.stdout
+
+
+# --- the exact-name set and its refresh -------------------------------------------
+REFRESH = ROOT / "roles/ai-stack/files/nikos-ollama-bridge-refresh"
+
+
+def _refresh(tmp_path, bindir, *args):
+    """Runs the refresh with nft and systemctl stubbed; returns (result, nft input, systemctl calls)."""
+    got, calls = tmp_path / "nft-input", tmp_path / "systemctl-calls"
+    (bindir / "nft").write_text(f"#!/bin/sh\ncat > {got}\n")
+    (bindir / "nft").chmod(0o755)
+    (bindir / "systemctl").write_text(f'#!/bin/sh\necho "$*" >> {calls}\n')
+    (bindir / "systemctl").chmod(0o755)
+    r = subprocess.run([str(REFRESH), *args], capture_output=True, text=True, timeout=30,
+                       env={"PATH": f"{bindir}:/usr/bin:/bin",
+                            "NIKOS_OLLAMA_BRIDGE_DROPIN_DIR": str(tmp_path / "socket.d")})
+    read = lambda p: p.read_text().splitlines() if p.exists() else []
+    return r, read(got), read(calls)
+
+
+def test_refresh_loads_dockers_bridges_in_one_transaction(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    r, nft, _ = _refresh(tmp_path, bindir)
+    assert r.returncode == 0, r
+    assert nft == [
+        "flush set inet nikos_ollama_bridge docker_ifs",
+        "flush set inet nikos_ollama_bridge docker_nets",
+        'add element inet nikos_ollama_bridge docker_ifs { "docker0", "br-646c6b405144" }',
+        "add element inet nikos_ollama_bridge docker_nets { 172.17.0.0/16, 192.168.16.0/20 }"]
+
+
+def test_refresh_gives_the_socket_dockers_exact_subnets_and_restarts_it_once(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    r, _, calls = _refresh(tmp_path, bindir)
+    assert r.returncode == 0, r
+    dropin = (tmp_path / "socket.d/docker-subnets.conf").read_text().splitlines()
+    # The empty line clears the unit's own list; then loopback and Docker's subnets, nothing wider.
+    assert dropin[1:] == ["[Socket]", "IPAddressAllow=", "IPAddressAllow=localhost 172.17.0.0/16 192.168.16.0/20"]
+    assert calls == ["daemon-reload", "--no-block try-restart nikos-ollama-bridge.socket"]
+    # Unchanged on the next refresh: the socket is not restarted.
+    (tmp_path / "systemctl-calls").unlink()
+    r, _, calls = _refresh(tmp_path, bindir)
+    assert r.returncode == 0 and calls == [], (r, calls)
+
+
+def test_refresh_without_docker_networks_lets_nothing_in(tmp_path, bindir):
+    """Fail closed: no network, empty sets and a loopback-only socket."""
+    (bindir / "docker").write_text('#!/bin/sh\n[ "$2" = ls ] && exit 0\nexit 1\n')
+    (bindir / "docker").chmod(0o755)
+    r, nft, calls = _refresh(tmp_path, bindir)
+    assert r.returncode == 0, r
+    assert nft == ["flush set inet nikos_ollama_bridge docker_ifs", "flush set inet nikos_ollama_bridge docker_nets"]
+    assert (tmp_path / "socket.d/docker-subnets.conf").read_text().splitlines()[-1] == "IPAddressAllow=localhost"
+
+
+def test_refresh_fails_when_docker_cannot_be_read(tmp_path, bindir):
+    """The filter unit ignores it (ExecStartPost=-) and the watcher retries."""
+    (bindir / "docker").write_text("#!/bin/sh\nexit 1\n")
+    (bindir / "docker").chmod(0o755)
+    r, nft, calls = _refresh(tmp_path, bindir)
+    assert r.returncode != 0
+    # Nothing loaded, the socket untouched: the last good lists stay.
+    assert nft == [] and calls == [] and not (tmp_path / "socket.d").exists()
+
+
+def test_the_watcher_refreshes_on_docker_network_changes(tmp_path, bindir):
+    w = task("Write the watcher that refreshes the filter on Docker network changes")["ansible.builtin.copy"]["content"]
+    assert "ExecStart=/usr/local/libexec/nikos-ollama-bridge-refresh --watch" in w
+    assert "docker events --filter type=network --filter event=create --filter event=destroy" in REFRESH.read_text()
+    assert "ExecStartPre=/usr/local/libexec/nikos-ollama-bridge-refresh" in w and "Restart=always" in w
+    flt = FILTER_UNIT["ansible.builtin.copy"]["content"]
+    assert "ExecStartPost=-/usr/local/libexec/nikos-ollama-bridge-refresh" in flt
+
+
+def test_a_removed_forwarder_takes_the_watcher_and_refresh_with_it():
+    found = task("Look for an Ollama forwarder that must not run")["loop"]
+    assert "/etc/systemd/system/nikos-ollama-bridge-watch.service" in found
+    assert "/usr/local/libexec/nikos-ollama-bridge-refresh" in found
+
+
+def test_doctor_refuses_a_vpn_when_the_filter_unit_is_not_active(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    p = bindir / "systemctl"
+    p.write_text("#!/bin/sh\nexit 3\n")
+    p.chmod(0o755)
+    _stub_nft(bindir, "")
+    _stub_ip(bindir, DOCKER_ONLY + "5: tun0    inet 172.20.8.2/24 scope global tun0\n")
+    units = tmp_path / "units"
+    _socket_unit(units, "127.0.0.1:9")
+    out = _doctor(tmp_path, units, f"{bindir}:/usr/bin:/bin")
+    line = next(l for l in out.splitlines() if "would pass its interface filter" in l or "not loaded" in l)
+    assert _is_error(line), line
+
+
+def test_a_removed_forwarder_takes_the_socket_drop_in_with_it():
+    found = task("Look for an Ollama forwarder that must not run")["loop"]
+    assert "/etc/systemd/system/nikos-ollama-bridge.socket.d" in found
+    rm = next(t for t in task("Remove the Ollama forwarder that must not run")["block"]
+              if t["name"] == "Delete the Ollama forwarder units")
+    assert "nikos-ollama-bridge.socket.d" in rm["loop"]
+
+
+def test_watch_refreshes_once_per_docker_network_event(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    d = bindir / "docker"
+    d.write_text(d.read_text().replace("#!/bin/bash\n", '#!/bin/bash\nif [ "$1" = events ]; then printf "x\\nx\\n"; exit 0; fi\n', 1))
+    got = tmp_path / "nft-calls"
+    (bindir / "nft").write_text(f"#!/bin/sh\ncat >/dev/null; echo call >> {got}\n")
+    (bindir / "nft").chmod(0o755)
+    (bindir / "systemctl").write_text("#!/bin/sh\nexit 0\n")
+    (bindir / "systemctl").chmod(0o755)
+    r = subprocess.run([str(REFRESH), "--watch"], capture_output=True, text=True, timeout=30,
+                       env={"PATH": f"{bindir}:/usr/bin:/bin",
+                            "NIKOS_OLLAMA_BRIDGE_DROPIN_DIR": str(tmp_path / "socket.d")})
+    assert r.returncode == 1, r  # the stream ended: systemd restarts the unit
+    assert got.read_text().count("call") == 2

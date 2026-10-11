@@ -67,8 +67,49 @@
     path: "{{ nikos_tools_dir }}/bitnet.cpp/build/bin/llama-cli"
   register: bitnet_build_cli
 
+# Skip-the-build guard. A rebuild takes minutes; `nikos update` reruns this
+# role every time. The installed CLI is current when it runs and the marker
+# names the checkout's commit (written after each install below).
+- name: Read the commit of the BitNet.cpp checkout
+  ansible.builtin.command:
+    argv: [git, -C, "{{ nikos_tools_dir }}/bitnet.cpp", rev-parse, HEAD]
+  register: bitnet_head
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Read the commit the installed BitNet CLI was built from
+  ansible.builtin.command:
+    argv: [cat, "{{ bitnet_prefix }}/.nikos-built-commit"]
+  register: bitnet_built_commit
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check that the installed BitNet CLI runs
+  ansible.builtin.command:
+    argv: ["{{ bitnet_prefix }}/llama-cli", --version]
+  environment:
+    LD_LIBRARY_PATH: "{{ bitnet_prefix }}"
+  register: bitnet_cli_health
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Rebuild when: the clone moved this run, the installed CLI does not run, or
+# its marker names another commit. No marker (installed before markers) with
+# a working CLI and an unmoved clone counts as current; the marker is written.
+- name: Decide whether BitNet.cpp has to be built
+  ansible.builtin.set_fact:
+    bitnet_needs_build: >-
+      {{ (bitnet_clone is changed)
+         or bitnet_cli_health.rc != 0
+         or (bitnet_built_commit.rc == 0
+             and (bitnet_built_commit.stdout | trim) != (bitnet_head.stdout | trim)) }}
+
 # Not a `creates:` guard: that skipped the build after the clone moved to a
-# new commit, so the old binary stayed installed.
+# new commit, so the old binary stayed installed. Also builds when the build
+# tree lost its CLI (an interrupted earlier build) and the install is unusable.
 - name: Build BitNet.cpp
   ansible.builtin.command: cmake --build build --config Release -j
   args:
@@ -76,7 +117,7 @@
   changed_when: true
   when:
     - not ansible_check_mode
-    - bitnet_clone is changed or not bitnet_build_cli.stat.exists
+    - bitnet_needs_build | bool
 
 # The CLI is installed away from the build tree, not linked back into it.
 # llama-cli is built with a RUNPATH holding the build directory's absolute
@@ -128,6 +169,19 @@
     - bitnet_built_cli.stat.exists
     - not bitnet_installed_cli.stat.exists
       or bitnet_built_cli.stat.checksum != bitnet_installed_cli.stat.checksum
+
+- name: Record the commit the installed BitNet CLI was built from
+  ansible.builtin.copy:
+    dest: "{{ bitnet_prefix }}/.nikos-built-commit"
+    content: "{{ bitnet_head.stdout | trim }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when:
+    - not ansible_check_mode
+    - bitnet_head.rc == 0
+    - bitnet_needs_build | bool or bitnet_built_commit.rc != 0
 
 - name: Install the BitNet CLI entry point
   ansible.builtin.copy:
