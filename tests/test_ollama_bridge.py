@@ -40,6 +40,10 @@ def _stub_docker(bindir: Path, rootless: bool, gateway: str, desktop: bool = Fal
         f'if [ "$1" = info ] && echo "$*" | grep -q OperatingSystem; then echo "{"Docker Desktop" if desktop else "Ubuntu 24.04 LTS"}"; exit 0; fi\n'
         f'if [ "$1" = info ]; then echo "[name=seccomp{",name=rootless" if rootless else ""}]"; exit 0; fi\n'
         'if [ "$2" = ls ]; then printf "%s\\n" aaaaaaaaaaaa 646c6b405144; exit 0; fi\n'
+        # Subnets: docker0 on 172.17.0.0/16; the compose one from the 192.168 pool,
+        # dual-stack (the IPv6 subnet is not the forwarder's).
+        'if [ "$2" = inspect ] && echo "$*" | grep -q Subnet; then [ "${@: -1}" = aaaaaaaaaaaa ]'
+        ' && echo "172.17.0.0/16 " || echo "192.168.16.0/20 fd00:db8::/64 "; exit 0; fi\n'
         f'if [ "$2" = inspect ] && [ "$3" = bridge ]; then echo "{gateway}"; exit 0; fi\n'
         'if [ "$2" = inspect ]; then [ "${@: -1}" = aaaaaaaaaaaa ] && echo docker0 || echo; exit 0; fi\n'
     )
@@ -154,7 +158,8 @@ def test_the_units_listen_on_the_bridge_and_forward_to_loopback(tmp_path, bindir
     assert "ListenStream=172.17.0.1:11500" in sock
     assert "FreeBind=yes" in sock
     assert "IPAddressDeny=any" in sock
-    assert "IPAddressAllow=localhost 172.16.0.0/12 192.168.0.0/16 10.0.0.0/8" in sock
+    # Loopback only: Docker's exact subnets come from the refresh's drop-in.
+    assert [l for l in sock.splitlines() if l.startswith("IPAddressAllow")] == ["IPAddressAllow=localhost"]
     assert "ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=60 127.0.0.1:11500" in svc
     # Checked before every start, as root, so a network that joined the range
     # after the play stops the forwarder; idle exit makes every start recheck.
@@ -439,7 +444,7 @@ def _stub_nft(bindir, table):
 
 NEW_FILTER = ('table inet nikos_ollama_bridge {\n set docker_ifs {\n  type ifname\n'
               '  elements = { "docker0", "br-646c6b405144" }\n }\n'
-              ' chain from_docker_only {\n  iifname "lo" return\n  iifname @docker_ifs return\n  drop\n }\n}\n')
+              ' chain from_docker_only {\n  iifname "lo" return\n  iifname @docker_ifs ip saddr @docker_nets return\n  drop\n }\n}\n')
 
 
 def _check(bindir, path_extra=True):
@@ -635,9 +640,13 @@ def test_the_socket_requires_the_interface_filter(tmp_path, bindir):
     # Its own table, replaced whole: never a flush of Docker's rules.
     assert "flush ruleset" not in nft and "delete table inet nikos_ollama_bridge" in nft
     # Docker's bridges by exact name, from a set the refresh fills; no br-* pattern.
-    for allowed in ('iifname "lo" return', 'iifname @docker_ifs return', 'type ifname'):
+    # And from Docker's subnets only: a LAN address spoofed onto a bridge is dropped.
+    for allowed in ('iifname "lo" return', 'iifname @docker_ifs ip saddr @docker_nets return', 'type ifname',
+                    'type ipv4_addr'):
         assert allowed in nft
     assert '"br-*"' not in nft and '"docker0"' not in nft
+    # Both sets start empty: nothing is let in before the refresh fills them.
+    assert "elements" not in nft
     assert nft.rstrip().splitlines()[-3].strip() == "drop"
 
 
@@ -901,35 +910,70 @@ def test_the_forwarder_under_systemd_on_a_stock_ubuntu():
     r = subprocess.run(["bash", str(ROOT / "tests/machine/ollama_bridge_systemd.sh")],
                        capture_output=True, text=True, timeout=1200)
     assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-2000:]
-    assert "ok: refused a shared range, installed, answered a container" in r.stdout
+    assert "ok: warned about a shared range, installed, answered a container" in r.stdout
 
 
 # --- the exact-name set and its refresh -------------------------------------------
 REFRESH = ROOT / "roles/ai-stack/files/nikos-ollama-bridge-refresh"
 
 
-def test_refresh_loads_dockers_bridges_in_one_transaction(tmp_path, bindir):
-    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
-    got = tmp_path / "nft-input"
+def _refresh(tmp_path, bindir, *args):
+    """Runs the refresh with nft and systemctl stubbed; returns (result, nft input, systemctl calls)."""
+    got, calls = tmp_path / "nft-input", tmp_path / "systemctl-calls"
     (bindir / "nft").write_text(f"#!/bin/sh\ncat > {got}\n")
     (bindir / "nft").chmod(0o755)
-    r = subprocess.run([str(REFRESH)], capture_output=True, text=True,
-                       env={"PATH": f"{bindir}:/usr/bin:/bin"}, timeout=30)
+    (bindir / "systemctl").write_text(f'#!/bin/sh\necho "$*" >> {calls}\n')
+    (bindir / "systemctl").chmod(0o755)
+    r = subprocess.run([str(REFRESH), *args], capture_output=True, text=True, timeout=30,
+                       env={"PATH": f"{bindir}:/usr/bin:/bin",
+                            "NIKOS_OLLAMA_BRIDGE_DROPIN_DIR": str(tmp_path / "socket.d")})
+    read = lambda p: p.read_text().splitlines() if p.exists() else []
+    return r, read(got), read(calls)
+
+
+def test_refresh_loads_dockers_bridges_in_one_transaction(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    r, nft, _ = _refresh(tmp_path, bindir)
     assert r.returncode == 0, r
-    assert got.read_text().splitlines() == [
+    assert nft == [
         "flush set inet nikos_ollama_bridge docker_ifs",
-        'add element inet nikos_ollama_bridge docker_ifs { "docker0", "br-646c6b405144" }']
+        "flush set inet nikos_ollama_bridge docker_nets",
+        'add element inet nikos_ollama_bridge docker_ifs { "docker0", "br-646c6b405144" }',
+        "add element inet nikos_ollama_bridge docker_nets { 172.17.0.0/16, 192.168.16.0/20 }"]
+
+
+def test_refresh_gives_the_socket_dockers_exact_subnets_and_restarts_it_once(tmp_path, bindir):
+    _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
+    r, _, calls = _refresh(tmp_path, bindir)
+    assert r.returncode == 0, r
+    dropin = (tmp_path / "socket.d/docker-subnets.conf").read_text().splitlines()
+    # The empty line clears the unit's own list; then loopback and Docker's subnets, nothing wider.
+    assert dropin[1:] == ["[Socket]", "IPAddressAllow=", "IPAddressAllow=localhost 172.17.0.0/16 192.168.16.0/20"]
+    assert calls == ["daemon-reload", "--no-block try-restart nikos-ollama-bridge.socket"]
+    # Unchanged on the next refresh: the socket is not restarted.
+    (tmp_path / "systemctl-calls").unlink()
+    r, _, calls = _refresh(tmp_path, bindir)
+    assert r.returncode == 0 and calls == [], (r, calls)
+
+
+def test_refresh_without_docker_networks_lets_nothing_in(tmp_path, bindir):
+    """Fail closed: no network, empty sets and a loopback-only socket."""
+    (bindir / "docker").write_text('#!/bin/sh\n[ "$2" = ls ] && exit 0\nexit 1\n')
+    (bindir / "docker").chmod(0o755)
+    r, nft, calls = _refresh(tmp_path, bindir)
+    assert r.returncode == 0, r
+    assert nft == ["flush set inet nikos_ollama_bridge docker_ifs", "flush set inet nikos_ollama_bridge docker_nets"]
+    assert (tmp_path / "socket.d/docker-subnets.conf").read_text().splitlines()[-1] == "IPAddressAllow=localhost"
 
 
 def test_refresh_fails_when_docker_cannot_be_read(tmp_path, bindir):
     """The filter unit ignores it (ExecStartPost=-) and the watcher retries."""
     (bindir / "docker").write_text("#!/bin/sh\nexit 1\n")
     (bindir / "docker").chmod(0o755)
-    (bindir / "nft").write_text("#!/bin/sh\nexit 0\n")
-    (bindir / "nft").chmod(0o755)
-    r = subprocess.run([str(REFRESH)], capture_output=True, text=True,
-                       env={"PATH": f"{bindir}:/usr/bin:/bin"}, timeout=30)
+    r, nft, calls = _refresh(tmp_path, bindir)
     assert r.returncode != 0
+    # Nothing loaded, the socket untouched: the last good lists stay.
+    assert nft == [] and calls == [] and not (tmp_path / "socket.d").exists()
 
 
 def test_the_watcher_refreshes_on_docker_network_changes(tmp_path, bindir):
@@ -961,13 +1005,12 @@ def test_doctor_refuses_a_vpn_when_the_filter_unit_is_not_active(tmp_path, bindi
     assert _is_error(line), line
 
 
-def test_the_socket_admits_dockers_192_168_pool():
-    import ipaddress
-    sock = SOCKET["ansible.builtin.copy"]["content"]
-    allow = next(l for l in sock.splitlines() if l.startswith("IPAddressAllow="))
-    nets = [ipaddress.ip_network(n) for n in allow.split("=", 1)[1].split() if n != "localhost"]
-    for subnet in ("192.168.16.0/20", "172.31.0.0/16", "172.17.0.0/16"):
-        assert any(ipaddress.ip_network(subnet).subnet_of(n) for n in nets), subnet
+def test_a_removed_forwarder_takes_the_socket_drop_in_with_it():
+    found = task("Look for an Ollama forwarder that must not run")["loop"]
+    assert "/etc/systemd/system/nikos-ollama-bridge.socket.d" in found
+    rm = next(t for t in task("Remove the Ollama forwarder that must not run")["block"]
+              if t["name"] == "Delete the Ollama forwarder units")
+    assert "nikos-ollama-bridge.socket.d" in rm["loop"]
 
 
 def test_watch_refreshes_once_per_docker_network_event(tmp_path, bindir):
@@ -977,7 +1020,10 @@ def test_watch_refreshes_once_per_docker_network_event(tmp_path, bindir):
     got = tmp_path / "nft-calls"
     (bindir / "nft").write_text(f"#!/bin/sh\ncat >/dev/null; echo call >> {got}\n")
     (bindir / "nft").chmod(0o755)
-    r = subprocess.run([str(REFRESH), "--watch"], capture_output=True, text=True,
-                       env={"PATH": f"{bindir}:/usr/bin:/bin"}, timeout=30)
+    (bindir / "systemctl").write_text("#!/bin/sh\nexit 0\n")
+    (bindir / "systemctl").chmod(0o755)
+    r = subprocess.run([str(REFRESH), "--watch"], capture_output=True, text=True, timeout=30,
+                       env={"PATH": f"{bindir}:/usr/bin:/bin",
+                            "NIKOS_OLLAMA_BRIDGE_DROPIN_DIR": str(tmp_path / "socket.d")})
     assert r.returncode == 1, r  # the stream ended: systemd restarts the unit
     assert got.read_text().count("call") == 2

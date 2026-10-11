@@ -9,9 +9,10 @@ All notable changes to NikOS are documented here.
   `wg0`) is a warning, not a refusal, while the interface filter is loaded; `nikos update` no longer removes the
   forwarder while the VPN is up. The nftables filter accepts Docker's bridges by exact
   name (set `docker_ifs`, refreshed on Docker network changes by
-  `nikos-ollama-bridge-watch.service`) instead of `br-*`, and the socket also admits
-  Docker's `192.168.0.0/16` and `10.0.0.0/8` pools, so a compose network on
-  `192.168.16.0/20` reaches Ollama.
+  `nikos-ollama-bridge-watch.service`) instead of `br-*`, and only from Docker's bridge
+  subnets (set `docker_nets`). The socket's `IPAddressAllow` is loopback plus those
+  exact subnets (a drop-in the refresh writes), so a compose network on
+  `192.168.16.0/20` reaches Ollama and a LAN host on `192.168.1.0/24` is refused by both.
 - `nikos update` with the TUI: a failed playbook clears the dialog screen, shows the
   summary and log path in a message box, and exits with the playbook's code; the
   optional-bundle pass no longer runs after a failure.

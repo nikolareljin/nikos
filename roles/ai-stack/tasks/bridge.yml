@@ -2,7 +2,7 @@
 # Containers reach the local Ollama through a forwarder on the Docker bridge
 # address; Ollama itself stays on loopback (nikos_ollama_host). A systemd
 # socket listens there and systemd-socket-proxyd passes each connection to
-# loopback. Only loopback and 172.16.0.0/12 may connect.
+# loopback. Only loopback and Docker's bridge subnets may connect.
 #
 # Run in every mode, from ai-stack and again after every role (site.yml
 # post_tasks): where the forwarder must not run, an installed one is removed.
@@ -53,9 +53,8 @@
     - ai_stack_bridge_addr | length > 0
     - ai_stack_bridge_addr is not regex('^172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}$')
 
-# The socket's allowlist trusts Docker's pool ranges (172.16.0.0/12 and
-# more), but the interface filter below accepts only lo and Docker's bridges
-# by exact name. files/nikos-ollama-
+# The socket admits loopback and Docker's bridge subnets only, and the
+# interface filter below accepts only lo and Docker's bridges by exact name. files/nikos-ollama-
 # bridge-check refuses an interface that passes the filter and is not Docker's,
 # and only warns about another network in the range (a VPN
 # routes 172.16.99.9): the filter drops that traffic. It runs here and again
@@ -109,8 +108,8 @@
 # The address filter on the socket decides by source address, which says
 # nothing about where a packet came in. This filter decides by interface: the
 # bridge address answers on the Ollama port only to loopback and to Docker's
-# bridges, by exact name. The set starts empty; nikos-ollama-bridge-refresh
-# fills it when the filter loads and on every Docker network change, so a
+# bridges, by exact name, from Docker's subnets. Both sets start empty (nothing
+# is let in); nikos-ollama-bridge-refresh fills them when the filter loads and on every Docker network change, so a
 # libvirt or LXC bridge named br-* is not let in. It is its own table, so it
 # never touches Docker's rules, and the socket requires it: no filter, no
 # forwarder.
@@ -136,12 +135,17 @@
     content: |
       # Managed by NikOS (roles/ai-stack). Loaded by nikos-ollama-bridge-filter.service.
       # The Ollama forwarder on {{ ai_stack_bridge_addr }}:{{ ai_stack_bridge_port }} answers
-      # only to loopback and Docker's bridges, whatever the source address says.
+      # only to loopback and to Docker's subnets arriving on Docker's bridges.
       table inet nikos_ollama_bridge
       delete table inet nikos_ollama_bridge
       table inet nikos_ollama_bridge {
         set docker_ifs {
           type ifname
+        }
+        set docker_nets {
+          type ipv4_addr
+          flags interval
+          auto-merge
         }
         chain input {
           type filter hook input priority filter - 5; policy accept;
@@ -149,7 +153,7 @@
         }
         chain from_docker_only {
           iifname "lo" return
-          iifname @docker_ifs return
+          iifname @docker_ifs ip saddr @docker_nets return
           drop
         }
       }
@@ -230,11 +234,11 @@
       # The bridge address exists only once Docker is up; bind before that.
       FreeBind=yes
       IPAddressDeny=any
-      # Docker's default pools: 172.17-31/16, then 192.168.x/20 once those run
-      # out (a compose network on 192.168.16.0/20 timed out with 172.16/12
-      # only); 10/8 for custom default-address-pools. A LAN in these ranges is
-      # still dropped: the interface filter accepts Docker's bridges by name.
-      IPAddressAllow=localhost 172.16.0.0/12 192.168.0.0/16 10.0.0.0/8
+      # Loopback only here; nikos-ollama-bridge-refresh adds Docker's current
+      # bridge subnets (e.g. 192.168.16.0/20 once 172.17-31 run out) in
+      # nikos-ollama-bridge.socket.d/docker-subnets.conf. No drop-in, no
+      # container gets in.
+      IPAddressAllow=localhost
 
       [Install]
       WantedBy=sockets.target
@@ -322,6 +326,7 @@
     - /usr/local/libexec/nikos-ollama-bridge-check
     - /usr/local/libexec/nikos-ollama-bridge-refresh
     - /etc/systemd/system/nikos-ollama-bridge-watch.service
+    - /etc/systemd/system/nikos-ollama-bridge.socket.d
   register: ai_stack_bridge_found
   when: not (ai_stack_bridge_wanted | bool)
 
@@ -358,7 +363,8 @@
       ansible.builtin.file:
         path: "/etc/systemd/system/{{ item }}"
         state: absent
-      loop: [nikos-ollama-bridge.socket, nikos-ollama-bridge.service, nikos-ollama-bridge-watch.service, nikos-ollama-bridge-filter.service]
+      loop: [nikos-ollama-bridge.socket, nikos-ollama-bridge.service, nikos-ollama-bridge-watch.service,
+             nikos-ollama-bridge-filter.service, nikos-ollama-bridge.socket.d]
     - name: Delete the Ollama forwarder's interface filter
       ansible.builtin.file:
         path: /etc/nikos/ollama-bridge.nft

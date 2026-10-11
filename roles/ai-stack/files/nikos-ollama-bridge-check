@@ -2,10 +2,11 @@
 # Managed by NikOS (roles/ai-stack). Run by the play, by nikos-ollama-bridge.service
 # before every start (ExecCondition), and by `nikos doctor`.
 #
-# The Ollama forwarder admits any source in 172.16.0.0/12, but only on the
-# interfaces its nftables filter accepts: lo and Docker's own bridges, by exact
-# name (set docker_ifs, kept current by nikos-ollama-bridge-refresh). A packet
-# from any other interface is dropped, whatever its source address.
+# The Ollama forwarder admits loopback and Docker's bridge subnets, and only on
+# the interfaces its nftables filter accepts: lo and Docker's own bridges, by
+# exact name (set docker_ifs, with source addresses in set docker_nets; both
+# kept current by nikos-ollama-bridge-refresh). A packet from any other
+# interface is dropped, whatever its source address.
 #
 # So:
 # - refused: an interface the filter accepts that Docker did not create (a
@@ -17,12 +18,14 @@
 #
 # Usage: nikos-ollama-bridge-check            check, as above
 #        nikos-ollama-bridge-check --docker-ifs  print Docker's bridge names
+#        nikos-ollama-bridge-check --docker-subnets  print their IPv4 subnets
 # Exit: 0 the forwarder may run (warnings, if any, on stderr as "warning: ...");
 #       1 it must not (each reason on stdout);
 #       2 something could not be read (it must not: no answer is not "none").
 set -uo pipefail
 
 docker_ifs=""
+docker_subnets=""
 if command -v docker >/dev/null 2>&1; then
   ids="$(docker network ls -q --filter driver=bridge 2>/dev/null)" || { echo "cannot list Docker's networks" >&2; exit 2; }
   for id in ${ids}; do
@@ -30,7 +33,19 @@ if command -v docker >/dev/null 2>&1; then
     name="$(docker network inspect -f '{{index .Options "com.docker.network.bridge.name"}}' "${id}" 2>/dev/null)" \
       || { echo "cannot inspect Docker network ${id}" >&2; exit 2; }
     docker_ifs="${docker_ifs} ${name:-br-${id:0:12}}"
+    # shellcheck disable=SC2016  # a docker template, not a shell expansion
+    nets="$(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' "${id}" 2>/dev/null)" \
+      || { echo "cannot inspect Docker network ${id}" >&2; exit 2; }
+    # IPv4 only: the forwarder listens on an IPv4 address.
+    for n in ${nets}; do
+      [[ "${n}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$ ]] && docker_subnets="${docker_subnets} ${n}"
+    done
   done
+fi
+
+if [[ "${1:-}" == "--docker-subnets" ]]; then
+  for n in ${docker_subnets}; do echo "${n}"; done | sort -u
+  exit 0
 fi
 
 if [[ "${1:-}" == "--docker-ifs" ]]; then

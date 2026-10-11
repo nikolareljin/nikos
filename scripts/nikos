@@ -1020,9 +1020,9 @@ cmd_doctor() {
       # that address as source, and was seen dropped while containers got answers.
       check "Ollama forwarder answers on the Docker bridge (${listen})" \
         curl -fsS --max-time 5 --interface 127.0.0.1 -o /dev/null "http://${listen}/api/version"
-      # The play refuses the forwarder where a LAN or VPN uses 172.16.0.0/12,
-      # but a VPN can connect after the play ran; the filter would then let its
-      # machines through. Docker names its own bridges; every other counts.
+      # A LAN or VPN in 172.16.0.0/12 is dropped by the interface filter (a
+      # warning); an interface that is not Docker's but passes the filter is
+      # refused. Docker names its own bridges; every other counts.
       # Refused starts (a shared range, an unreadable check) count against the
       # socket's trigger limit, and a socket that hit it stays failed after the
       # cause is gone.

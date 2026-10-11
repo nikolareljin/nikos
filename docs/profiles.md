@@ -85,9 +85,10 @@ bridge, not on loopback. So `local` also installs a forwarder:
 `host.docker.internal` resolves to with `extra_hosts:
 ["host.docker.internal:host-gateway"]`; `172.17.0.1` on a default Docker Engine)
 and `nikos-ollama-bridge.service` runs `systemd-socket-proxyd` to the loopback
-endpoint. Only loopback and Docker's pool ranges (`172.16.0.0/12`,
-`192.168.0.0/16`, `10.0.0.0/8`) may connect, and only through Docker's own
-bridges (the interface filter below), so another machine on the network is
+endpoint. Only loopback and the subnets of Docker's current bridge networks may
+connect (`IPAddressAllow`, kept in
+`nikos-ollama-bridge.socket.d/docker-subnets.conf`), and only through Docker's
+own bridges (the interface filter below), so another machine on the network is
 refused, and Ollama itself stays on loopback.
 
 `nikos_ollama_bridge: auto` uses the bridge of a rootful Docker Engine and
@@ -114,10 +115,13 @@ The address filter decides by source address, which says nothing about where a
 packet came in. So the forwarder also has an interface filter: an nftables table
 of its own (`/etc/nikos/ollama-bridge.nft`, loaded by
 `nikos-ollama-bridge-filter.service`) lets the bridge address's Ollama port answer
-only `lo` and Docker's bridges by exact name (set `docker_ifs`), and the socket
-requires it: no filter, no forwarder. `nikos-ollama-bridge-refresh` fills the set
-when the filter loads, and `nikos-ollama-bridge-watch.service` refreshes it on
-every Docker network create or destroy, so a libvirt or LXC `br-*` is not let in.
+only `lo` and Docker's bridges by exact name (set `docker_ifs`), from Docker's
+subnets (set `docker_nets`), and the socket requires it: no filter, no forwarder.
+`nikos-ollama-bridge-refresh` fills both sets and the socket's drop-in when the
+filter loads, restarting the socket only when the subnets changed;
+with no Docker network both sets are empty and the socket admits loopback only.
+`nikos-ollama-bridge-watch.service` runs it again on every Docker network
+create or destroy, so a libvirt or LXC `br-*` is not let in.
 The network check refuses an interface that passes the filter, by a stale set
 entry or by an older `br-*` filter, when Docker did not create it, whatever its
 address. It never flushes or edits Docker's rules. `tests/machine/ollama_bridge_filter.sh`
