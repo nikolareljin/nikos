@@ -54,10 +54,10 @@
     - ai_stack_bridge_addr is not regex('^172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}$')
 
 # The socket admits loopback and Docker's bridge subnets only, and the
-# interface filter below accepts only lo and Docker's bridges by exact name. files/nikos-ollama-
-# bridge-check refuses an interface that passes the filter and is not Docker's,
-# and only warns about another network in the range (a VPN
-# routes 172.16.99.9): the filter drops that traffic. It runs here and again
+# interface filter below accepts only lo and Docker's bridges by exact name.
+# files/nikos-ollama-bridge-check refuses an interface that passes the filter
+# and is not Docker's, and only warns about another network in the range (a
+# VPN routes 172.16.99.9): the filter drops that traffic. It runs here and again
 # before every start of the forwarder (ExecCondition), and fails closed.
 - name: Find networks outside Docker that use 172.16.0.0/12
   ansible.builtin.command: "{{ role_path }}/files/nikos-ollama-bridge-check"
@@ -108,9 +108,10 @@
 # The address filter on the socket decides by source address, which says
 # nothing about where a packet came in. This filter decides by interface: the
 # bridge address answers on the Ollama port only to loopback and to Docker's
-# bridges, by exact name, from Docker's subnets. Both sets start empty (nothing
-# is let in); nikos-ollama-bridge-refresh fills them when the filter loads and on every Docker network change, so a
-# libvirt or LXC bridge named br-* is not let in. It is its own table, so it
+# bridges, by exact name, from Docker's subnets. Both sets start empty
+# (nothing is let in); nikos-ollama-bridge-refresh fills them when the filter
+# loads and on every Docker network change, so a libvirt or LXC bridge named
+# br-* is not let in. It is its own table, so it
 # never touches Docker's rules, and the socket requires it: no filter, no
 # forwarder.
 - name: Install nftables for the Ollama forwarder's filter
