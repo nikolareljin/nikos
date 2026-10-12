@@ -203,6 +203,9 @@ nikos models         # class of machine and approved model per role; `prune` off
 nikos status         # show version, Ollama models, conda envs
 nikos doctor         # check for broken configs and missing tools
 nikos clean          # list unused caches to free disk; --apply removes them (never volumes)
+nikos hooks          # security hooks: tools, owners, every clone you own
+nikos hooks apply    # set them up per repository (--dry-run first); --global is opt-in
+nikos hooks export ~/carry ; nikos hooks import ~/carry   # same setup on another computer
 nikos log [N]        # tail the latest playbook log
 ```
 

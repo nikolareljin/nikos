@@ -317,6 +317,10 @@ Usage:
   nikos doctor           Check for broken configs and missing dependencies
   nikos clean [--apply]  Free disk: old Docker build cache, idle node_modules, unused
                          package caches. A dry run unless --apply; never Docker volumes
+  nikos hooks            Security hooks: status of the tools and every clone you own
+  nikos hooks apply      Set them up in your clones (--dry-run, --batch N, --agents)
+  nikos hooks --global   Machine-wide git hooks (opt-in; install/update never run it)
+  nikos hooks export|import DIR   Carry the setup to another computer
   nikos log [N]          Show last N lines of the latest playbook log (default 50)
   nikos log list         List available log files
   nikos help             Show this message
@@ -1101,6 +1105,11 @@ cmd_doctor() {
   optional_check "Git setup done or skipped (nikos-git-setup)" test -f "${HOME}/.config/nikos/github-configured"
   check "NikOS repo present" test -d "${NIKOS_HOME}/.git"
   check "script-helpers present" test -f "${HELPERS}"
+  # Hooks (nikos hooks): optional, since owners are set by hand once per machine.
+  optional_check "git-lantern has 'hooks'" lantern hooks --help
+  optional_check "agentvault installed" command -v agentvault
+  optional_check "gitleaks installed" command -v gitleaks
+  optional_check "script-helpers.owners set (nikos hooks)" git config --global --get script-helpers.owners
   echo ""
   if [[ ${issues} -eq 0 ]]; then
     print_success "All checks passed."
@@ -1166,6 +1175,7 @@ case "${1:-help}" in
   status) cmd_status ;;
   doctor) cmd_doctor ;;
   clean)  shift; exec bash "${NIKOS_HOME}/scripts/clean-caches.sh" "$@" ;;
+  hooks)  shift; exec bash "${NIKOS_HOME}/scripts/nikos-hooks.sh" "$@" ;;
   log)    cmd_log "${2:-50}" ;;
   help | --help | -h) usage ;;
   *)

@@ -4,6 +4,15 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Added
+- `nikos hooks`: status of the hook tools (script-helpers, git-lantern, agentvault,
+  gitleaks, owners) and every clone; `apply`/`repair`/`remove` through
+  `lantern hooks` in the clones under your owners; `--global` for the machine-wide
+  hooks, an explicit opt-in that install and update never run; `export`/`import DIR`
+  carry `lantern-hooks.json` and `agentvault.avbundle` to another computer, and import
+  sets the owners only where none are set. An unknown option exits 2 and changes
+  nothing. `nikos doctor` lists the hook tools as optional checks.
+
 ### Fixed
 - Ollama forwarder: a VPN or LAN in `172.16.0.0/12` (e.g. a VPN's `172.16.99.9` on
   `wg0`) is a warning, not a refusal, while the interface filter is loaded; `nikos update` no longer removes the
