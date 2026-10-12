@@ -84,7 +84,7 @@ python3 scripts/bump-versions.py --verify    # re-download every pin and compare
 
 Eligible means not a draft or pre-release and at least `--min-age-days` (3)
 old. `--bump` never changes an apt key fingerprint or a pin whose artifact has
-no vendor checksum (mkcert, Nordic, the nvm script): it says what is newer, and
+no vendor checksum (mkcert, agentvault, Nordic, the nvm script): it says what is newer, and
 a person updates those by hand and proves them with `--verify`.
 
 The Python packages share one env, so `--bump` moves them as a set (needs

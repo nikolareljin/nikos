@@ -559,6 +559,99 @@
     - not ansible_check_mode
     - pin_gate_install | bool
 
+# ── Hook tools (nikos hooks): gitleaks, agentvault, script-helpers.home ──
+# gitleaks: the version script-helpers pins (lib/ci_defaults.sh), checked
+# against the release's checksums file. Prints "8.30.0".
+- name: Read the installed gitleaks version
+  ansible.builtin.command: "{{ nikos_home }}/.local/bin/gitleaks version"
+  register: dev_tools_gitleaks_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether gitleaks needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: gitleaks
+    pin_gate_want: "{{ gitleaks_version }}"
+    pin_gate_path: "{{ nikos_home }}/.local/bin/gitleaks"
+    pin_gate_output: "{{ dev_tools_gitleaks_installed.stdout | default('') }}"
+
+- name: Install gitleaks {{ gitleaks_version }}
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
+  block:
+    - name: Create the private download directory
+      ansible.builtin.file:
+        path: "{{ nikos_user_download_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Download the gitleaks release archive
+      ansible.builtin.get_url:
+        url: "https://github.com/gitleaks/gitleaks/releases/download/v{{ gitleaks_version }}/gitleaks_{{ gitleaks_version }}_linux_x64.tar.gz"
+        dest: "{{ nikos_user_download_dir }}/gitleaks-{{ gitleaks_version }}.tar.gz"
+        checksum: "sha256:{{ gitleaks_sha256 }}"
+        mode: "0644"
+
+    - name: Unpack gitleaks
+      ansible.builtin.unarchive:
+        src: "{{ nikos_user_download_dir }}/gitleaks-{{ gitleaks_version }}.tar.gz"
+        dest: "{{ nikos_home }}/.local/bin"
+        remote_src: true
+        include: [gitleaks]
+        mode: "0755"
+
+# agentvault: carries AI tool rules and hooks between machines. Pinned release
+# binary, hashed by hand (the release has no sums file). Prints
+# "agentvault 0.13.0 (commit: ...)".
+- name: Read the installed agentvault version
+  ansible.builtin.command: "{{ nikos_home }}/.local/bin/agentvault version"
+  register: dev_tools_agentvault_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether agentvault needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: agentvault
+    pin_gate_want: "{{ agentvault_version }}"
+    pin_gate_path: "{{ nikos_home }}/.local/bin/agentvault"
+    pin_gate_output: "{{ dev_tools_agentvault_installed.stdout | default('') }}"
+
+- name: Install agentvault {{ agentvault_version }}
+  ansible.builtin.get_url:
+    url: "https://github.com/nikolareljin/agentvault/releases/download/{{ agentvault_version }}/agentvault-linux-amd64"
+    dest: "{{ nikos_home }}/.local/bin/agentvault"
+    checksum: "sha256:{{ agentvault_sha256 }}"
+    force: true
+    mode: "0755"
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
+
+# script-helpers for `nikos hooks` and `lantern hooks`: the copy NikOS pins,
+# set only when the user has not chosen one, never over their value.
+- name: Read script-helpers.home
+  community.general.git_config_info:
+    name: script-helpers.home
+    scope: global
+  register: dev_tools_sh_home
+  check_mode: false
+
+- name: Point script-helpers.home at the copy NikOS pins
+  community.general.git_config:
+    name: script-helpers.home
+    scope: global
+    value: "{{ playbook_dir }}/scripts/script-helpers"
+  when: (dev_tools_sh_home.config_value | default('') | trim) == ""
+
 # ── ai-runner (local Ollama model runner with simple UI) ──
 
 - name: Decide whether the ai-runner checkout has to move

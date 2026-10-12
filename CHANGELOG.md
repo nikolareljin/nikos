@@ -12,6 +12,12 @@ All notable changes to NikOS are documented here.
   carry `lantern-hooks.json` and `agentvault.avbundle` to another computer, and import
   sets the owners only where none are set. An unknown option exits 2 and changes
   nothing. `nikos doctor` lists the hook tools as optional checks.
+- `dev-tools` installs the tools `nikos hooks` drives: gitleaks 8.30.0 (the version
+  script-helpers pins, checked against the release's checksums file) and agentvault
+  0.13.0 (pinned binary, hashed by hand), both installed when missing or older and
+  never downgraded; git-lantern moves from 0.8.2 to 0.9.0 (`lantern hooks`).
+  `script-helpers.home` is set to the script-helpers copy NikOS pins only when the
+  user has not set one.
 
 ### Changed
 - script-helpers submodule 0.48.0 -> 0.50.0: per-repository hooks that chain to the
