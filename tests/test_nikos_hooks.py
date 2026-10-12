@@ -130,3 +130,14 @@ def test_a_failed_step_is_exit_1(env):
 def test_nikos_dispatches_hooks():
     text = (ROOT / "scripts" / "nikos").read_text()
     assert 'hooks)  shift; exec bash "${NIKOS_HOME}/scripts/nikos-hooks.sh" "$@" ;;' in text
+
+
+def test_lantern_gets_the_script_helpers_the_status_shows(env):
+    """Without script-helpers.home, lantern would look for its own vendored copy,
+    which an installed lantern does not have; it gets NikOS's pinned copy."""
+    stub = env["tmp"] / "bin" / "lantern"
+    stub.write_text(f'#!/bin/sh\necho "SH=$SCRIPT_HELPERS_HOME" >> "{env["log"]}"\n')
+    stub.chmod(0o755)
+    subprocess.run(["git", "config", "--global", "--unset", "script-helpers.home"], env=env["env"], check=True)
+    assert run(env, "apply").returncode == 0
+    assert f"SH={env['tmp'] / 'nikos' / 'scripts' / 'script-helpers'}" in env["log"].read_text()

@@ -43,6 +43,10 @@ helpers_home() {
   printf '%s\n' "${home:-${NIKOS_HOME}/scripts/script-helpers}"
 }
 
+# lantern with the same script-helpers this script reports: without it lantern
+# would look for its own vendored copy, which an installed lantern lacks.
+run_lantern() { SCRIPT_HELPERS_HOME="$(helpers_home)" lantern "$@"; }
+
 need_lantern() {
   command -v lantern >/dev/null 2>&1 || die "git-lantern is not installed (nikos update installs it)"
   lantern hooks --help >/dev/null 2>&1 || die "this git-lantern has no 'hooks' command; run nikos update"
@@ -62,7 +66,7 @@ cmd_status() {
   info "machine-wide:   ${global:-off (nikos hooks --global)}"
   info ""
   need_lantern
-  lantern hooks status --root "${ROOT}" "$@"
+  run_lantern hooks status --root "${ROOT}" "$@"
 }
 
 # The options each lantern sub-command takes; anything else is refused before
@@ -90,7 +94,7 @@ cmd_lantern() {
   if [[ "${sub}" == status ]]; then
     cmd_status "$@"
   else
-    lantern hooks "${sub}" --root "${ROOT}" "$@"
+    run_lantern hooks "${sub}" --root "${ROOT}" "$@"
   fi
 }
 
@@ -108,7 +112,7 @@ cmd_export() {
   [[ $# -eq 1 && -n "${dir}" ]] || die "export needs one folder: nikos hooks export DIR"
   need_lantern
   mkdir -p "${dir}"
-  lantern hooks export "${dir}/${LANTERN_FILE}" --root "${ROOT}" || return 1
+  run_lantern hooks export "${dir}/${LANTERN_FILE}" --root "${ROOT}" || return 1
   if command -v agentvault >/dev/null 2>&1; then
     agentvault export "${dir}/${VAULT_FILE}" || rc=1
   else
@@ -134,7 +138,7 @@ cmd_import() {
     git config --global script-helpers.owners "${owners}"
     info "owners set to ${owners}"
   fi
-  lantern hooks import "${file}" --root "${ROOT}" || rc=1
+  run_lantern hooks import "${file}" --root "${ROOT}" || rc=1
   if [[ -f "${dir}/${VAULT_FILE}" ]]; then
     if command -v agentvault >/dev/null 2>&1; then
       agentvault import "${dir}/${VAULT_FILE}" || rc=1
