@@ -13,6 +13,12 @@ All notable changes to NikOS are documented here.
   sets the owners only where none are set. An unknown option exits 2 and changes
   nothing. `nikos doctor` lists the hook tools as optional checks.
 
+### Changed
+- script-helpers submodule 0.48.0 -> 0.50.0: per-repository hooks that chain to the
+  ones a repository already runs (`setup-hooks.sh --status --porcelain`, `--repair`),
+  AI agent hooks for Codex, Gemini, Copilot CLI and Cursor, and the gitleaks
+  helper. `ollama_models.sh` is unchanged; the Ollama library changes are additions.
+
 ### Fixed
 - Ollama forwarder: a VPN or LAN in `172.16.0.0/12` (e.g. a VPN's `172.16.99.9` on
   `wg0`) is a warning, not a refusal, while the interface filter is loaded; `nikos update` no longer removes the
