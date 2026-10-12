@@ -4,6 +4,14 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Added
+- `dev-tools` installs the tools `nikos hooks` drives: gitleaks 8.30.0 (the version
+  script-helpers pins, checked against the release's checksums file) and agentvault
+  0.13.0 (pinned binary, hashed by hand), both installed when missing or older and
+  never downgraded; git-lantern moves from 0.8.2 to 0.9.0 (`lantern hooks`).
+  `script-helpers.home` is set to the script-helpers copy NikOS pins only when the
+  user has not set one.
+
 ### Changed
 - script-helpers submodule 0.48.0 -> 0.50.0: per-repository hooks that chain to the
   ones a repository already runs (`setup-hooks.sh --status --porcelain`, `--repair`),

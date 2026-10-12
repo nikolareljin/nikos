@@ -141,6 +141,13 @@ anki_sha256: "d70e01971a7aa190b189927573ee643f2525ff840eafaecc7a8f8cde505650b3"
 # github.com/FiloSottile/mkcert releases; no sums file, hashed by hand.
 mkcert_version: "v1.4.4"
 mkcert_sha256: "6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52"
+# github.com/gitleaks/gitleaks releases; the version script-helpers pins
+# (lib/ci_defaults.sh); sha256 from gitleaks_<v>_checksums.txt.
+gitleaks_version: "8.30.0"
+gitleaks_sha256: "79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
+# github.com/nikolareljin/agentvault releases; no sums file, hashed by hand.
+agentvault_version: "0.13.0"
+agentvault_sha256: "e37a8fb2881ba4b8ea146490d26015d4db4cf91db3ae6c6c2d8dd2e72aaf2f5b"
 # github.com/EricLBuehler/mistral.rs releases, CPU build; sha256 = GitHub asset digest.
 mistralrs_version: "v0.9.4"
 mistralrs_sha256: "99a8f233db07927b9af4d6ac8d5c1541bc9e4c6c90ebeec1be97fe6306e00feb"
@@ -164,8 +171,8 @@ distrodeck_commit: "68a27e4964ddc49dc5e39155c1a7a74319152d45"
 image_view_version: "0.6.2"
 image_view_commit: "52b7d11f2509c31e79defe584cd3d8ddb9b1b692"
 # github.com/nikolareljin/git-lantern tag.
-git_lantern_version: "0.8.2"
-git_lantern_commit: "e596755a9deed1de5762f630a347aeab6f243d9c"
+git_lantern_version: "0.9.0"
+git_lantern_commit: "358a3f3953a9e0ed3c1bbda2d083eeed6856e411"
 # github.com/nikolareljin/ai-runner tag.
 ai_runner_version: "0.1.5"
 ai_runner_commit: "5bd3089ba909fc62588629e82f98c86a9f103ec4"
@@ -343,6 +350,19 @@ nikos_pin_sources:
     version_var: mkcert_version
     artifacts:
       - {asset: "mkcert-{tag}-linux-amd64", sha256_var: mkcert_sha256}
+  gitleaks:
+    type: github-release
+    repo: gitleaks/gitleaks
+    tag_prefix: v
+    version_var: gitleaks_version
+    artifacts:
+      - {asset: "gitleaks_{version}_linux_x64.tar.gz", sha256_var: gitleaks_sha256, checksums: "gitleaks_{version}_checksums.txt"}
+  agentvault:
+    type: github-release
+    repo: nikolareljin/agentvault
+    version_var: agentvault_version
+    artifacts:
+      - {asset: agentvault-linux-amd64, sha256_var: agentvault_sha256}
   mistralrs:
     type: github-release
     repo: EricLBuehler/mistral.rs
