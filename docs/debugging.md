@@ -369,3 +369,27 @@ ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags ai-stack -e 
 ```
 
 Note: role tags must be explicitly set in `site.yml`. The optional roles (`network`, `music`, `education`, `neovim`, `java`, `podman`) are tag-gated by default.
+
+## Security hooks: nikos hooks
+
+`nikos hooks` drives the script-helpers hooks through git-lantern (git hooks per
+repository) and agentvault (AI tool rules and hooks). Only clones whose `origin` is
+under `git config --global script-helpers.owners` are changed; hooks a clone already
+runs (an employer's included) keep running, and `remove` brings back what was there.
+
+```bash
+git config --global script-helpers.owners <user-or-org>   # once per machine
+nikos hooks                                    # tools, owners, every clone
+nikos hooks apply --dry-run                    # the plan
+nikos hooks apply --batch 10 [--agents all]    # ten clones at a time
+nikos hooks repair                             # after husky or similar took over
+nikos hooks remove [--agents codex]            # take ours out
+nikos hooks --global [--uninstall]             # machine-wide; install/update never run it
+nikos hooks export ~/carry                     # lantern-hooks.json + agentvault.avbundle
+nikos hooks import ~/carry                     # on the other computer
+```
+
+`--root DIR` (or `NIKOS_HOOKS_ROOT`) says where the clones are; the default is
+`~/Projects`. script-helpers comes from `script-helpers.home`, else the copy NikOS
+pins. An unknown option exits 2 and changes nothing. `import` sets the owners from
+the export only when this machine has none.

@@ -5,6 +5,13 @@ All notable changes to NikOS are documented here.
 ## Unreleased
 
 ### Added
+- `nikos hooks`: status of the hook tools (script-helpers, git-lantern, agentvault,
+  gitleaks, owners) and every clone; `apply`/`repair`/`remove` through
+  `lantern hooks` in the clones under your owners; `--global` for the machine-wide
+  hooks, an explicit opt-in that install and update never run; `export`/`import DIR`
+  carry `lantern-hooks.json` and `agentvault.avbundle` to another computer, and import
+  sets the owners only where none are set. An unknown option exits 2 and changes
+  nothing. `nikos doctor` lists the hook tools as optional checks.
 - `dev-tools` installs the tools `nikos hooks` drives: gitleaks 8.30.0 (the version
   script-helpers pins, checked against the release's checksums file) and agentvault
   0.13.0 (pinned binary, hashed by hand), both installed when missing or older and
