@@ -72,7 +72,7 @@ def test_apply_passes_its_options_and_root(env):
 
 @pytest.mark.parametrize("args", [
     ["apply", "--force"], ["apply", "--batch"], ["repair", "--agents", "all"], ["remove", "--dry-run"],
-    ["--bogus"], ["install"], ["--global", "--claude"], ["export"], ["export", "a", "b"], ["import"],
+    ["--bogus"], ["install"], ["apply", "--root="], ["apply", "--root"], ["--global", "--claude"], ["export"], ["export", "a", "b"], ["import"],
 ])
 def test_bad_usage_exits_2_and_runs_nothing(env, args):
     r = run(env, *args)

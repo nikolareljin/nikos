@@ -151,7 +151,7 @@ main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --root) [[ $# -ge 2 && -n "$2" ]] || die "--root needs a folder"; ROOT="$2"; shift 2 ;;
-      --root=*) ROOT="${1#--root=}"; shift ;;
+      --root=*) ROOT="${1#--root=}"; [[ -n "${ROOT}" ]] || die "--root needs a folder"; shift ;;
       -h|--help) usage; exit 0 ;;
       *) args+=("$1"); shift ;;
     esac
