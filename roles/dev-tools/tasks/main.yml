@@ -639,19 +639,18 @@
 # script-helpers for `nikos hooks` and `lantern hooks`: the copy NikOS pins,
 # set only when the user has not chosen one, never over their value.
 - name: Read script-helpers.home
-  ansible.builtin.command: git config --global --get script-helpers.home
+  community.general.git_config_info:
+    name: script-helpers.home
+    scope: global
   register: dev_tools_sh_home
-  changed_when: false
-  failed_when: false
   check_mode: false
 
 - name: Point script-helpers.home at the copy NikOS pins
-  ansible.builtin.command:
-    argv: [git, config, --global, script-helpers.home, "{{ playbook_dir }}/scripts/script-helpers"]
-  changed_when: true
-  when:
-    - not ansible_check_mode
-    - dev_tools_sh_home.rc != 0 or (dev_tools_sh_home.stdout | trim) == ""
+  community.general.git_config:
+    name: script-helpers.home
+    scope: global
+    value: "{{ playbook_dir }}/scripts/script-helpers"
+  when: (dev_tools_sh_home.config_value | default('') | trim) == ""
 
 # ── ai-runner (local Ollama model runner with simple UI) ──
 
