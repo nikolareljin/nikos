@@ -160,6 +160,11 @@ nikos models prune
 nikos clean
 nikos clean --apply
 
+<span class="c"># security hooks in the clones you own (a plan first; --global is opt-in)</span>
+nikos hooks
+nikos hooks apply --dry-run
+nikos hooks export ~/carry   <span class="c"># then on the other computer: nikos hooks import ~/carry</span>
+
 <span class="c"># read the last playbook log</span>
 nikos log 100</code></pre>
 
@@ -177,6 +182,13 @@ nikos log 100</code></pre>
   containers, virtual environments, build output or tracked files. It is in NikOS 1.2.0 and
   later (<code>nikos update</code> brings it). Details:
   <a href="https://github.com/nikolareljin/nikos/blob/main/docs/debugging.md#disk-full-nikos-clean">docs/debugging.md</a>.</p>
+
+  <p><code>nikos hooks</code> (1.4.0 and later) sets up the script-helpers security hooks in every clone
+  whose origin is under your owners (<code>git config --global script-helpers.owners</code>); other
+  clones, an employer's included, are never changed, and hooks a clone already runs keep running.
+  <code>export</code> and <code>import</code> carry the setup, with your AI tool rules, to another
+  computer. Details:
+  <a href="https://github.com/nikolareljin/nikos/blob/main/docs/debugging.md#security-hooks-nikos-hooks">docs/debugging.md</a>.</p>
 
   <h2>Customising before you run</h2>
 
