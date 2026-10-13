@@ -2,7 +2,7 @@
 
 All notable changes to NikOS are documented here.
 
-## Unreleased
+## [1.4.0] - 2026-10-12
 
 ### Added
 - `nikos hooks`: status of the hook tools (script-helpers, git-lantern, agentvault,
