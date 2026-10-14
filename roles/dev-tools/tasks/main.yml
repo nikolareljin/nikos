@@ -561,7 +561,7 @@
 
 # ── Hook tools (nikos hooks): gitleaks, agentvault, script-helpers.home ──
 # gitleaks: the version script-helpers pins (lib/ci_defaults.sh), checked
-# against the release's checksums file. Prints "8.30.0".
+# against the release's checksums file. Prints "8.30.1".
 - name: Read the installed gitleaks version
   ansible.builtin.command: "{{ nikos_home }}/.local/bin/gitleaks version"
   register: dev_tools_gitleaks_installed

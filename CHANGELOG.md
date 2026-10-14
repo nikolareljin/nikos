@@ -2,6 +2,17 @@
 
 All notable changes to NikOS are documented here.
 
+## Unreleased
+
+### Changed
+- script-helpers submodule 0.50.0 -> 0.52.0: a push runs security, hygiene and
+  lint on the changed files, not the test suite; gitleaks and foxguard are
+  installed on demand; `setup-hooks.sh` offers both and records the signed-in
+  GitHub account. `ollama_models.sh` is unchanged.
+- gitleaks 8.30.0 -> 8.30.1, the version script-helpers 0.52.0 pins.
+- git-lantern 0.9.0 -> 0.9.1: `lantern hooks` repairs clones whose setup runs
+  only the repository's own hooks; it vendors script-helpers 0.52.0.
+
 ## [1.4.0] - 2026-10-12
 
 ### Added
