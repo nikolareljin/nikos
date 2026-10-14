@@ -143,8 +143,8 @@ mkcert_version: "v1.4.4"
 mkcert_sha256: "6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52"
 # github.com/gitleaks/gitleaks releases; the version script-helpers pins
 # (lib/ci_defaults.sh); sha256 from gitleaks_<v>_checksums.txt.
-gitleaks_version: "8.30.0"
-gitleaks_sha256: "79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
+gitleaks_version: "8.30.1"
+gitleaks_sha256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
 # github.com/nikolareljin/agentvault releases; no sums file, hashed by hand.
 agentvault_version: "0.13.0"
 agentvault_sha256: "e37a8fb2881ba4b8ea146490d26015d4db4cf91db3ae6c6c2d8dd2e72aaf2f5b"
