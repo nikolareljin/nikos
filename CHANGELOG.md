@@ -4,6 +4,8 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+## [1.4.1] - 2026-10-14
+
 ### Changed
 - script-helpers submodule 0.50.0 -> 0.52.0: a push runs security, hygiene and
   lint on the changed files, not the test suite; gitleaks and foxguard are
