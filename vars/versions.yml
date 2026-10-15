@@ -171,8 +171,8 @@ distrodeck_commit: "68a27e4964ddc49dc5e39155c1a7a74319152d45"
 image_view_version: "0.6.2"
 image_view_commit: "52b7d11f2509c31e79defe584cd3d8ddb9b1b692"
 # github.com/nikolareljin/git-lantern tag.
-git_lantern_version: "0.9.1"
-git_lantern_commit: "2492189419c866c114504814b8786947177b0f12"
+git_lantern_version: "0.10.0"
+git_lantern_commit: "0a52f267033ab2e11a729ab4d71bf65046c96395"
 # github.com/nikolareljin/ai-runner tag.
 ai_runner_version: "0.1.5"
 ai_runner_commit: "5bd3089ba909fc62588629e82f98c86a9f103ec4"
