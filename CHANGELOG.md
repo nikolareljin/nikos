@@ -4,6 +4,8 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+## [1.4.2] - 2026-10-15
+
 ### Changed
 - git-lantern 0.9.1 -> 0.11.0: `lantern hooks apply` sets
   `script-helpers.push-tests quick` in owned clones of private repositories
