@@ -175,6 +175,14 @@ def test_status_with_an_older_script_helpers_never_runs_it(env):
     assert not [c for c in calls(env) if c.startswith("setup-hooks")]
 
 
+def test_status_with_a_missing_script_helpers_home_says_so(env):
+    subprocess.run(["git", "config", "--global", "script-helpers.home", str(env["tmp"] / "gone")],
+                   env=env["env"], check=True)
+    r = run(env)
+    assert f"claude hook:    not checked: no {env['tmp'] / 'gone'}/scripts/setup-hooks.sh" in r.stdout
+    assert "nikos update" not in r.stdout.split("claude hook:")[1].splitlines()[0]
+
+
 @pytest.mark.parametrize("sub", ["repair", "apply"])
 @pytest.mark.parametrize("state", ["absent", "broken", "stale"])
 def test_repair_and_apply_install_a_bad_claude_hook_first(env, sub, state):
