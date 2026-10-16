@@ -4,6 +4,9 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Docs
+- Site: vellum (Markdown viewer for the terminal) joins the tool suite links on the site.
+
 ### Changed
 - git-lantern 0.9.1 -> 0.10.0: `lantern hooks apply` sets
   `script-helpers.push-tests quick` in owned clones of private repositories
