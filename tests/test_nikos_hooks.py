@@ -144,7 +144,7 @@ def test_lantern_gets_the_script_helpers_the_status_shows(env):
 
 
 def fake_claude(env, state, hook="/data/script-helpers/claude-hooks/scripts/claude-hooks/pretooluse_private_names.sh"):
-    """A setup-hooks.sh that knows --status --porcelain --claude (newer than 0.53.1) and
+    """A setup-hooks.sh that knows --status --porcelain --claude (0.54.0 or newer) and
     reports <state>; --claude logs and makes it ok."""
     sh = Path(git_get(env, "script-helpers.home")) / "scripts" / "setup-hooks.sh"
     st = env["tmp"] / "claude-state"
