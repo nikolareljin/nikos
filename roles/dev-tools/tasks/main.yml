@@ -1,5 +1,5 @@
 ---
-# NikOS-managed checkouts (distrodeck, image-view, git-lantern, ai-runner) live
+# NikOS-managed checkouts (distrodeck, image-view, vellum, git-lantern, ai-runner) live
 # in nikos_tools_dir, not ~/Projects: that is the user's workspace, and a
 # developer's own clone of one of these repos there made the playbook fail on
 # "Local modifications exist in the destination".
@@ -420,6 +420,19 @@
     - (dev_tools_image_view_result is not skipped and dev_tools_image_view_result is succeeded)
       or (not dev_tools_image_view_needs_build | bool and dev_tools_image_view_built.rc != 0)
 
+# A build that was due but did not happen (failed, no cargo, cargo too old)
+# leaves a marker no commit matches. Without it, a binary from an older pin
+# with no marker yet would be adopted as current on the next run.
+- name: Mark image-view as still to be built
+  ansible.builtin.copy:
+    dest: "{{ nikos_tools_dir }}/.nikos-built/image-view"
+    content: "pending\n"
+    mode: "0644"
+  when:
+    - not ansible_check_mode
+    - dev_tools_image_view_needs_build | bool
+    - dev_tools_image_view_result is skipped or dev_tools_image_view_result is failed
+
 - name: Warn when image-view build failed
   ansible.builtin.debug:
     msg: >-
@@ -450,6 +463,150 @@
   when:
     - not ansible_check_mode
     - dev_tools_cargo_bin | length == 0
+
+# ── vellum (Markdown viewer for the terminal — requires cargo from distrodeck) ──
+
+# Built with --locked against vellum's own Cargo.lock, so the build never
+# rewrites a tracked file and the checkout stays clean for `nikos update`.
+# The binary is copied out of target/ rather than `cargo install`ed, which
+# would leave .crates.toml and .crates2.json in ~/.local.
+- name: Decide whether the vellum checkout has to move
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: git
+  vars:
+    pin_gate_dest: "{{ nikos_tools_dir }}/vellum"
+    pin_gate_commit: "{{ vellum_commit }}"
+
+- name: Clone vellum
+  ansible.builtin.git:
+    repo: https://github.com/nikolareljin/vellum.git
+    dest: "{{ nikos_tools_dir }}/vellum"
+    # The commit of release tag vellum_version; `nikos update` moves an
+    # existing clone to it.
+    version: "{{ vellum_commit }}"
+    update: "{{ nikos_update_mode | bool }}"
+  register: dev_tools_vellum_clone
+  when: not pin_gate_clone_current | bool
+
+- name: Check whether vellum binary is already installed
+  ansible.builtin.stat:
+    path: "{{ nikos_home }}/.local/bin/vellum"
+  register: dev_tools_vellum_bin
+
+- name: Read the commit of the vellum checkout
+  ansible.builtin.command:
+    argv: [git, -C, "{{ nikos_tools_dir }}/vellum", rev-parse, HEAD]
+  register: dev_tools_vellum_head
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Read the commit vellum was last built from
+  ansible.builtin.command:
+    argv: [cat, "{{ nikos_tools_dir }}/.nikos-built/vellum"]
+  register: dev_tools_vellum_built
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Same rule as image-view: rebuild when the binary is missing, the clone moved
+# this run, or the last successful build was from another commit.
+- name: Decide whether vellum has to be built
+  ansible.builtin.set_fact:
+    dev_tools_vellum_needs_build: >-
+      {{ not dev_tools_vellum_bin.stat.exists
+         or (dev_tools_vellum_clone is changed)
+         or (dev_tools_vellum_built.rc == 0
+             and (dev_tools_vellum_built.stdout | trim) != (dev_tools_vellum_head.stdout | trim)) }}
+
+# vellum declares rust-version 1.90 (its image dependencies need it).
+- name: Build vellum
+  ansible.builtin.command:
+    argv: [cargo, build, --release, --locked]
+    chdir: "{{ nikos_tools_dir }}/vellum"
+  changed_when: true
+  environment:
+    HOME: "{{ nikos_home }}"
+    PATH: "{{ (dev_tools_cargo_bin | dirname) + ':' + ansible_env.PATH }}"
+  register: dev_tools_vellum_result
+  ignore_errors: true
+  when:
+    - not ansible_check_mode
+    - dev_tools_cargo_bin | length > 0
+    - dev_tools_cargo_version_number is version('1.90.0', '>=')
+    - dev_tools_vellum_needs_build | bool
+
+- name: Install the vellum binary
+  ansible.builtin.copy:
+    src: "{{ nikos_tools_dir }}/vellum/target/release/vellum"
+    dest: "{{ nikos_home }}/.local/bin/vellum"
+    remote_src: true
+    mode: "0755"
+  register: dev_tools_vellum_install
+  when:
+    - not ansible_check_mode
+    - dev_tools_vellum_result is not skipped
+    - dev_tools_vellum_result is succeeded
+
+# The build cache is about 800 MB and is not needed again: the marker below
+# keeps the next update from rebuilding until the pinned commit changes.
+- name: Remove the vellum build cache
+  ansible.builtin.file:
+    path: "{{ nikos_tools_dir }}/vellum/target"
+    state: absent
+  when:
+    - not ansible_check_mode
+    - dev_tools_vellum_install is not skipped
+    - dev_tools_vellum_install is succeeded
+
+- name: Record the commit vellum was built from
+  ansible.builtin.copy:
+    dest: "{{ nikos_tools_dir }}/.nikos-built/vellum"
+    content: "{{ dev_tools_vellum_head.stdout | trim }}\n"
+    mode: "0644"
+  when:
+    - not ansible_check_mode
+    - dev_tools_vellum_head.rc == 0
+    - (dev_tools_vellum_install is not skipped and dev_tools_vellum_install is succeeded)
+      or (not dev_tools_vellum_needs_build | bool and dev_tools_vellum_built.rc != 0)
+
+# A build that was due but did not happen (failed, no cargo, cargo too old)
+# leaves a marker no commit matches. Without it, a binary from an older pin
+# with no marker yet would be adopted as current on the next run.
+- name: Mark vellum as still to be built
+  ansible.builtin.copy:
+    dest: "{{ nikos_tools_dir }}/.nikos-built/vellum"
+    content: "pending\n"
+    mode: "0644"
+  when:
+    - not ansible_check_mode
+    - dev_tools_vellum_needs_build | bool
+    - dev_tools_vellum_install is skipped
+
+- name: Warn when vellum build failed
+  ansible.builtin.debug:
+    msg: >-
+      vellum build failed (rc={{ dev_tools_vellum_result.rc | default('n/a') }}).
+      It is optional; the rest of NikOS is fully installed.
+      To retry: cd {{ nikos_tools_dir }}/vellum && cargo build --release --locked
+      Error: {{ dev_tools_vellum_result.stderr | default('') | truncate(200) }}
+  when:
+    - not ansible_check_mode
+    - dev_tools_vellum_result is defined
+    - dev_tools_vellum_result.failed | default(false)
+
+- name: Warn when cargo is too old for vellum
+  ansible.builtin.debug:
+    msg: >-
+      vellum skipped: Cargo {{ dev_tools_cargo_version_number }} is too old.
+      vellum requires Rust 1.90 or newer.
+      Update Rust (rustup update stable), then rerun nikos update.
+  when:
+    - not ansible_check_mode
+    - dev_tools_cargo_bin | length > 0
+    - dev_tools_cargo_version_number is version('1.90.0', '<')
+    - dev_tools_vellum_needs_build | bool
 
 # ── git-lantern (repo dashboard CLI — command: lantern) ──
 

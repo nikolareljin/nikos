@@ -161,6 +161,7 @@ Additional tools installed directly:
 | Tool | Command | Purpose |
 |---|---|---|
 | [image-view](https://github.com/nikolareljin/image-view) | `image-view` | Terminal image preview (Rust) |
+| [vellum](https://github.com/nikolareljin/vellum) | `vellum` | Markdown viewer for the terminal (Rust) |
 | [git-lantern](https://github.com/nikolareljin/git-lantern) | `lantern` | Repo dashboard — local + GitHub status |
 
 ### Git host integration
@@ -213,7 +214,7 @@ nikos log [N]        # tail the latest playbook log
 advances to the newest release only when that release is genuinely newer, and a
 branch install stays on its branch. An update never downgrades. It then refreshes
 the pinned `script-helpers` submodule, NikOS-managed tool repositories
-(`distrodeck`, `image-view`, `git-lantern`, and `ai-runner`), Python/pipx
+(`distrodeck`, `image-view`, `vellum`, `git-lantern`, and `ai-runner`), Python/pipx
 packages, VS Code extensions, Ollama models, and installed system packages
 (apt, snap, and flatpak). The optional bundles selected during installation
 remain selected. For Ollama, it first asks, one model at a time, before removing
@@ -285,6 +286,7 @@ NikOS is the workstation layer of a broader AI development toolkit maintained by
 | [nikolareljin/finetorch](https://github.com/nikolareljin/finetorch) | Rust-native LLM finetuning — LoRA/QLoRA, dataset prep, training on a single GPU |
 | [nikolareljin/shrink-llm](https://github.com/nikolareljin/shrink-llm) | LLM compression — quantization, pruning, knowledge distillation for mobile/edge |
 | [nikolareljin/image-view](https://github.com/nikolareljin/image-view) | Terminal image preview CLI (pre-installed on NikOS) |
+| [nikolareljin/vellum](https://github.com/nikolareljin/vellum) | Markdown viewer for the terminal (pre-installed on NikOS) |
 | [nikolareljin/git-lantern](https://github.com/nikolareljin/git-lantern) | Repo dashboard CLI — local + GitHub branch status (pre-installed on NikOS) |
 
 ### AI modeling workflow
