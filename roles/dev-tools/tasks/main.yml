@@ -536,6 +536,17 @@
     - dev_tools_vellum_result is not skipped
     - dev_tools_vellum_result is succeeded
 
+# The build cache is about 800 MB and is not needed again: the marker below
+# keeps the next update from rebuilding until the pinned commit changes.
+- name: Remove the vellum build cache
+  ansible.builtin.file:
+    path: "{{ nikos_tools_dir }}/vellum/target"
+    state: absent
+  when:
+    - not ansible_check_mode
+    - dev_tools_vellum_install is not skipped
+    - dev_tools_vellum_install is succeeded
+
 - name: Record the commit vellum was built from
   ansible.builtin.copy:
     dest: "{{ nikos_tools_dir }}/.nikos-built/vellum"
