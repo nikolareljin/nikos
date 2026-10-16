@@ -4,6 +4,11 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Added
+- dev-tools installs vellum 0.7.0 (Markdown viewer for the terminal) into
+  `~/.local/bin`, built from the pinned tag with `cargo build --locked`; needs
+  Rust 1.90+. `nikos update` follows new tags through `vars/versions.yml`.
+
 ### Docs
 - Site: vellum (Markdown viewer for the terminal) joins the tool suite links on the site.
 

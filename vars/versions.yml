@@ -170,6 +170,9 @@ distrodeck_commit: "68a27e4964ddc49dc5e39155c1a7a74319152d45"
 # github.com/nikolareljin/image-view tag.
 image_view_version: "0.6.2"
 image_view_commit: "52b7d11f2509c31e79defe584cd3d8ddb9b1b692"
+# github.com/nikolareljin/vellum tag.
+vellum_version: "0.7.0"
+vellum_commit: "c33dfca3858c4b7093cffdc20b18c7f944162307"
 # github.com/nikolareljin/git-lantern tag.
 git_lantern_version: "0.11.0"
 git_lantern_commit: "550bb78d1b74fe30896c1f0e28d05fd7f45ed784"
@@ -392,6 +395,12 @@ nikos_pin_sources:
     repo: nikolareljin/image-view
     version_var: image_view_version
     commit_var: image_view_commit
+    version_regex: '^[0-9]+[.][0-9]+[.][0-9]+$'
+  vellum:
+    type: github-tag
+    repo: nikolareljin/vellum
+    version_var: vellum_version
+    commit_var: vellum_commit
     version_regex: '^[0-9]+[.][0-9]+[.][0-9]+$'
   git_lantern:
     type: github-tag
