@@ -4,6 +4,16 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Fixed
+- The Claude Code security hook is installed for the user on every `nikos install` and
+  `nikos update` (`setup-hooks.sh --claude`, from `script-helpers.home`), into
+  `~/.local/share/script-helpers/claude-hooks`. Before, nothing installed it, and an entry
+  made by hand could point into a script-helpers checkout; a branch switch there removed the
+  file and the hook stopped running, with only a non-blocking error.
+- `nikos hooks` shows that hook: ok, NOT INSTALLED, BROKEN (the file it runs is missing) or
+  STALE (it runs a file outside the installed copy). `nikos hooks repair` and `apply`
+  reinstall it unless it is ok; `apply --dry-run` only reports it.
+
 ### Docs
 - Site: vellum (Markdown viewer for the terminal) joins the tool suite links on the site.
 
