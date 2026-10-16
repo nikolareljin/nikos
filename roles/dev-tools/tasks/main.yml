@@ -673,9 +673,23 @@
   register: dev_tools_claude_hook
   # Changed when the settings entry was written; the copy is refreshed every run.
   changed_when: "'updated ' in dev_tools_claude_hook.stdout"
+  # One hook problem (an unreadable settings.json, no Python, a script-helpers.home
+  # without the script) must not stop every role after this one: warned below,
+  # and nikos hooks shows the state until it is fixed.
+  failed_when: false
   when:
     - not ansible_check_mode
     - (dev_tools_sh_owners.config_value | default('') | trim) != ""
+
+- name: Warn that the Claude Code hook was not installed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: the Claude Code hook was NOT installed (setup-hooks.sh --claude
+      exit {{ dev_tools_claude_hook.rc }}): {{ (dev_tools_claude_hook.stderr | default('') ~ ' ' ~ dev_tools_claude_hook.stdout | default('')) | trim | truncate(400) }}
+      Fix the cause, then run nikos hooks repair; nikos hooks shows its state.
+  when:
+    - dev_tools_claude_hook.rc is defined
+    - dev_tools_claude_hook.rc != 0
 
 - name: Say why the Claude Code hook was not installed
   ansible.builtin.debug:

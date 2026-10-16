@@ -247,3 +247,16 @@ def test_only_leaves_the_user_hook_alone(env):
 def test_no_python_is_said_as_such(env):
     fake_claude(env, "unknown")
     assert "claude hook:    unknown: no Python" in run(env).stdout
+
+
+def test_dry_run_without_owners_says_it_would_not_install(env):
+    fake_claude(env, "absent")
+    r = run(env, "apply", "--dry-run")
+    assert "would not install it: no owners set" in r.stdout
+
+
+def test_a_failed_hook_install_warns_and_does_not_stop_the_play():
+    text = (ROOT / "roles" / "dev-tools" / "tasks" / "main.yml").read_text()
+    block = text.split("- name: Install the Claude Code hook for this user", 1)[1].split("\n- name:", 1)[0]
+    assert "failed_when: false" in block
+    assert "- name: Warn that the Claude Code hook was not installed" in text

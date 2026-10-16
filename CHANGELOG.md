@@ -13,6 +13,7 @@ All notable changes to NikOS are documented here.
 - `nikos hooks` shows that hook: ok, NOT INSTALLED, BROKEN (the file it runs is missing) or
   STALE (it runs a file outside the installed copy). `nikos hooks repair` and `apply`
   reinstall it unless it is ok; `apply --dry-run` only reports it, and `--only` leaves it alone.
+  A failed install warns and lets `nikos update` go on; `nikos hooks` keeps showing the state.
 
 ### Docs
 - Site: vellum (Markdown viewer for the terminal) joins the tool suite links on the site.

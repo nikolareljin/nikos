@@ -148,7 +148,13 @@ cmd_lantern() {
     if [[ " $* " == *" --only"* ]]; then
       :
     elif [[ " $* " == *" --dry-run "* ]]; then
-      [[ "$(claude_state | cut -f1)" == ok ]] || info "claude hook: would install it from $(helpers_home)"
+      if [[ "$(claude_state | cut -f1)" == ok ]]; then
+        :
+      elif [[ -z "$(git config --global --get script-helpers.owners 2>/dev/null || true)" ]]; then
+        info "claude hook: would not install it: no owners set"
+      else
+        info "claude hook: would install it from $(helpers_home)"
+      fi
     else
       fix_claude || rc=1
     fi
