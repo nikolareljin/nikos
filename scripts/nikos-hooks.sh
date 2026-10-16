@@ -53,17 +53,18 @@ run_lantern() { SCRIPT_HELPERS_HOME="$(helpers_home)" lantern "$@"; }
 # claude_state: the user's Claude Code hook as script-helpers sees it: ok,
 # absent, broken (the file it runs is missing), stale (it runs a file outside
 # the installed copy, such as a checkout a branch switch removes), or unknown
-# (script-helpers older than 0.54.0 cannot tell). Second field: the file.
+# (script-helpers older than 0.54.0 cannot tell), or failed (the check did not
+# run). Second field: the file.
 claude_state() {
-  local script out
+  local script out state
   script="$(helpers_home)/scripts/setup-hooks.sh"
   # Older copies read --status --porcelain --claude as an install: never run it there.
   if [[ ! -f "${script}" ]] || ! grep -q 'claude_user=' "${script}"; then
     printf 'unknown\t\n'; return 0
   fi
   out="$(bash "${script}" --status --porcelain --claude 2>/dev/null | tail -n 1)" || true
-  printf '%s\t%s\n' "$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^claude_user=//p')" \
-    "$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^hook=//p')"
+  state="$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^claude_user=//p')"
+  printf '%s\t%s\n' "${state:-failed}" "$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^hook=//p')"
 }
 
 # fix_claude: install the user's Claude hook from script-helpers.home unless it
@@ -107,6 +108,7 @@ cmd_status() {
     absent)  info "claude hook:    NOT INSTALLED (nikos hooks repair)" ;;
     broken)  info "claude hook:    BROKEN: ${hook} does not exist, so it cannot run (nikos hooks repair)" ;;
     stale)   info "claude hook:    STALE: runs ${hook}, not the installed copy (nikos hooks repair)" ;;
+    failed)  info "claude hook:    could not be checked: $(helpers_home)/scripts/setup-hooks.sh --status --porcelain --claude failed" ;;
     *)       info "claude hook:    unknown (script-helpers older than 0.54.0; nikos update)" ;;
   esac
   info ""

@@ -226,3 +226,11 @@ def test_the_playbook_installs_the_claude_hook_from_the_pinned_copy():
     text = (ROOT / "roles" / "dev-tools" / "tasks" / "main.yml").read_text()
     assert "- name: Install the Claude Code hook for this user" in text
     assert "/scripts/setup-hooks.sh\"\n      - --claude" in text
+
+
+def test_a_failed_check_is_said_as_such(env):
+    fake_claude(env, "ok")
+    sh = Path(git_get(env, "script-helpers.home")) / "scripts" / "setup-hooks.sh"
+    sh.write_text(sh.read_text().replace('"--status --porcelain --claude")', '"--status --porcelain --claude") exit 1;'))
+    r = run(env)
+    assert "claude hook:    could not be checked" in r.stdout
