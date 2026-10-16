@@ -204,9 +204,10 @@ ai_stack_model_modules:
 
 # ── distrodeck ──────────────────────────────────────────────────────────────
 # Where NikOS keeps the tool repositories it clones and builds (distrodeck,
-# image-view, git-lantern, ai-runner, bitnet.cpp). Per user, no root: the tools
-# build as the user. Not ~/Projects, which is the user's own workspace, and not
-# under ~/.local/share/nikos, which is the NikOS git checkout itself.
+# image-view, vellum, git-lantern, ai-runner, bitnet.cpp). Per user, no root:
+# the tools build as the user. Not ~/Projects, which is the user's own
+# workspace, and not under ~/.local/share/nikos, which is the NikOS git
+# checkout itself.
 # true: when an NVIDIA GPU has no loaded driver, install Ubuntu's recommended
 # one (ubuntu-drivers install, signed Ubuntu archive). false: leave GPU drivers alone.
 nikos_nvidia_drivers: true

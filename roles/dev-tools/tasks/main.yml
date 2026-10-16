@@ -420,6 +420,19 @@
     - (dev_tools_image_view_result is not skipped and dev_tools_image_view_result is succeeded)
       or (not dev_tools_image_view_needs_build | bool and dev_tools_image_view_built.rc != 0)
 
+# A build that was due but did not happen (failed, no cargo, cargo too old)
+# leaves a marker no commit matches. Without it, a binary from an older pin
+# with no marker yet would be adopted as current on the next run.
+- name: Mark image-view as still to be built
+  ansible.builtin.copy:
+    dest: "{{ nikos_tools_dir }}/.nikos-built/image-view"
+    content: "pending\n"
+    mode: "0644"
+  when:
+    - not ansible_check_mode
+    - dev_tools_image_view_needs_build | bool
+    - dev_tools_image_view_result is skipped or dev_tools_image_view_result is failed
+
 - name: Warn when image-view build failed
   ansible.builtin.debug:
     msg: >-
@@ -557,6 +570,19 @@
     - dev_tools_vellum_head.rc == 0
     - (dev_tools_vellum_install is not skipped and dev_tools_vellum_install is succeeded)
       or (not dev_tools_vellum_needs_build | bool and dev_tools_vellum_built.rc != 0)
+
+# A build that was due but did not happen (failed, no cargo, cargo too old)
+# leaves a marker no commit matches. Without it, a binary from an older pin
+# with no marker yet would be adopted as current on the next run.
+- name: Mark vellum as still to be built
+  ansible.builtin.copy:
+    dest: "{{ nikos_tools_dir }}/.nikos-built/vellum"
+    content: "pending\n"
+    mode: "0644"
+  when:
+    - not ansible_check_mode
+    - dev_tools_vellum_needs_build | bool
+    - dev_tools_vellum_install is skipped
 
 - name: Warn when vellum build failed
   ansible.builtin.debug:
