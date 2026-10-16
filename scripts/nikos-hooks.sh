@@ -53,8 +53,8 @@ run_lantern() { SCRIPT_HELPERS_HOME="$(helpers_home)" lantern "$@"; }
 # claude_state: the user's Claude Code hook as script-helpers sees it: ok,
 # absent, broken (the file it runs is missing), stale (it runs a file outside
 # the installed copy, such as a checkout a branch switch removes), unknown (no
-# Python to read the settings), old (script-helpers 0.53.1 or older cannot
-# tell), or failed (the check did not run). Second field: the file.
+# Python to read the settings), old (a copy without --claude porcelain
+# cannot tell), or failed (the check did not run). Second field: the file.
 claude_state() {
   local script out state
   script="$(helpers_home)/scripts/setup-hooks.sh"
