@@ -4,6 +4,11 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Added
+- dev-tools installs vellum 0.7.0 (Markdown viewer for the terminal) into
+  `~/.local/bin`, built from the pinned tag with `cargo build --locked`; needs
+  Rust 1.90+. `nikos update` follows new tags through `vars/versions.yml`.
+
 ### Fixed
 - The Claude Code security hook is installed for the user on every `nikos install` and
   `nikos update` (`setup-hooks.sh --claude`, from `script-helpers.home`), into

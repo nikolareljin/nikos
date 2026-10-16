@@ -191,6 +191,12 @@ If the playbook reports that Cargo is too old for `image-view`, update Rust via
 distrodeck and rerun `nikos update`. The package dependencies require Cargo 1.85+
 for Rust 2024 edition support.
 
+### vellum not found
+
+`vellum` installs to `~/.local/bin/` like `image-view` (see above for the PATH
+line). It needs Rust 1.90 or newer; when the playbook reports Cargo is too old,
+run `rustup update stable` and then `nikos update`.
+
 ### NikOS boot splash logo missing
 
 The Plymouth logo is embedded into initramfs. If the install was interrupted or a

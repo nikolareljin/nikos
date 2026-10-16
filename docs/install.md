@@ -52,7 +52,7 @@ Roles marked *desktop* run only on the `desktop` profile; see
 | `editors` (*desktop*) | VS Code + AI extensions + Nord theme + JetBrains Mono |
 | `cloud-ai-cli` | Node (system or nvm-pinned), Gemini CLI, shell-gpt, glances |
 | `agent-dev` | LangChain, LlamaIndex, ML/data libraries, Claude Code |
-| `dev-tools` | distrodeck tools, image-view, git-lantern, mkcert, gitleaks, agentvault, ai-runner; sets `script-helpers.home` when unset |
+| `dev-tools` | distrodeck tools, image-view, vellum, git-lantern, mkcert, gitleaks, agentvault, ai-runner; sets `script-helpers.home` when unset |
 | `optional/*` | network / music / education / neovim / java / podman / bun / databases / LLM tools / monitoring (opt-in) |
 
 ## First login

@@ -22,7 +22,7 @@ nikos/
 │   ├── editors/                    # VS Code + extensions + settings
 │   ├── cloud-ai-cli/               # Node.js, Gemini CLI, shell-gpt, glances
 │   ├── agent-dev/                  # LangChain, LlamaIndex, Claude Code
-│   ├── dev-tools/                  # distrodeck, image-view, git-lantern, ai-runner
+│   ├── dev-tools/                  # distrodeck, image-view, vellum, git-lantern, ai-runner
 │   └── optional/
 │       ├── network/                # nmap, wireshark, OpenVPN
 │       ├── music/                  # LMMS, Ardour, Audacity
