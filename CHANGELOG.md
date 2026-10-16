@@ -5,10 +5,12 @@ All notable changes to NikOS are documented here.
 ## Unreleased
 
 ### Changed
-- git-lantern 0.9.1 -> 0.10.0: `lantern hooks apply` sets
+- git-lantern 0.9.1 -> 0.11.0: `lantern hooks apply` sets
   `script-helpers.push-tests quick` in owned clones of private repositories
-  with no value yet, so their pushes run the quick tests; it vendors
-  script-helpers 0.53.1.
+  with no value yet, so their pushes run the quick tests; `lantern todo issues`
+  reads Markdown TODO files; `.env` loads only lantern's own keys, and a
+  `./.env` outside the lantern checkout is ignored (use `GIT_LANTERN_ENV`).
+  It vendors script-helpers 0.53.1.
 - script-helpers submodule 0.52.0 -> 0.53.1: gate scratch files in one per-run
   directory, removed on exit; a push that updates no ref passes `pre-push`.
 
