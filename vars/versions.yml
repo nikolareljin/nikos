@@ -174,8 +174,8 @@ image_view_commit: "52b7d11f2509c31e79defe584cd3d8ddb9b1b692"
 vellum_version: "0.7.0"
 vellum_commit: "c33dfca3858c4b7093cffdc20b18c7f944162307"
 # github.com/nikolareljin/git-lantern tag.
-git_lantern_version: "0.11.0"
-git_lantern_commit: "550bb78d1b74fe30896c1f0e28d05fd7f45ed784"
+git_lantern_version: "0.11.1"
+git_lantern_commit: "ff10e2ec5868ac2fc0f50ffb1e7bd6bf4ff10aae"
 # github.com/nikolareljin/ai-runner tag.
 ai_runner_version: "0.1.5"
 ai_runner_commit: "5bd3089ba909fc62588629e82f98c86a9f103ec4"

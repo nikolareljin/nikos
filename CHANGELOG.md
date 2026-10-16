@@ -4,10 +4,20 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+## [1.5.0] - 2026-10-16
+
 ### Added
 - dev-tools installs vellum 0.7.0 (Markdown viewer for the terminal) into
   `~/.local/bin`, built from the pinned tag with `cargo build --locked`; needs
   Rust 1.90+. `nikos update` follows new tags through `vars/versions.yml`.
+
+### Changed
+- git-lantern 0.11.0 -> 0.11.1: `lantern hooks status` names a clone where no
+  push checks run (`NO PUSH CHECKS`, `TAKEN OVER`, `OWN HOOKS ONLY, NOT SCANNED`)
+  and `repair` fixes a missing hooks directory. It vendors script-helpers 0.54.0.
+- script-helpers submodule 0.53.1 -> 0.54.0: `setup-hooks.sh --status` reports a
+  Claude hook entry that is BROKEN or STALE, `--doctor` fails on both, and
+  `--status --porcelain --claude` gives `nikos hooks` the hook state.
 
 ### Fixed
 - The Claude Code security hook is installed for the user on every `nikos install` and
