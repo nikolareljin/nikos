@@ -4,6 +4,9 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Docs
+- Site: vellum (Markdown viewer for the terminal) joins the tool suite links on the site.
+
 ## [1.4.2] - 2026-10-15
 
 ### Changed
