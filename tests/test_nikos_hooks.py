@@ -144,7 +144,7 @@ def test_lantern_gets_the_script_helpers_the_status_shows(env):
 
 
 def fake_claude(env, state, hook="/data/script-helpers/claude-hooks/scripts/claude-hooks/pretooluse_private_names.sh"):
-    """A setup-hooks.sh that knows --status --porcelain --claude (0.54.0+) and
+    """A setup-hooks.sh that knows --status --porcelain --claude (newer than 0.53.1) and
     reports <state>; --claude logs and makes it ok."""
     sh = Path(git_get(env, "script-helpers.home")) / "scripts" / "setup-hooks.sh"
     st = env["tmp"] / "claude-state"
@@ -171,7 +171,7 @@ def test_status_shows_the_claude_hook(env, state, line):
 
 def test_status_with_an_older_script_helpers_never_runs_it(env):
     r = run(env)
-    assert "claude hook:    unknown" in r.stdout
+    assert "claude hook:    not checked: script-helpers 0.50.0 cannot (nikos update)" in r.stdout
     assert not [c for c in calls(env) if c.startswith("setup-hooks")]
 
 
@@ -234,3 +234,16 @@ def test_a_failed_check_is_said_as_such(env):
     sh.write_text(sh.read_text().replace('"--status --porcelain --claude")', '"--status --porcelain --claude") exit 1;'))
     r = run(env)
     assert "claude hook:    could not be checked" in r.stdout
+
+
+def test_only_leaves_the_user_hook_alone(env):
+    only = ["--only", "a"]
+    subprocess.run(["git", "config", "--global", "script-helpers.owners", "me"], env=env["env"], check=True)
+    fake_claude(env, "stale")
+    assert run(env, "repair", *only).returncode == 0
+    assert "setup-hooks --claude" not in calls(env)
+
+
+def test_no_python_is_said_as_such(env):
+    fake_claude(env, "unknown")
+    assert "claude hook:    unknown: no Python" in run(env).stdout

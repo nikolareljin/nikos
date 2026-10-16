@@ -398,5 +398,5 @@ The Claude Code hook is per user, not per clone. `nikos install` and `nikos upda
 install it with `setup-hooks.sh --claude`, which copies it to
 `~/.local/share/script-helpers/claude-hooks`; the settings entry runs that copy, never a
 checkout. `nikos hooks` shows its state (ok, NOT INSTALLED, BROKEN, STALE), and
-`repair` or `apply` reinstalls it. Point `script-helpers.home` at a copy that stays on a
+`repair` or `apply` (without `--only`) reinstalls it. Point `script-helpers.home` at a copy that stays on a
 release, not a checkout you switch branches in: `status` and `repair` run its code.

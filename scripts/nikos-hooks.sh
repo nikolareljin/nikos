@@ -15,9 +15,9 @@
 #     --agents LIST    Also the AI agent hooks: claude,codex,gemini,copilot,cursor or all.
 #     --only LIST      Only these clones (directory names or paths).
 #   repair [--only]    Re-chain clones another tool took over (husky and the like),
-#                      or whose core.hooksPath has no pre-push. Also (and apply
-#                      too) installs the user's Claude Code hook when it is
-#                      missing, broken or points outside the installed copy.
+#                      or whose hooks directory is missing. Without --only, repair
+#                      and apply also install the user's Claude Code hook when it
+#                      is missing, broken or points outside the installed copy.
 #   remove [--agents LIST] [--only LIST]
 #                      Take ours out; the hooks that ran before run again.
 #   export DIR         Write lantern-hooks.json and agentvault.avbundle into DIR.
@@ -52,15 +52,15 @@ run_lantern() { SCRIPT_HELPERS_HOME="$(helpers_home)" lantern "$@"; }
 
 # claude_state: the user's Claude Code hook as script-helpers sees it: ok,
 # absent, broken (the file it runs is missing), stale (it runs a file outside
-# the installed copy, such as a checkout a branch switch removes), or unknown
-# (script-helpers older than 0.54.0 cannot tell), or failed (the check did not
-# run). Second field: the file.
+# the installed copy, such as a checkout a branch switch removes), unknown (no
+# Python to read the settings), old (script-helpers 0.53.1 or older cannot
+# tell), or failed (the check did not run). Second field: the file.
 claude_state() {
   local script out state
   script="$(helpers_home)/scripts/setup-hooks.sh"
   # Older copies read --status --porcelain --claude as an install: never run it there.
   if [[ ! -f "${script}" ]] || ! grep -q 'claude_user=' "${script}"; then
-    printf 'unknown\t\n'; return 0
+    printf 'old\t\n'; return 0
   fi
   out="$(bash "${script}" --status --porcelain --claude 2>/dev/null | tail -n 1)" || true
   state="$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^claude_user=//p')"
@@ -68,12 +68,12 @@ claude_state() {
 }
 
 # fix_claude: install the user's Claude hook from script-helpers.home unless it
-# is ok. The hook is copied out of that tree, so a branch
-# switch there never removes it. Needs owners; says so when they are unset.
+# is ok. The hook is copied out of that tree, so a branch switch there never
+# removes it. Needs owners; says so when they are unset.
 fix_claude() {
   local state
   state="$(claude_state | cut -f1)"
-  # unknown (an older script-helpers): install anyway; --claude is idempotent.
+  # old, unknown or failed: install anyway; --claude is idempotent.
   [[ "${state}" == ok ]] && return 0
   if [[ -z "$(git config --global --get script-helpers.owners 2>/dev/null || true)" ]]; then
     # lantern refuses without owners too, and says so; one failure, not two.
@@ -109,7 +109,8 @@ cmd_status() {
     broken)  info "claude hook:    BROKEN: ${hook} does not exist, so it cannot run (nikos hooks repair)" ;;
     stale)   info "claude hook:    STALE: runs ${hook}, not the installed copy (nikos hooks repair)" ;;
     failed)  info "claude hook:    could not be checked: $(helpers_home)/scripts/setup-hooks.sh --status --porcelain --claude failed" ;;
-    *)       info "claude hook:    unknown (script-helpers older than 0.54.0; nikos update)" ;;
+    old)     info "claude hook:    not checked: script-helpers $(cat "${home}/VERSION" 2>/dev/null || echo '?') cannot (nikos update)" ;;
+    *)       info "claude hook:    unknown: no Python to read the settings" ;;
   esac
   info ""
   need_lantern
@@ -142,9 +143,11 @@ cmd_lantern() {
     cmd_status "$@"
   elif [[ "${sub}" == repair || "${sub}" == apply ]]; then
     # The user's Claude hook first: it is not per clone, so lantern never sees it.
-    # A dry run only reports it.
+    # A dry run only reports it; --only limits the run to those clones.
     local rc=0
-    if [[ " $* " == *" --dry-run "* ]]; then
+    if [[ " $* " == *" --only"* ]]; then
+      :
+    elif [[ " $* " == *" --dry-run "* ]]; then
       [[ "$(claude_state | cut -f1)" == ok ]] || info "claude hook: would install it from $(helpers_home)"
     else
       fix_claude || rc=1

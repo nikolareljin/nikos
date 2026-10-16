@@ -671,6 +671,7 @@
       - "{{ (dev_tools_sh_home.config_value | default('') | trim) or (playbook_dir ~ '/scripts/script-helpers') }}/scripts/setup-hooks.sh"
       - --claude
   register: dev_tools_claude_hook
+  # Changed when the settings entry was written; the copy is refreshed every run.
   changed_when: "'updated ' in dev_tools_claude_hook.stdout"
   when:
     - not ansible_check_mode

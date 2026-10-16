@@ -12,7 +12,7 @@ All notable changes to NikOS are documented here.
   file and the hook stopped running, with only a non-blocking error.
 - `nikos hooks` shows that hook: ok, NOT INSTALLED, BROKEN (the file it runs is missing) or
   STALE (it runs a file outside the installed copy). `nikos hooks repair` and `apply`
-  reinstall it unless it is ok; `apply --dry-run` only reports it.
+  reinstall it unless it is ok; `apply --dry-run` only reports it, and `--only` leaves it alone.
 
 ### Docs
 - Site: vellum (Markdown viewer for the terminal) joins the tool suite links on the site.
