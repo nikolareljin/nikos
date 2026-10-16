@@ -685,7 +685,9 @@
   ansible.builtin.debug:
     msg: >-
       WARNING: the Claude Code hook was NOT installed (setup-hooks.sh --claude
-      exit {{ dev_tools_claude_hook.rc }}): {{ (dev_tools_claude_hook.stderr | default('') ~ ' ' ~ dev_tools_claude_hook.stdout | default('')) | trim | truncate(400) }}
+      exit {{ dev_tools_claude_hook.rc }}):
+      {{ (dev_tools_claude_hook.stderr | default('') ~ ' ' ~ dev_tools_claude_hook.stdout | default(''))
+         | trim | truncate(400) }}
       Fix the cause, then run nikos hooks repair; nikos hooks shows its state.
   when:
     - dev_tools_claude_hook.rc is defined
