@@ -9,6 +9,17 @@ All notable changes to NikOS are documented here.
   `~/.local/bin`, built from the pinned tag with `cargo build --locked`; needs
   Rust 1.90+. `nikos update` follows new tags through `vars/versions.yml`.
 
+### Fixed
+- The Claude Code security hook is installed for the user on every `nikos install` and
+  `nikos update` (`setup-hooks.sh --claude`, from `script-helpers.home`), into
+  `~/.local/share/script-helpers/claude-hooks`. Before, nothing installed it, and an entry
+  made by hand could point into a script-helpers checkout; a branch switch there removed the
+  file and the hook stopped running, with only a non-blocking error.
+- `nikos hooks` shows that hook: ok, NOT INSTALLED, BROKEN (the file it runs is missing) or
+  STALE (it runs a file outside the installed copy). `nikos hooks repair` and `apply`
+  reinstall it unless it is ok; `apply --dry-run` only reports it, and `--only` leaves it alone.
+  A failed install warns and lets `nikos update` go on; `nikos hooks` keeps showing the state.
+
 ### Docs
 - Site: vellum (Markdown viewer for the terminal) joins the tool suite links on the site.
 

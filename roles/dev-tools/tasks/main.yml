@@ -809,6 +809,55 @@
     value: "{{ playbook_dir }}/scripts/script-helpers"
   when: (dev_tools_sh_home.config_value | default('') | trim) == ""
 
+# The Claude Code security hook for this user, installed from that copy into
+# <data>/script-helpers/claude-hooks. Never run from a checkout: a settings
+# entry pointing into one breaks on the next branch switch, and a broken hook
+# fails open. setup-hooks.sh --claude replaces such an entry and is idempotent.
+# Needs owners (git config --global script-helpers.owners); skipped without.
+- name: Read the script-helpers owners
+  community.general.git_config_info:
+    name: script-helpers.owners
+    scope: global
+  register: dev_tools_sh_owners
+  check_mode: false
+
+- name: Install the Claude Code hook for this user
+  ansible.builtin.command:
+    argv:
+      - bash
+      - "{{ (dev_tools_sh_home.config_value | default('') | trim) or (playbook_dir ~ '/scripts/script-helpers') }}/scripts/setup-hooks.sh"
+      - --claude
+  register: dev_tools_claude_hook
+  # Changed when the settings entry was written; the copy is refreshed every run.
+  changed_when: "'updated ' in dev_tools_claude_hook.stdout"
+  # One hook problem (an unreadable settings.json, no Python, a script-helpers.home
+  # without the script) must not stop every role after this one: warned below,
+  # and nikos hooks shows the state until it is fixed.
+  failed_when: false
+  when:
+    - not ansible_check_mode
+    - (dev_tools_sh_owners.config_value | default('') | trim) != ""
+
+- name: Warn that the Claude Code hook was not installed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: the Claude Code hook was NOT installed (setup-hooks.sh --claude
+      exit {{ dev_tools_claude_hook.rc }}):
+      {{ (dev_tools_claude_hook.stderr | default('') ~ ' ' ~ dev_tools_claude_hook.stdout | default(''))
+         | trim | truncate(400) }}
+      Fix the cause, then run nikos hooks repair; nikos hooks shows its state.
+  when:
+    - dev_tools_claude_hook.rc is defined
+    - dev_tools_claude_hook.rc != 0
+
+- name: Say why the Claude Code hook was not installed
+  ansible.builtin.debug:
+    msg: >-
+      No script-helpers owners are set, so the Claude Code hook was not installed.
+      Set them (git config --global script-helpers.owners <user-or-org>), then run
+      nikos hooks repair.
+  when: (dev_tools_sh_owners.config_value | default('') | trim) == ""
+
 # ── ai-runner (local Ollama model runner with simple UI) ──
 
 - name: Decide whether the ai-runner checkout has to move

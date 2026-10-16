@@ -388,7 +388,7 @@ git config --global script-helpers.owners <user-or-org>   # once per machine
 nikos hooks                                    # tools, owners, every clone
 nikos hooks apply --dry-run                    # the plan
 nikos hooks apply --batch 10 [--agents all]    # ten clones at a time
-nikos hooks repair                             # after husky or similar took over
+nikos hooks repair                             # after husky took over, a missing hooks dir, or a bad Claude hook
 nikos hooks remove [--agents codex]            # take ours out
 nikos hooks --global [--uninstall]             # machine-wide; install/update never run it
 nikos hooks export ~/carry                     # lantern-hooks.json + agentvault.avbundle
@@ -399,3 +399,10 @@ nikos hooks import ~/carry                     # on the other computer
 `~/Projects`. script-helpers comes from `script-helpers.home`, else the copy NikOS
 pins. An unknown option exits 2 and changes nothing. `import` sets the owners from
 the export only when this machine has none.
+
+The Claude Code hook is per user, not per clone. `nikos install` and `nikos update`
+install it with `setup-hooks.sh --claude`, which copies it to
+`~/.local/share/script-helpers/claude-hooks`; the settings entry runs that copy, never a
+checkout. `nikos hooks` shows its state (ok, NOT INSTALLED, BROKEN, STALE), and
+`repair` or `apply` (without `--only`) reinstalls it. Point `script-helpers.home` at a copy that stays on a
+release, not a checkout you switch branches in: `status` and `repair` run its code.

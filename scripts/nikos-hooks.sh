@@ -14,7 +14,10 @@
 #     --batch N        Set up at most N clones this run.
 #     --agents LIST    Also the AI agent hooks: claude,codex,gemini,copilot,cursor or all.
 #     --only LIST      Only these clones (directory names or paths).
-#   repair [--only]    Re-chain clones another tool took over (husky and the like).
+#   repair [--only]    Re-chain clones another tool took over (husky and the like),
+#                      or whose hooks directory is missing. Without --only, repair
+#                      and apply also install the user's Claude Code hook when it
+#                      is missing, broken or points outside the installed copy.
 #   remove [--agents LIST] [--only LIST]
 #                      Take ours out; the hooks that ran before run again.
 #   export DIR         Write lantern-hooks.json and agentvault.avbundle into DIR.
@@ -47,13 +50,49 @@ helpers_home() {
 # would look for its own vendored copy, which an installed lantern lacks.
 run_lantern() { SCRIPT_HELPERS_HOME="$(helpers_home)" lantern "$@"; }
 
+# claude_state: the user's Claude Code hook as script-helpers sees it: ok,
+# absent, broken (the file it runs is missing), stale (it runs a file outside
+# the installed copy, such as a checkout a branch switch removes), unknown (no
+# Python to read the settings), missing (no setup-hooks.sh in script-helpers.home),
+# old (a copy without --claude porcelain cannot tell), or failed (the check did not run). Second field: the file.
+claude_state() {
+  local script out state
+  script="$(helpers_home)/scripts/setup-hooks.sh"
+  # Older copies read --status --porcelain --claude as an install: never run it there.
+  [[ -f "${script}" ]] || { printf 'missing\t\n'; return 0; }
+  if ! grep -q 'claude_user=' "${script}"; then
+    printf 'old\t\n'; return 0
+  fi
+  out="$(bash "${script}" --status --porcelain --claude 2>/dev/null | tail -n 1)" || true
+  state="$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^claude_user=//p')"
+  printf '%s\t%s\n' "${state:-failed}" "$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^hook=//p')"
+}
+
+# fix_claude: install the user's Claude hook from script-helpers.home unless it
+# is ok. The hook is copied out of that tree, so a branch switch there never
+# removes it. Needs owners; says so when they are unset.
+fix_claude() {
+  local state
+  state="$(claude_state | cut -f1)"
+  # old, unknown or failed: install anyway; --claude is idempotent.
+  [[ "${state}" == ok ]] && return 0
+  if [[ -z "$(git config --global --get script-helpers.owners 2>/dev/null || true)" ]]; then
+    # lantern refuses without owners too, and says so; one failure, not two.
+    echo "nikos hooks: Claude hook ${state}; set owners first: git config --global script-helpers.owners <user-or-org>" >&2
+    return 0
+  fi
+  info "claude hook ${state}: installing it from $(helpers_home)"
+  [[ -f "$(helpers_home)/scripts/setup-hooks.sh" ]] || { echo "nikos hooks: no setup-hooks.sh in $(helpers_home)" >&2; return 1; }
+  bash "$(helpers_home)/scripts/setup-hooks.sh" --claude
+}
+
 need_lantern() {
   command -v lantern >/dev/null 2>&1 || die "git-lantern is not installed (nikos update installs it)"
   lantern hooks --help >/dev/null 2>&1 || die "this git-lantern has no 'hooks' command; run nikos update"
 }
 
 cmd_status() {
-  local home owners global
+  local home owners global claude hook
   home="$(helpers_home)"
   owners="$(git config --global --get script-helpers.owners 2>/dev/null || true)"
   global="$(git config --global --get core.hooksPath 2>/dev/null || true)"
@@ -64,6 +103,17 @@ cmd_status() {
   command -v agentvault >/dev/null 2>&1 || info "                not installed"
   info "gitleaks:       $(gitleaks version 2>/dev/null || echo "not installed")"
   info "machine-wide:   ${global:-off (nikos hooks --global)}"
+  IFS=$'\t' read -r claude hook < <(claude_state)
+  case "${claude}" in
+    ok)      info "claude hook:    ok (${hook})" ;;
+    absent)  info "claude hook:    NOT INSTALLED (nikos hooks repair)" ;;
+    broken)  info "claude hook:    BROKEN: ${hook} does not exist, so it cannot run (nikos hooks repair)" ;;
+    stale)   info "claude hook:    STALE: runs ${hook}, not the installed copy (nikos hooks repair)" ;;
+    failed)  info "claude hook:    could not be checked: $(helpers_home)/scripts/setup-hooks.sh --status --porcelain --claude failed" ;;
+    missing) info "claude hook:    not checked: no ${home}/scripts/setup-hooks.sh (check git config --global script-helpers.home)" ;;
+    old)     info "claude hook:    not checked: script-helpers $(cat "${home}/VERSION" 2>/dev/null || echo '?') cannot (nikos update)" ;;
+    *)       info "claude hook:    unknown: no Python to read the settings" ;;
+  esac
   info ""
   need_lantern
   run_lantern hooks status --root "${ROOT}" "$@"
@@ -93,6 +143,25 @@ cmd_lantern() {
   need_lantern
   if [[ "${sub}" == status ]]; then
     cmd_status "$@"
+  elif [[ "${sub}" == repair || "${sub}" == apply ]]; then
+    # The user's Claude hook first: it is not per clone, so lantern never sees it.
+    # A dry run only reports it; --only limits the run to those clones.
+    local rc=0
+    if [[ " $* " == *" --only"* ]]; then
+      :
+    elif [[ " $* " == *" --dry-run "* ]]; then
+      if [[ "$(claude_state | cut -f1)" == ok ]]; then
+        :
+      elif [[ -z "$(git config --global --get script-helpers.owners 2>/dev/null || true)" ]]; then
+        info "claude hook: would not install it: no owners set"
+      else
+        info "claude hook: would install it from $(helpers_home)"
+      fi
+    else
+      fix_claude || rc=1
+    fi
+    run_lantern hooks "${sub}" --root "${ROOT}" "$@" || rc=1
+    return "${rc}"
   else
     run_lantern hooks "${sub}" --root "${ROOT}" "$@"
   fi
