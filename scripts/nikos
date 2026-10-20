@@ -144,10 +144,9 @@ _print_logo() {
 
   local blue='' gray='' reset=''
   if [[ -z "${NO_COLOR:-}" ]]; then
-    # script-helpers supplies these on normal installs. The fallbacks keep a
-    # partial checkout usable before the submodule has been initialized.
-    blue="$(printf '%b' "${BLUE:-$'\033[0;34m'}")"
-    gray="$(printf '%b' "${GREY:-$'\033[0;90m'}")"
+    # Match the blue and gray node colors in assets/menu-icon.svg.
+    blue=$'\033[38;2;33;150;243m'
+    gray=$'\033[38;2;144;164;174m'
     reset="$(printf '%b' "${NC:-$'\033[0m'}")"
   fi
 

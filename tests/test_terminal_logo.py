@@ -38,8 +38,10 @@ def test_help_renders_the_two_color_n_monogram():
     assert b"NikOS" in output
     assert b"Neural Innovation for Knowledge OS" in output
     assert b"Usage:" in output
-    assert b"\x1b[0;34m" in output
-    assert b"\x1b[0;90m" in output
+    assert b"\x1b[38;2;33;150;243m" in output
+    assert b"\x1b[38;2;144;164;174m" in output
+    assert b"\x1b[0;34m" not in output
+    assert b"\x1b[0;90m" not in output
     assert b"\x1b[0;37m" not in output
 
 
