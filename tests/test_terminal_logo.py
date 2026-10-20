@@ -10,8 +10,10 @@ ROOT = Path(__file__).resolve().parent.parent
 CLI = ROOT / "scripts" / "nikos"
 
 
-def run_on_terminal(*args: str, no_color: bool = False) -> tuple[int, bytes]:
-    env = {**os.environ, "TERM": "xterm-256color", "NIKOS_HOME": str(ROOT)}
+def run_on_terminal(
+    *args: str, no_color: bool = False, term: str = "xterm-256color"
+) -> tuple[int, bytes]:
+    env = {**os.environ, "TERM": term, "NIKOS_HOME": str(ROOT)}
     if no_color:
         env["NO_COLOR"] = "1"
     else:
@@ -31,7 +33,7 @@ def run_on_terminal(*args: str, no_color: bool = False) -> tuple[int, bytes]:
     return os.waitstatus_to_exitcode(status), output
 
 
-def test_help_renders_the_two_color_n_monogram():
+def test_help_renders_the_exact_terminal_logo_palette():
     returncode, output = run_on_terminal("--help")
 
     assert returncode == 0
@@ -40,6 +42,7 @@ def test_help_renders_the_two_color_n_monogram():
     assert b"Usage:" in output
     assert b"\x1b[38;2;33;150;243m" in output
     assert b"\x1b[38;2;144;164;174m" in output
+    assert b"\x1b[38;2;255;255;255m" in output
     assert b"\x1b[0;34m" not in output
     assert b"\x1b[0;90m" not in output
     assert b"\x1b[0;37m" not in output
@@ -55,6 +58,14 @@ def test_no_color_keeps_the_interactive_logo_readable():
     assert header.count("●".encode()) == 4
     assert "│".encode() in header
     assert "╲".encode() in header
+
+
+def test_dumb_terminal_skips_the_logo():
+    returncode, output = run_on_terminal("--help", term="dumb")
+
+    assert returncode == 0
+    assert output.startswith(b"nikos ")
+    assert "●".encode() not in output
 
 
 def test_command_errors_keep_the_terminal_header():
