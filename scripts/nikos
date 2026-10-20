@@ -137,6 +137,29 @@ else
   print_warn()    { echo "[warn] $*"; }
 fi
 
+# Render a small terminal header for people, without changing output that
+# another command captures. NO_COLOR retains the layout without escape codes.
+_print_logo() {
+  [[ -t 1 && "${TERM:-dumb}" != "dumb" ]] || return 0
+
+  local blue='' gray='' white='' reset=''
+  if [[ -z "${NO_COLOR:-}" ]]; then
+    # Match the blue and gray node colors in assets/menu-icon.svg.
+    blue=$'\033[38;2;33;150;243m'
+    gray=$'\033[38;2;144;164;174m'
+    reset="$(printf '%b' "${NC:-$'\033[0m'}")"
+    white=$'\033[38;2;255;255;255m'
+  fi
+
+  printf '\n'
+  printf '  %s●%s   %s●%s      %sNikOS%s %s%s%s\n' "${blue}" "${reset}" "${gray}" "${reset}" "${blue}" "${reset}" "${gray}" "${NIKOS_VERSION}" "${reset}"
+  printf '  %s│╲%s  %s│%s     %sNeural Innovation for Knowledge OS%s\n' \
+    "${blue}" "${reset}" "${gray}" "${reset}" "${white}" "${reset}"
+  printf '  %s│ ╲%s %s│%s     %sLight system. Heavy thinking.%s\n' \
+    "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+  printf '  %s●%s  %s╲%s%s●%s\n\n' "${gray}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}"
+}
+
 _TOOLS_LIB_LOADED=false
 if [[ -f "${NIKOS_HOME}/scripts/nikos-tools.sh" ]]; then
   # shellcheck source=scripts/nikos-tools.sh
@@ -1156,6 +1179,8 @@ cmd_log() {
   tail -n "${arg}" "${latest}"
   echo "----------------------------------------"
 }
+
+_print_logo
 
 case "${1:-help}" in
   setup)  cmd_setup ;;
