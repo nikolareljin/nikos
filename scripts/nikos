@@ -153,12 +153,13 @@ _print_logo() {
   fi
 
   printf '\n'
-  printf '        %so%s                 %sNikOS %s%s\n' "${blue}" "${reset}" "${pale}" "${NIKOS_VERSION}" "${reset}"
-  printf '  %so%s%s---/ %s%s\\---o%s     %sNeural Innovation for Knowledge OS%s\n' \
-    "${blue}" "${reset}" "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
-  printf '      %sNikOS%s             %sLight system. Heavy thinking.%s\n' "${pale}" "${reset}" "${gray}" "${reset}"
-  printf '  %s[]%s%s---\\ o%s%s /---o%s\n\n' \
-    "${blue}" "${reset}" "${blue}" "${reset}" "${gray}" "${reset}"
+  printf '        %s●%s                 %sNikOS %s%s\n' "${blue}" "${reset}" "${pale}" "${NIKOS_VERSION}" "${reset}"
+  printf '    %s╱%s       %s╲%s             %sNeural Innovation for Knowledge OS%s\n' \
+    "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+  printf '  %s●%s   %sNikOS%s   %s●%s       %sLight system. Heavy thinking.%s\n' \
+    "${blue}" "${reset}" "${pale}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+  printf '  %s■╲%s       %s╱●%s\n' "${blue}" "${reset}" "${gray}" "${reset}"
+  printf '        %s●%s\n\n' "${blue}" "${reset}"
 }
 
 _TOOLS_LIB_LOADED=false
