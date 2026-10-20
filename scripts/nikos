@@ -137,6 +137,30 @@ else
   print_warn()    { echo "[warn] $*"; }
 fi
 
+# Render a small terminal header for people, without changing output that
+# another command captures. NO_COLOR retains the layout without escape codes.
+_print_logo() {
+  [[ -t 1 && "${TERM:-dumb}" != "dumb" ]] || return 0
+
+  local blue='' gray='' pale='' reset=''
+  if [[ -z "${NO_COLOR:-}" ]]; then
+    # script-helpers supplies these on normal installs. The fallbacks keep a
+    # partial checkout usable before the submodule has been initialized.
+    blue="$(printf '%b' "${BLUE:-$'\033[0;34m'}")"
+    gray="$(printf '%b' "${GREY:-$'\033[0;90m'}")"
+    pale="$(printf '%b' "${WHITE:-$'\033[0;37m'}")"
+    reset="$(printf '%b' "${NC:-$'\033[0m'}")"
+  fi
+
+  printf '\n'
+  printf '        %so%s                 %sNikOS %s%s\n' "${blue}" "${reset}" "${pale}" "${NIKOS_VERSION}" "${reset}"
+  printf '  %so%s%s-----%s%s+%s%s-----%s%so%s     %sNeural Innovation for Knowledge OS%s\n' \
+    "${blue}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+  printf '      %sNikOS%s             %sLight system. Heavy thinking.%s\n' "${pale}" "${reset}" "${gray}" "${reset}"
+  printf '  %s[]%s%s-----%s%so%s%s-----%s%so%s\n\n' \
+    "${blue}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+}
+
 _TOOLS_LIB_LOADED=false
 if [[ -f "${NIKOS_HOME}/scripts/nikos-tools.sh" ]]; then
   # shellcheck source=scripts/nikos-tools.sh
@@ -1156,6 +1180,8 @@ cmd_log() {
   tail -n "${arg}" "${latest}"
   echo "----------------------------------------"
 }
+
+_print_logo
 
 case "${1:-help}" in
   setup)  cmd_setup ;;
