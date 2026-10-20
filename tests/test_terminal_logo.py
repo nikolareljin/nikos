@@ -31,7 +31,7 @@ def run_on_terminal(*args: str, no_color: bool = False) -> tuple[int, bytes]:
     return os.waitstatus_to_exitcode(status), output
 
 
-def test_help_renders_the_three_color_n_monogram():
+def test_help_renders_the_two_color_n_monogram():
     returncode, output = run_on_terminal("--help")
 
     assert returncode == 0
@@ -40,7 +40,7 @@ def test_help_renders_the_three_color_n_monogram():
     assert b"Usage:" in output
     assert b"\x1b[0;34m" in output
     assert b"\x1b[0;90m" in output
-    assert b"\x1b[0;37m" in output
+    assert b"\x1b[0;37m" not in output
 
 
 def test_no_color_keeps_the_interactive_logo_readable():

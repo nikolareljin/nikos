@@ -142,23 +142,22 @@ fi
 _print_logo() {
   [[ -t 1 && "${TERM:-dumb}" != "dumb" ]] || return 0
 
-  local blue='' gray='' pale='' reset=''
+  local blue='' gray='' reset=''
   if [[ -z "${NO_COLOR:-}" ]]; then
     # script-helpers supplies these on normal installs. The fallbacks keep a
     # partial checkout usable before the submodule has been initialized.
     blue="$(printf '%b' "${BLUE:-$'\033[0;34m'}")"
     gray="$(printf '%b' "${GREY:-$'\033[0;90m'}")"
-    pale="$(printf '%b' "${WHITE:-$'\033[0;37m'}")"
     reset="$(printf '%b' "${NC:-$'\033[0m'}")"
   fi
 
   printf '\n'
-  printf '  %s●%s       %s●%s     %sNikOS %s%s\n' "${blue}" "${reset}" "${gray}" "${reset}" "${pale}" "${NIKOS_VERSION}" "${reset}"
-  printf '  %s│%s%s╲%s      %s│%s     %sNeural Innovation for Knowledge OS%s\n' \
-    "${blue}" "${reset}" "${pale}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
-  printf '  %s│%s %s╲%s     %s│%s     %sLight system. Heavy thinking.%s\n' \
-    "${blue}" "${reset}" "${pale}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
-  printf '  %s●%s  %s╲%s    %s●%s\n\n' "${gray}" "${reset}" "${pale}" "${reset}" "${blue}" "${reset}"
+  printf '  %s●%s     %s●%s     %sNikOS%s %s%s%s\n' "${blue}" "${reset}" "${gray}" "${reset}" "${blue}" "${reset}" "${gray}" "${NIKOS_VERSION}" "${reset}"
+  printf '  %s│╲%s    %s│%s     %sNeural Innovation for Knowledge OS%s\n' \
+    "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+  printf '  %s│ ╲%s   %s│%s     %sLight system. Heavy thinking.%s\n' \
+    "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+  printf '  %s●%s  %s╲%s  %s●%s\n\n' "${gray}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}"
 }
 
 _TOOLS_LIB_LOADED=false
