@@ -154,11 +154,11 @@ _print_logo() {
 
   printf '\n'
   printf '        %so%s                 %sNikOS %s%s\n' "${blue}" "${reset}" "${pale}" "${NIKOS_VERSION}" "${reset}"
-  printf '  %so%s%s-----%s%s+%s%s-----%s%so%s     %sNeural Innovation for Knowledge OS%s\n' \
-    "${blue}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+  printf '  %so%s%s---/ %s%s\\---o%s     %sNeural Innovation for Knowledge OS%s\n' \
+    "${blue}" "${reset}" "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
   printf '      %sNikOS%s             %sLight system. Heavy thinking.%s\n' "${pale}" "${reset}" "${gray}" "${reset}"
-  printf '  %s[]%s%s-----%s%so%s%s-----%s%so%s\n\n' \
-    "${blue}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+  printf '  %s[]%s%s---\\ o%s%s /---o%s\n\n' \
+    "${blue}" "${reset}" "${blue}" "${reset}" "${gray}" "${reset}"
 }
 
 _TOOLS_LIB_LOADED=false

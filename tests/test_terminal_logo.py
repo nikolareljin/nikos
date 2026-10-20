@@ -49,6 +49,8 @@ def test_no_color_keeps_the_interactive_logo_readable():
     assert b"NikOS" in output
     header, _, _ = output.partition(b"Usage:")
     assert b"\x1b[" not in header
+    assert b"o---/ \\---o" in header
+    assert b"[]---\\ o /---o" in header
 
 
 def test_command_errors_keep_the_terminal_header():
