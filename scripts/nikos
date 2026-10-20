@@ -148,14 +148,16 @@ _print_logo() {
     blue=$'\033[38;2;33;150;243m'
     gray=$'\033[38;2;144;164;174m'
     reset="$(printf '%b' "${NC:-$'\033[0m'}")"
+    white=$'\033[38;2;255;255;255m'
   fi
 
   printf '\n'
-  printf '  %s●%s   %s●%s     %sNikOS%s %s%s%s\n' "${blue}" "${reset}" "${gray}" "${reset}" "${blue}" "${reset}" "${gray}" "${NIKOS_VERSION}" "${reset}"
+  printf '  %s●%s   %s●%s      %sNikOS%s %s%s%s\n' "${blue}" "${reset}" "${gray}" "${reset}" "${blue}" "${reset}" "${gray}" "${NIKOS_VERSION}" "${reset}"
   printf '  %s│╲%s  %s│%s     %sNeural Innovation for Knowledge OS%s\n' \
-    "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+    "${blue}" "${reset}" "${gray}" "${reset}" "${white}" "${reset}"
   printf '  %s│ ╲%s %s│%s     %sLight system. Heavy thinking.%s\n' \
     "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
+  # printf '  %s●%s   %s╲%s%s●%s\n\n' "${gray}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}"
   printf '  %s●%s  %s╲%s%s●%s\n\n' "${gray}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}"
 }
 
