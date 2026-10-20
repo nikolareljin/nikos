@@ -152,12 +152,12 @@ _print_logo() {
   fi
 
   printf '\n'
-  printf '  %s●%s     %s●%s     %sNikOS%s %s%s%s\n' "${blue}" "${reset}" "${gray}" "${reset}" "${blue}" "${reset}" "${gray}" "${NIKOS_VERSION}" "${reset}"
-  printf '  %s│╲%s    %s│%s     %sNeural Innovation for Knowledge OS%s\n' \
+  printf '  %s●%s   %s●%s     %sNikOS%s %s%s%s\n' "${blue}" "${reset}" "${gray}" "${reset}" "${blue}" "${reset}" "${gray}" "${NIKOS_VERSION}" "${reset}"
+  printf '  %s│╲%s  %s│%s     %sNeural Innovation for Knowledge OS%s\n' \
     "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
-  printf '  %s│ ╲%s   %s│%s     %sLight system. Heavy thinking.%s\n' \
+  printf '  %s│ ╲%s %s│%s     %sLight system. Heavy thinking.%s\n' \
     "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
-  printf '  %s●%s  %s╲%s  %s●%s\n\n' "${gray}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}"
+  printf '  %s●%s  %s╲%s%s●%s\n\n' "${gray}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}"
 }
 
 _TOOLS_LIB_LOADED=false
