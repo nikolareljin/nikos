@@ -107,6 +107,7 @@
     owner: root
     group: root
     mode: "0644"
+  when: not ansible_check_mode
 
 # GTK requires @import before normal CSS rules. The selector is scoped to the
 # notebook name assigned by xfce4-terminal, so Nordic's other GTK apps keep
@@ -117,6 +118,7 @@
     insertbefore: BOF
     marker: "/* {mark} NikOS terminal tabs */"
     block: '@import url("nikos-terminal-tabs.css");'
+  when: not ansible_check_mode
 
 - name: Create GRUB themes directory
   ansible.builtin.file:

@@ -151,3 +151,7 @@ def test_terminal_tabs_have_distinct_active_and_inactive_colours() -> None:
     assert "#88C0D0" in css
     assert "tab:checked:backdrop" in css
     assert "#4C566A" in css
+    theming_tasks = (REPO_ROOT / "roles/theming/tasks/main.yml").read_text(
+        encoding="utf-8"
+    )
+    assert theming_tasks.count("when: not ansible_check_mode") >= 3
