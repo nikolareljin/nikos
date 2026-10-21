@@ -257,6 +257,7 @@ class TestSyncRepoToRef:
 
         assert result.returncode == 2, result.stdout + result.stderr
         assert "changes already present in origin/main" in result.stdout
+        assert "switch main && git" in result.stdout
         assert "reset --hard origin/main" in result.stdout
 
     def test_sees_tags_published_after_the_clone(self, clone, origin):

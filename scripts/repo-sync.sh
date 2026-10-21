@@ -44,12 +44,14 @@ _repo_branch_changes_are_upstream() {
 _repo_sync_offer_rewritten_branch_recovery() {
   local branch="$1"
   local upstream="$2"
-  local quoted_nikos_home=""
+  local quoted_nikos_home="" quoted_branch="" quoted_upstream=""
 
   printf -v quoted_nikos_home '%q' "${NIKOS_HOME}"
+  printf -v quoted_branch '%q' "${branch}"
+  printf -v quoted_upstream '%q' "${upstream}"
   _repo_sync_print_info "${branch} contains changes already present in ${upstream} after a history rewrite."
   _repo_sync_print_info "Move it to the rewritten branch with:"
-  _repo_sync_print_info "  git -C ${quoted_nikos_home} reset --hard ${upstream}"
+  _repo_sync_print_info "  git -C ${quoted_nikos_home} switch ${quoted_branch} && git -C ${quoted_nikos_home} reset --hard ${quoted_upstream}"
 }
 
 # Read candidate tag names on stdin, print the highest release version.
