@@ -4,6 +4,13 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+## [1.5.1] - 2026-10-20
+
+### Changed
+- Interactive `nikos` commands show the terminal logo in a bordered layout
+  with the project blue and gray palette, version, slogan, and documentation
+  URL. `NO_COLOR`, dumb terminals, and piped output keep their plain behavior.
+
 ## [1.5.0] - 2026-10-16
 
 ### Added

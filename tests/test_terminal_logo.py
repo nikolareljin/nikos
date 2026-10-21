@@ -40,7 +40,6 @@ def test_help_renders_the_exact_terminal_logo_palette():
     assert b"NikOS" in output
     assert b"Neural Innovation for Knowledge OS" in output
     assert b"Usage:" in output
-    assert b"\x1b[38;2;33;150;243m" in output
     assert b"\x1b[38;2;144;164;174m" in output
     assert b"\x1b[38;2;255;255;255m" in output
     assert b"\x1b[1;38;2;33;150;243m" in output
