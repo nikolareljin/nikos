@@ -39,6 +39,7 @@ def test_help_renders_the_exact_terminal_logo_palette():
     assert returncode == 0
     assert b"NikOS" in output
     assert b"Neural Innovation for Knowledge OS" in output
+    assert b"https://nikolareljin.github.io/nikos" in output
     assert b"Usage:" in output
     assert b"\x1b[38;2;144;164;174m" in output
     assert b"\x1b[38;2;255;255;255m" in output
@@ -57,6 +58,7 @@ def test_no_color_keeps_the_interactive_logo_readable():
     assert returncode == 0
     assert b"NikOS" in output
     header, _, _ = output.partition(b"Usage:")
+    assert b"https://nikolareljin.github.io/nikos" in header
     assert b"\x1b[" not in header
     assert header.count("●".encode()) == 4
     assert "┌".encode() in header
