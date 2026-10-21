@@ -487,4 +487,4 @@ The first Whisker Menu Favorites are Terminal, Text Editor and Coding IDE.
 Text Editor opens Mousepad; Coding IDE opens VS Code. NikOS sets Mousepad as
 the system default for plain text and Markdown, and VS Code for common source,
 JSON, YAML and shell file types. A user `~/.config/mimeapps.list` takes
-precedence over these system defaults and is never replaced by `nikos update`.
+precedence over the Xubuntu desktop defaults and is never replaced by `nikos update`.

@@ -139,7 +139,7 @@ def test_system_mime_defaults_keep_user_overrides_possible() -> None:
     defaults = MIMEAPPS.read_text(encoding="utf-8")
     assert "text/plain=org.xfce.mousepad.desktop;" in defaults
     assert "text/x-python=code.desktop;" in defaults
-    assert "/etc/xdg/mimeapps.list" in (
+    assert "/etc/xdg/xdg-xubuntu/mimeapps.list" in (
         REPO_ROOT / "roles/desktop/tasks/main.yml"
     ).read_text(encoding="utf-8")
 

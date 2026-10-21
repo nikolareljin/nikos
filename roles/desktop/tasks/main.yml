@@ -272,13 +272,13 @@
     - nikos-text-editor.desktop
     - nikos-coding-ide.desktop
 
-# /etc/xdg/mimeapps.list provides the machine default without replacing a
-# user's ~/.config/mimeapps.list. A future `nikos config apps` command can
-# write the higher-priority user choice and it will survive every update.
+# The Xubuntu-specific XDG directory provides desktop defaults without
+# replacing generic system defaults or a user's ~/.config/mimeapps.list. A
+# future `nikos config apps` command can write the higher-priority user choice.
 - name: Set system defaults for text and coding files
   ansible.builtin.copy:
     src: mimeapps.list
-    dest: /etc/xdg/mimeapps.list
+    dest: /etc/xdg/xdg-xubuntu/mimeapps.list
     owner: root
     group: root
     mode: "0644"
