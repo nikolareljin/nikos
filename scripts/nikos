@@ -145,7 +145,7 @@ _print_logo() {
   local blue='' gray='' white='' reset='' underlined='' bold_blue='' bold_gray=''
   if [[ -z "${NO_COLOR:-}" ]]; then
     # Match the blue and gray node colors in assets/menu-icon.svg.
-    blue=$'\033[38;2;33;150;243m'
+    # blue=$'\033[38;2;33;150;243m'
     gray=$'\033[38;2;144;164;174m'
     reset="$(printf '%b' "${NC:-$'\033[0m'}")"
     white=$'\033[38;2;255;255;255m'
