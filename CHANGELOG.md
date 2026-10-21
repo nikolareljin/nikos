@@ -13,8 +13,9 @@ All notable changes to NikOS are documented here.
 
 ### Fixed
 - `nikos update --ref` restores the branch or detached commit that was checked
-  out before a target branch cannot fast-forward. It also identifies an old
-  `repo-sync.sh` helper instead of reporting it as missing.
+  out before a target branch cannot fast-forward, and shows how to reset a
+  local branch whose changes were rewritten upstream. It also identifies an
+  old `repo-sync.sh` helper instead of reporting it as missing.
 
 ## [1.5.0] - 2026-10-16
 

@@ -240,6 +240,25 @@ class TestSyncRepoToRef:
         assert git("branch", "--show-current", cwd=clone) == ""
         assert git("rev-parse", "HEAD", cwd=clone) == before
 
+    def test_offers_to_reset_a_branch_rewritten_upstream(self, clone, origin):
+        git("switch", "-q", "main", cwd=clone)
+        commit(clone, "local main commit", path="rewrite.txt", content="same change")
+        git("switch", "-q", "release/0.12.0", cwd=clone)
+
+        commit(
+            origin["work"],
+            "rewritten upstream main commit",
+            path="rewrite.txt",
+            content="same change",
+        )
+        git("push", "-q", "origin", "main", cwd=origin["work"])
+
+        result = run_sourced('_sync_repo_to_ref "main" "test-autostash"', env=sync_env(clone))
+
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert "changes already present in origin/main" in result.stdout
+        assert "reset --hard origin/main" in result.stdout
+
     def test_sees_tags_published_after_the_clone(self, clone, origin):
         git("tag", "0.20.0", cwd=origin["work"])
         git("push", "-q", "origin", "0.20.0", cwd=origin["work"])
