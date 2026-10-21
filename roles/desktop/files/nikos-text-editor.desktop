@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Text Editor
+Comment=Open text files with Mousepad
+Exec=mousepad %F
+Icon=org.xfce.mousepad
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/plain;text/markdown;text/x-readme;text/x-log;
+StartupNotify=true

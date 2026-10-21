@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Coding IDE
+Comment=Open code with Visual Studio Code
+Exec=code --new-window %F
+Icon=com.visualstudio.code
+Terminal=false
+Categories=Development;IDE;
+MimeType=text/x-python;text/x-c;text/x-c++;text/x-csrc;text/x-c++src;text/x-java-source;text/x-go;text/x-rust;application/javascript;text/javascript;application/json;application/x-yaml;text/x-makefile;text/x-shellscript;
+StartupNotify=true
+StartupWMClass=Code

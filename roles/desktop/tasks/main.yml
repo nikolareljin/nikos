@@ -255,6 +255,34 @@
     state: directory
     mode: "0755"
 
+- name: Ensure the shared application directory exists
+  ansible.builtin.file:
+    path: /usr/share/applications
+    state: directory
+    mode: "0755"
+
+- name: Install NikOS default editor launchers
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/share/applications/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - nikos-text-editor.desktop
+    - nikos-coding-ide.desktop
+
+# /etc/xdg/mimeapps.list provides the machine default without replacing a
+# user's ~/.config/mimeapps.list. A future `nikos config apps` command can
+# write the higher-priority user choice and it will survive every update.
+- name: Set system defaults for text and coding files
+  ansible.builtin.copy:
+    src: mimeapps.list
+    dest: /etc/xdg/mimeapps.list
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Point the menu's Help entry at the NikOS documentation
   ansible.builtin.copy:
     src: xfhelp4.desktop
