@@ -716,7 +716,7 @@ cmd_update() {
     :
   elif [[ -d "${NIKOS_HOME}/.git" ]]; then
     if ! declare -F _sync_repo_to_ref >/dev/null; then
-      print_error "Repo sync helpers not found at ${REPO_SYNC_HELPERS}. Reinstall NikOS or restore that file."
+      print_error "Repo sync helper at ${REPO_SYNC_HELPERS} is from an older NikOS release. Reinstall NikOS to refresh it."
       exit 1
     fi
 

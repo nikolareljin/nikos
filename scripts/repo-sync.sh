@@ -158,7 +158,7 @@ _sync_repo_to_ref() {
   local target_ref="${1:-}"
   local stash_label="${2:-nikos-update-autostash}"
   local stash_ref=""
-  local current_branch=""
+  local current_branch="" original_branch="" original_head=""
 
   _migrate_local_vars
 
@@ -179,6 +179,9 @@ _sync_repo_to_ref() {
     return 2
   fi
 
+  original_branch="$(git -C "${NIKOS_HOME}" branch --show-current 2>/dev/null || true)"
+  original_head="$(git -C "${NIKOS_HOME}" rev-parse --verify HEAD 2>/dev/null || true)"
+
   if [[ -n "${target_ref}" ]]; then
     if ! _repo_switch_to_ref "${target_ref}"; then
       _repo_sync_print_stash_recovery "${stash_ref}"
@@ -191,6 +194,17 @@ _sync_repo_to_ref() {
      git -C "${NIKOS_HOME}" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
     if ! git -C "${NIKOS_HOME}" merge --ff-only '@{u}'; then
       _repo_sync_print_info "Failed to fast-forward ${current_branch} in ${NIKOS_HOME}; repository was not updated."
+      if [[ "${current_branch}" != "${original_branch}" ]]; then
+        if [[ -n "${original_branch}" ]]; then
+          if ! git -C "${NIKOS_HOME}" switch "${original_branch}"; then
+            _repo_sync_print_info "Failed to restore ${NIKOS_HOME} to ${original_branch}."
+          fi
+        elif [[ -n "${original_head}" ]]; then
+          if ! git -C "${NIKOS_HOME}" switch --detach "${original_head}"; then
+            _repo_sync_print_info "Failed to restore ${NIKOS_HOME} to ${original_head}."
+          fi
+        fi
+      fi
       _repo_sync_print_stash_recovery "${stash_ref}"
       return 2
     fi

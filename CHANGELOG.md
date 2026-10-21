@@ -11,6 +11,11 @@ All notable changes to NikOS are documented here.
   with the project blue and gray palette, version, slogan, and documentation
   URL. `NO_COLOR`, dumb terminals, and piped output keep their plain behavior.
 
+### Fixed
+- `nikos update --ref` restores the branch or detached commit that was checked
+  out before a target branch cannot fast-forward. It also identifies an old
+  `repo-sync.sh` helper instead of reporting it as missing.
+
 ## [1.5.0] - 2026-10-16
 
 ### Added
