@@ -131,6 +131,7 @@ nikos_desktop_extra_packages:
   - xfconf  # the desktop role writes Xfce settings with it
   - xfce4-goodies
   - xfce4-terminal
+  - mousepad
   - lightdm
   - lightdm-gtk-greeter
   - lightdm-gtk-greeter-settings

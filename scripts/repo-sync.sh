@@ -23,6 +23,37 @@ _repo_sync_print_stash_recovery() {
   _repo_sync_print_info "  git -C ${quoted_nikos_home} stash pop ${stash_ref}"
 }
 
+# Return success when every non-merge change unique to branch also exists in
+# its upstream. This identifies a branch left behind by a history rewrite.
+_repo_branch_changes_are_upstream() {
+  local branch="$1"
+  local upstream="$2"
+  local branch_patches="" upstream_patches="" missing_patches=""
+
+  branch_patches="$(git -C "${NIKOS_HOME}" log --format= --no-merges -p "${upstream}..${branch}" \
+    | git patch-id --stable | awk '{print $1}' | sort -u)"
+  upstream_patches="$(git -C "${NIKOS_HOME}" log --format= --no-merges -p "${branch}..${upstream}" \
+    | git patch-id --stable | awk '{print $1}' | sort -u)"
+
+  [[ -n "${branch_patches}" && -n "${upstream_patches}" ]] || return 1
+
+  missing_patches="$(comm -23 <(printf '%s\n' "${branch_patches}") <(printf '%s\n' "${upstream_patches}"))"
+  [[ -z "${missing_patches}" ]]
+}
+
+_repo_sync_offer_rewritten_branch_recovery() {
+  local branch="$1"
+  local upstream="$2"
+  local quoted_nikos_home="" quoted_branch="" quoted_upstream=""
+
+  printf -v quoted_nikos_home '%q' "${NIKOS_HOME}"
+  printf -v quoted_branch '%q' "${branch}"
+  printf -v quoted_upstream '%q' "${upstream}"
+  _repo_sync_print_info "${branch} contains changes already present in ${upstream} after a history rewrite."
+  _repo_sync_print_info "Move it to the rewritten branch with:"
+  _repo_sync_print_info "  git -C ${quoted_nikos_home} switch ${quoted_branch} && git -C ${quoted_nikos_home} reset --hard ${quoted_upstream}"
+}
+
 # Read candidate tag names on stdin, print the highest release version.
 # Prints nothing when no line is a bare X.Y.Z release tag.
 _pick_latest_semver() {
@@ -158,7 +189,7 @@ _sync_repo_to_ref() {
   local target_ref="${1:-}"
   local stash_label="${2:-nikos-update-autostash}"
   local stash_ref=""
-  local current_branch=""
+  local current_branch="" original_branch="" original_head="" upstream=""
 
   _migrate_local_vars
 
@@ -179,6 +210,9 @@ _sync_repo_to_ref() {
     return 2
   fi
 
+  original_branch="$(git -C "${NIKOS_HOME}" branch --show-current 2>/dev/null || true)"
+  original_head="$(git -C "${NIKOS_HOME}" rev-parse --verify HEAD 2>/dev/null || true)"
+
   if [[ -n "${target_ref}" ]]; then
     if ! _repo_switch_to_ref "${target_ref}"; then
       _repo_sync_print_stash_recovery "${stash_ref}"
@@ -188,9 +222,23 @@ _sync_repo_to_ref() {
 
   current_branch="$(git -C "${NIKOS_HOME}" branch --show-current 2>/dev/null || true)"
   if [[ -n "${current_branch}" ]] && \
-     git -C "${NIKOS_HOME}" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+     upstream="$(git -C "${NIKOS_HOME}" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)"; then
     if ! git -C "${NIKOS_HOME}" merge --ff-only '@{u}'; then
       _repo_sync_print_info "Failed to fast-forward ${current_branch} in ${NIKOS_HOME}; repository was not updated."
+      if _repo_branch_changes_are_upstream "${current_branch}" "${upstream}"; then
+        _repo_sync_offer_rewritten_branch_recovery "${current_branch}" "${upstream}"
+      fi
+      if [[ "${current_branch}" != "${original_branch}" ]]; then
+        if [[ -n "${original_branch}" ]]; then
+          if ! git -C "${NIKOS_HOME}" switch "${original_branch}"; then
+            _repo_sync_print_info "Failed to restore ${NIKOS_HOME} to ${original_branch}."
+          fi
+        elif [[ -n "${original_head}" ]]; then
+          if ! git -C "${NIKOS_HOME}" switch --detach "${original_head}"; then
+            _repo_sync_print_info "Failed to restore ${NIKOS_HOME} to ${original_head}."
+          fi
+        fi
+      fi
       _repo_sync_print_stash_recovery "${stash_ref}"
       return 2
     fi

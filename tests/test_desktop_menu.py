@@ -22,6 +22,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MENU_RC = REPO_ROOT / "roles/desktop/files/whiskermenu-defaults.rc"
 VARS = REPO_ROOT / "vars/main.yml"
+TEXT_EDITOR = REPO_ROOT / "roles/desktop/files/nikos-text-editor.desktop"
+CODING_IDE = REPO_ROOT / "roles/desktop/files/nikos-coding-ide.desktop"
+MIMEAPPS = REPO_ROOT / "roles/desktop/files/mimeapps.list"
+TERMINAL_TABS = REPO_ROOT / "roles/theming/files/nikos-terminal-tabs.css"
 
 # Binaries that arrive with the Xfce or Xubuntu metapackages NikOS already
 # installs, so they need no separate entry. Anything not listed here has to be
@@ -118,3 +122,36 @@ def test_favourites_look_like_desktop_ids(entry: str) -> None:
     assert re.fullmatch(r"[A-Za-z0-9_.+-]+\.desktop", entry), (
         f"favourite {entry!r} is not a desktop file id"
     )
+
+
+def test_menu_exposes_the_default_text_editor_and_coding_ide() -> None:
+    favourites = menu_settings().get("favorites", "").split(",")
+    assert favourites[:3] == [
+        "xfce4-terminal-emulator.desktop",
+        "nikos-text-editor.desktop",
+        "nikos-coding-ide.desktop",
+    ]
+    assert "Exec=mousepad %F" in TEXT_EDITOR.read_text(encoding="utf-8")
+    assert "Exec=code --new-window %F" in CODING_IDE.read_text(encoding="utf-8")
+
+
+def test_system_mime_defaults_keep_user_overrides_possible() -> None:
+    defaults = MIMEAPPS.read_text(encoding="utf-8")
+    assert "text/plain=org.xfce.mousepad.desktop;" in defaults
+    assert "text/x-python=code.desktop;" in defaults
+    assert "/etc/xdg/xdg-xubuntu/mimeapps.list" in (
+        REPO_ROOT / "roles/desktop/tasks/main.yml"
+    ).read_text(encoding="utf-8")
+
+
+def test_terminal_tabs_have_distinct_active_and_inactive_colours() -> None:
+    css = TERMINAL_TABS.read_text(encoding="utf-8")
+    assert "#xfce4-terminal-notebook" in css
+    assert "tab:checked" in css
+    assert "#88C0D0" in css
+    assert "tab:checked:backdrop" in css
+    assert "#4C566A" in css
+    theming_tasks = (REPO_ROOT / "roles/theming/tasks/main.yml").read_text(
+        encoding="utf-8"
+    )
+    assert theming_tasks.count("when: not ansible_check_mode") >= 3

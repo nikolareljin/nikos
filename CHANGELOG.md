@@ -4,6 +4,25 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+## [1.5.1] - 2026-10-20
+
+### Changed
+- Interactive `nikos` commands show the terminal logo in a bordered layout
+  with the project blue and gray palette, version, slogan, and documentation
+  URL. `NO_COLOR`, dumb terminals, and piped output keep their plain behavior.
+- Xfce Terminal highlights the selected tab in blue while its window is active
+  and mutes that tab to gray when another application has focus.
+- The Whisker Menu opens with Text Editor (Mousepad) and Coding IDE (VS Code)
+  beside Terminal. Text and code MIME defaults match those launchers.
+- Site product titles open their published GitHub Pages site when one exists;
+  each card keeps a separate Repository link.
+
+### Fixed
+- `nikos update --ref` restores the branch or detached commit that was checked
+  out before a target branch cannot fast-forward, and shows how to reset a
+  local branch whose changes were rewritten upstream. It also identifies an
+  old `repo-sync.sh` helper instead of reporting it as missing.
+
 ## [1.5.0] - 2026-10-16
 
 ### Added

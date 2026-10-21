@@ -91,3 +91,35 @@ def test_the_search_console_file_is_not_a_page(site):
     assert any(p.name.startswith("google") for p in site.glob("google*.html"))
     assert seo.problems(site) == []
     assert "google" not in seo.sitemap()
+
+
+def test_product_cards_default_to_published_pages():
+    about = (ROOT / "site" / "about.html").read_text(encoding="utf-8")
+    products = {
+        "nikos": "NikOS",
+        "local-ai-lab": "local-ai-lab",
+        "ai-runner": "ai-runner",
+        "leak-lock": "Leak Lock",
+        "claude-reposec": "claude-reposec",
+        "ci-helpers": "ci-helpers",
+        "script-helpers": "script-helpers",
+        "git-lantern": "git-lantern",
+        "vellum": "vellum",
+        "docforge": "docforge",
+        "claude-plugins": "claude-plugins",
+        "claude-docsmith": "claude-docsmith",
+        "claude-reelsmith": "claude-reelsmith",
+        "ink-mate": "ink-mate",
+        "kinect-forge": "Kinect Forge",
+        "pharos": "Pharos",
+        "scancontext": "ScanContext",
+        "denial-shield": "DenialShield",
+        "orthodox-calendar": "orthodox-calendar",
+        "PravKal": "PravKal",
+        "500ad": "500 A.D.",
+    }
+    for slug, name in products.items():
+        assert (
+            f'<h4><a href="https://nikolareljin.github.io/{slug}/">{name}</a></h4>'
+            in about
+        )

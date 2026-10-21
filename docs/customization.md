@@ -476,3 +476,15 @@ To use a different icon, set `button-icon` to any icon name or absolute path in
 `roles/desktop/files/whiskermenu-defaults.rc`. Note that the Xubuntu defaults in
 `/etc/xdg/xdg-xubuntu/xfce4/whiskermenu/defaults.rc` are read before the NikOS
 ones, so the desktop role rewrites the `button-icon` line there as well.
+
+## Terminal tabs and default editors
+
+Xfce Terminal uses a blue selected-tab background while its window has focus.
+When another application is active, the selected tab switches to gray. Restart
+open Terminal windows after `nikos update` to load the theme CSS.
+
+The first Whisker Menu Favorites are Terminal, Text Editor and Coding IDE.
+Text Editor opens Mousepad; Coding IDE opens VS Code. NikOS sets Mousepad as
+the system default for plain text and Markdown, and VS Code for common source,
+JSON, YAML and shell file types. A user `~/.config/mimeapps.list` takes
+precedence over the Xubuntu desktop defaults and is never replaced by `nikos update`.

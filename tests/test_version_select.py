@@ -13,6 +13,7 @@ import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 REPO_SYNC = REPO_ROOT / "scripts" / "repo-sync.sh"
+NIKOS_CLI = REPO_ROOT / "scripts" / "nikos"
 
 
 def run_sourced(snippet, stdin=None, cwd=None, env=None):
@@ -204,6 +205,60 @@ class TestSyncRepoToRef:
         assert result.returncode == 0, result.stdout + result.stderr
         assert head_ref(clone) == "main"
         assert git("log", "-1", "--format=%s", cwd=clone) == "upstream commit"
+
+    def test_restores_the_original_branch_after_a_target_fast_forward_fails(
+        self, clone, origin
+    ):
+        git("switch", "-q", "main", cwd=clone)
+        commit(clone, "local main commit")
+        git("switch", "-q", "release/0.12.0", cwd=clone)
+        before = head_ref(clone)
+
+        commit(origin["work"], "rewritten upstream main commit")
+        git("push", "-q", "origin", "main", cwd=origin["work"])
+
+        result = run_sourced('_sync_repo_to_ref "main" "test-autostash"', env=sync_env(clone))
+
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert head_ref(clone) == before
+        assert git("status", "--porcelain", cwd=clone) == ""
+
+    def test_restores_the_original_detached_commit_after_a_target_fast_forward_fails(
+        self, clone, origin
+    ):
+        git("switch", "-q", "main", cwd=clone)
+        commit(clone, "local main commit")
+        git("switch", "-q", "--detach", "0.1.0", cwd=clone)
+        before = git("rev-parse", "HEAD", cwd=clone)
+
+        commit(origin["work"], "rewritten upstream main commit")
+        git("push", "-q", "origin", "main", cwd=origin["work"])
+
+        result = run_sourced('_sync_repo_to_ref "main" "test-autostash"', env=sync_env(clone))
+
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert git("branch", "--show-current", cwd=clone) == ""
+        assert git("rev-parse", "HEAD", cwd=clone) == before
+
+    def test_offers_to_reset_a_branch_rewritten_upstream(self, clone, origin):
+        git("switch", "-q", "main", cwd=clone)
+        commit(clone, "local main commit", path="rewrite.txt", content="same change")
+        git("switch", "-q", "release/0.12.0", cwd=clone)
+
+        commit(
+            origin["work"],
+            "rewritten upstream main commit",
+            path="rewrite.txt",
+            content="same change",
+        )
+        git("push", "-q", "origin", "main", cwd=origin["work"])
+
+        result = run_sourced('_sync_repo_to_ref "main" "test-autostash"', env=sync_env(clone))
+
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert "changes already present in origin/main" in result.stdout
+        assert "switch main && git" in result.stdout
+        assert "reset --hard origin/main" in result.stdout
 
     def test_sees_tags_published_after_the_clone(self, clone, origin):
         git("tag", "0.20.0", cwd=origin["work"])
@@ -471,3 +526,25 @@ fi
     def test_reports_failure_when_no_source_can_supply_it(self, tmp_path):
         result = self._drive_sourcing(tmp_path / "gone", tmp_path / "also-gone")
         assert result.stdout.strip().splitlines()[-1] == "HELPERS_MISSING"
+
+
+def test_update_names_an_old_repo_sync_helper(tmp_path):
+    nikos_home = tmp_path / "nikos"
+    (nikos_home / ".git").mkdir(parents=True)
+    (nikos_home / "scripts").mkdir()
+    (nikos_home / "scripts" / "repo-sync.sh").write_text("_pull_repo_updates() { :; }\n")
+
+    result = subprocess.run(
+        ["bash", str(NIKOS_CLI), "update"],
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "NIKOS_HOME": str(nikos_home),
+            "NIKOS_USE_DIALOG": "0",
+            "TERM": "dumb",
+        },
+    )
+
+    assert result.returncode == 1
+    assert "is from an older NikOS release" in result.stderr

@@ -1,0 +1,19 @@
+[Default Applications]
+text/plain=org.xfce.mousepad.desktop;
+text/markdown=org.xfce.mousepad.desktop;
+text/x-readme=org.xfce.mousepad.desktop;
+text/x-log=org.xfce.mousepad.desktop;
+text/x-python=code.desktop;
+text/x-c=code.desktop;
+text/x-c++=code.desktop;
+text/x-csrc=code.desktop;
+text/x-c++src=code.desktop;
+text/x-java-source=code.desktop;
+text/x-go=code.desktop;
+text/x-rust=code.desktop;
+application/javascript=code.desktop;
+text/javascript=code.desktop;
+application/json=code.desktop;
+application/x-yaml=code.desktop;
+text/x-makefile=code.desktop;
+text/x-shellscript=code.desktop;

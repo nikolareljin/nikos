@@ -1,0 +1,27 @@
+/* Only Xfce Terminal owns this widget name. Keep other GTK notebooks unchanged. */
+#xfce4-terminal-notebook > header > tabs > tab:checked {
+  background-color: #88C0D0;
+  border: 1px solid #8FBCBB;
+  border-bottom: 3px solid #5E81AC;
+  border-radius: 5px 5px 0 0;
+  color: #2E3440;
+  font-weight: bold;
+}
+
+#xfce4-terminal-notebook > header > tabs > tab:checked label,
+#xfce4-terminal-notebook > header > tabs > tab:checked button {
+  color: #2E3440;
+}
+
+/* :backdrop is the inactive Terminal window state. */
+#xfce4-terminal-notebook > header > tabs > tab:checked:backdrop {
+  background-color: #4C566A;
+  border-color: #4C566A;
+  border-bottom-color: #3B4252;
+  color: #ECEFF4;
+}
+
+#xfce4-terminal-notebook > header > tabs > tab:checked:backdrop label,
+#xfce4-terminal-notebook > header > tabs > tab:checked:backdrop button {
+  color: #ECEFF4;
+}
