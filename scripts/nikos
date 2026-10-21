@@ -142,22 +142,47 @@ fi
 _print_logo() {
   [[ -t 1 && "${TERM:-dumb}" != "dumb" ]] || return 0
 
-  local blue='' gray='' white='' reset=''
+  local blue='' gray='' white='' reset='' underlined='' bold_blue='' bold_gray=''
   if [[ -z "${NO_COLOR:-}" ]]; then
     # Match the blue and gray node colors in assets/menu-icon.svg.
     blue=$'\033[38;2;33;150;243m'
     gray=$'\033[38;2;144;164;174m'
     reset="$(printf '%b' "${NC:-$'\033[0m'}")"
     white=$'\033[38;2;255;255;255m'
+    underlined=$'\033[4m'
+    bold_blue=$'\033[1;38;2;33;150;243m'
+    bold_gray=$'\033[1;38;2;144;164;174m'
   fi
 
+  local -a rows plain_rows
+  rows=(
+    "  ${bold_blue}●${reset}  ${bold_gray}●${reset}                ${bold_blue}NikOS${reset} ${gray}${NIKOS_VERSION}${reset}"
+    "  ${bold_blue}┃╲${reset} ${bold_gray}┃${reset}     ${white}Neural Innovation for Knowledge OS${reset}"
+    "  ${bold_blue}┃ ╲${reset}${bold_gray}┃${reset}       ${gray}Light system. Heavy thinking.${reset}"
+    "  ${bold_gray}●${reset}  ${bold_blue}●${reset}    ${underlined}https://nikolareljin.github.io/nikos${reset}"
+  )
+  plain_rows=(
+    "  ●  ●                NikOS ${NIKOS_VERSION}"
+    "  ┃╲ ┃     Neural Innovation for Knowledge OS"
+    "  ┃ ╲┃       Light system. Heavy thinking."
+    "  ●  ●    https://nikolareljin.github.io/nikos"
+  )
+
+  local frame_width=0 index padding horizontal
+  for index in "${!plain_rows[@]}"; do
+    (( ${#plain_rows[index]} > frame_width )) && frame_width=${#plain_rows[index]}
+  done
+  printf -v horizontal '%*s' "$((frame_width + 1))" ''
+  horizontal="${horizontal// /─}"
+
   printf '\n'
-  printf '  %s●%s   %s●%s      %sNikOS%s %s%s%s\n' "${blue}" "${reset}" "${gray}" "${reset}" "${blue}" "${reset}" "${gray}" "${NIKOS_VERSION}" "${reset}"
-  printf '  %s│╲%s  %s│%s     %sNeural Innovation for Knowledge OS%s\n' \
-    "${blue}" "${reset}" "${gray}" "${reset}" "${white}" "${reset}"
-  printf '  %s│ ╲%s %s│%s     %sLight system. Heavy thinking.%s\n' \
-    "${blue}" "${reset}" "${gray}" "${reset}" "${gray}" "${reset}"
-  printf '  %s●%s  %s╲%s%s●%s\n\n' "${gray}" "${reset}" "${blue}" "${reset}" "${blue}" "${reset}"
+  printf '  %s┌%s┐%s\n' "${gray}" "${horizontal}" "${reset}"
+  for index in "${!rows[@]}"; do
+    padding=$((frame_width - ${#plain_rows[index]}))
+    printf '  %s│%s%s%*s %s│%s\n' \
+      "${gray}" "${reset}" "${rows[index]}" "${padding}" '' "${gray}" "${reset}"
+  done
+  printf '  %s└%s┘%s\n\n' "${gray}" "${horizontal}" "${reset}"
 }
 
 _TOOLS_LIB_LOADED=false
