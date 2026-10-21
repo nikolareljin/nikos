@@ -206,7 +206,9 @@ class TestSyncRepoToRef:
         assert head_ref(clone) == "main"
         assert git("log", "-1", "--format=%s", cwd=clone) == "upstream commit"
 
-    def test_restores_the_original_branch_after_a_target_fast_forward_fails(self, clone, origin):
+    def test_restores_the_original_branch_after_a_target_fast_forward_fails(
+        self, clone, origin
+    ):
         git("switch", "-q", "main", cwd=clone)
         commit(clone, "local main commit")
         git("switch", "-q", "release/0.12.0", cwd=clone)
@@ -221,7 +223,9 @@ class TestSyncRepoToRef:
         assert head_ref(clone) == before
         assert git("status", "--porcelain", cwd=clone) == ""
 
-    def test_restores_the_original_detached_commit_after_a_target_fast_forward_fails(self, clone, origin):
+    def test_restores_the_original_detached_commit_after_a_target_fast_forward_fails(
+        self, clone, origin
+    ):
         git("switch", "-q", "main", cwd=clone)
         commit(clone, "local main commit")
         git("switch", "-q", "--detach", "0.1.0", cwd=clone)
@@ -514,7 +518,12 @@ def test_update_names_an_old_repo_sync_helper(tmp_path):
         ["bash", str(NIKOS_CLI), "update"],
         capture_output=True,
         text=True,
-        env={**os.environ, "NIKOS_HOME": str(nikos_home), "NIKOS_USE_DIALOG": "0", "TERM": "dumb"},
+        env={
+            **os.environ,
+            "NIKOS_HOME": str(nikos_home),
+            "NIKOS_USE_DIALOG": "0",
+            "TERM": "dumb",
+        },
     )
 
     assert result.returncode == 1
