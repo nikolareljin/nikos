@@ -146,8 +146,11 @@ mkcert_sha256: "6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
 gitleaks_version: "8.30.1"
 gitleaks_sha256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
 # github.com/nikolareljin/agentvault releases; no sums file, hashed by hand.
-agentvault_version: "0.14.0"
-agentvault_sha256: "72517713dc06ac8eb4145632e81ee85fca66fa16751ef4ad7201005ec2e15c6a"
+agentvault_version: "0.15.2"
+agentvault_sha256: "75f76004878df3c9e58835c2cda5fc52972ae9b47e7632d04c460914d6820244"
+# github.com/nikolareljin/leak-lock releases; VSIX digest published by GitHub.
+leak_lock_version: "0.11.0"
+leak_lock_sha256: "7c3d11e381f94feea9b1972efb70bb142bf5adadb340c4febef7059d60ef43f0"
 # github.com/EricLBuehler/mistral.rs releases, CPU build; sha256 = GitHub asset digest.
 mistralrs_version: "v0.9.4"
 mistralrs_sha256: "99a8f233db07927b9af4d6ac8d5c1541bc9e4c6c90ebeec1be97fe6306e00feb"
@@ -366,6 +369,13 @@ nikos_pin_sources:
     version_var: agentvault_version
     artifacts:
       - {asset: agentvault-linux-amd64, sha256_var: agentvault_sha256}
+  leak_lock:
+    type: github-release
+    repo: nikolareljin/leak-lock
+    tag_prefix: v
+    version_var: leak_lock_version
+    artifacts:
+      - {asset: "leak-lock-{version}.vsix", sha256_var: leak_lock_sha256}
   mistralrs:
     type: github-release
     repo: EricLBuehler/mistral.rs

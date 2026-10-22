@@ -764,7 +764,7 @@
 
 # agentvault: carries AI tool rules and hooks between machines. Pinned release
 # binary, hashed by hand (the release has no sums file). Prints
-# "agentvault 0.14.0 (commit: ...)".
+# "agentvault 0.15.2 (commit: ...)".
 - name: Read the installed agentvault version
   ansible.builtin.command: "{{ nikos_home }}/.local/bin/agentvault version"
   register: dev_tools_agentvault_installed
