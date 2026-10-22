@@ -4,6 +4,13 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Changed
+- script-helpers submodule 0.54.0 -> 0.56.0, including the current hook
+  checks and model-selection helpers. Shared CI workflows continue to use the
+  current ci-helpers production release (0.43.0).
+- agentvault 0.13.0 -> 0.14.0. The Linux binary pin now matches the release
+  asset's published SHA-256 digest.
+
 ## [1.5.1] - 2026-10-20
 
 ### Changed
