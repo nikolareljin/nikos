@@ -5,10 +5,10 @@ All notable changes to NikOS are documented here.
 ## Unreleased
 
 ### Changed
-- script-helpers submodule 0.54.0 -> 0.57.0, including the current hook
+- script-helpers submodule 0.54.0 -> 0.58.0, including the current hook
   checks and model-selection helpers. Shared CI workflows continue to use the
   current ci-helpers production release (0.43.0).
-- agentvault 0.13.0 -> 0.18.0. The Linux binary pin now matches the release
+- agentvault 0.13.0 -> 0.19.0. The Linux binary pin now matches the release
   asset's published SHA-256 digest.
 - Leak Lock 0.11.1 now installs from its verified VSIX release asset instead
   of the unpinned VS Code Marketplace extension.
