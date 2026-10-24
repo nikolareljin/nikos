@@ -1,8 +1,8 @@
 """scripts/nikos-hooks.sh (nikos hooks): what it passes to lantern, agentvault
 and setup-hooks.sh, and that a bad option changes nothing.
 
-lantern, agentvault and gitleaks are stubs that log their arguments. git is the
-real one, with a throwaway global config.
+lantern, agentvault, gitleaks and foxguard are stubs that log their arguments.
+git is the real one, with a throwaway global config.
 """
 
 import json
@@ -62,7 +62,9 @@ def test_status_is_the_default_and_lists_the_tools(env):
     assert "script-helpers:" in r.stdout and "0.50.0" in r.stdout
     assert "owners:         unset" in r.stdout
     assert "foxguard:" in r.stdout
-    assert calls(env)[-1] == f"lantern hooks status --root {env['tmp'] / 'Projects'}"
+    status_calls = calls(env)
+    assert "foxguard --version" in status_calls
+    assert status_calls[-1] == f"lantern hooks status --root {env['tmp'] / 'Projects'}"
 
 
 def test_apply_passes_its_options_and_root(env):
