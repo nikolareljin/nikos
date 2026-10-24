@@ -145,6 +145,9 @@ mkcert_sha256: "6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
 # (lib/ci_defaults.sh); sha256 from gitleaks_<v>_checksums.txt.
 gitleaks_version: "8.30.1"
 gitleaks_sha256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+# github.com/0sec-labs/foxguard releases; Linux x86_64 digest from checksums.txt.
+foxguard_version: "0.14.1"
+foxguard_sha256: "10a531279f7f3e9dcd01996e5e288309cd6d7d2bb2b7fa35de583d0bbe715bc2"
 # github.com/nikolareljin/agentvault releases; no sums file, hashed by hand.
 agentvault_version: "0.19.0"
 agentvault_sha256: "4f28f4e002d0c83e2292157eb1be9a3234a37a1fa14e34b2970e5303c118c990"
@@ -363,6 +366,13 @@ nikos_pin_sources:
     version_var: gitleaks_version
     artifacts:
       - {asset: "gitleaks_{version}_linux_x64.tar.gz", sha256_var: gitleaks_sha256, checksums: "gitleaks_{version}_checksums.txt"}
+  foxguard:
+    type: github-release
+    repo: 0sec-labs/foxguard
+    tag_prefix: v
+    version_var: foxguard_version
+    artifacts:
+      - {asset: foxguard-linux-x86_64, sha256_var: foxguard_sha256, checksums: checksums.txt}
   agentvault:
     type: github-release
     repo: nikolareljin/agentvault

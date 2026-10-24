@@ -382,6 +382,8 @@ Note: role tags must be explicitly set in `site.yml`. The optional roles (`netwo
 repository) and agentvault (AI tool rules and hooks). Only clones whose `origin` is
 under `git config --global script-helpers.owners` are changed; hooks a clone already
 runs (an employer's included) keep running, and `remove` brings back what was there.
+`nikos update` installs gitleaks and foxguard so the hooks can run the credential
+and advisory static-analysis scans instead of reporting a missing tool.
 
 ```bash
 git config --global script-helpers.owners <user-or-org>   # once per machine

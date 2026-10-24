@@ -716,7 +716,7 @@
     - not ansible_check_mode
     - pin_gate_install | bool
 
-# ── Hook tools (nikos hooks): gitleaks, agentvault, script-helpers.home ──
+# ── Hook tools (nikos hooks): gitleaks, foxguard, agentvault, script-helpers.home ──
 # gitleaks: the version script-helpers pins (lib/ci_defaults.sh), checked
 # against the release's checksums file. Prints "8.30.1".
 - name: Read the installed gitleaks version
@@ -761,6 +761,37 @@
         remote_src: true
         include: [gitleaks]
         mode: "0755"
+
+# foxguard: static analysis that script-helpers runs for changed files during
+# a push. It is advisory, but installing the pinned binary makes every hook
+# run the scan instead of warning that it was skipped.
+- name: Read the installed foxguard version
+  ansible.builtin.command: "{{ nikos_home }}/.local/bin/foxguard --version"
+  register: dev_tools_foxguard_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether foxguard needs installing
+  ansible.builtin.include_role:
+    name: pin-gate
+    tasks_from: version
+  vars:
+    pin_gate_name: foxguard
+    pin_gate_want: "{{ foxguard_version }}"
+    pin_gate_path: "{{ nikos_home }}/.local/bin/foxguard"
+    pin_gate_output: "{{ dev_tools_foxguard_installed.stdout | default('') }}"
+
+- name: Install foxguard {{ foxguard_version }}
+  ansible.builtin.get_url:
+    url: "https://github.com/0sec-labs/foxguard/releases/download/v{{ foxguard_version }}/foxguard-linux-x86_64"
+    dest: "{{ nikos_home }}/.local/bin/foxguard"
+    checksum: "sha256:{{ foxguard_sha256 }}"
+    force: true
+    mode: "0755"
+  when:
+    - not ansible_check_mode
+    - pin_gate_install | bool
 
 # agentvault: carries AI tool rules and hooks between machines. Pinned release
 # binary, hashed by hand (the release has no sums file). Prints

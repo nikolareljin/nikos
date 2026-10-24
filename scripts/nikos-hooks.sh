@@ -102,6 +102,7 @@ cmd_status() {
   info "agentvault:     $(agentvault version 2>/dev/null | head -n 1 || true)"
   command -v agentvault >/dev/null 2>&1 || info "                not installed"
   info "gitleaks:       $(gitleaks version 2>/dev/null || echo "not installed")"
+  info "foxguard:       $(foxguard --version 2>/dev/null || echo "not installed")"
   info "machine-wide:   ${global:-off (nikos hooks --global)}"
   IFS=$'\t' read -r claude hook < <(claude_state)
   case "${claude}" in
