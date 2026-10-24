@@ -129,6 +129,31 @@
     'cannot be downgraded' not in (editors_ext_result.stderr | default(''))
   when: not ansible_check_mode
 
+- name: Create the private VS Code extension download directory
+  ansible.builtin.file:
+    path: "{{ nikos_user_download_dir }}"
+    state: directory
+    mode: "0700"
+  when: not ansible_check_mode
+
+- name: Download Leak Lock {{ leak_lock_version }}
+  ansible.builtin.get_url:
+    url: "https://github.com/nikolareljin/leak-lock/releases/download/v{{ leak_lock_version }}/leak-lock-{{ leak_lock_version }}.vsix"
+    dest: "{{ nikos_user_download_dir }}/leak-lock-{{ leak_lock_version }}.vsix"
+    checksum: "sha256:{{ leak_lock_sha256 }}"
+    mode: "0600"
+  when: not ansible_check_mode
+
+- name: Install Leak Lock {{ leak_lock_version }}
+  ansible.builtin.command: >-
+    code --install-extension {{ nikos_user_download_dir }}/leak-lock-{{ leak_lock_version }}.vsix --force
+  register: editors_leak_lock_result
+  changed_when: false
+  failed_when: >-
+    editors_leak_lock_result.rc != 0 and
+    'cannot be downgraded' not in (editors_leak_lock_result.stderr | default(''))
+  when: not ansible_check_mode
+
 - name: Install AI VS Code extensions
   ansible.builtin.command: code --install-extension {{ item }} --force
   loop: >-

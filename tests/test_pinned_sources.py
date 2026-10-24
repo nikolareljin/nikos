@@ -237,6 +237,34 @@ def test_every_pin_has_a_source_entry_and_is_used() -> None:
     assert unused == [], unused
 
 
+def test_leak_lock_uses_the_verified_release_vsix() -> None:
+    versions = _versions()
+    source = versions["nikos_pin_sources"]["leak_lock"]
+    assert source["repo"] == "nikolareljin/leak-lock"
+    assert source["tag_prefix"] == "v"
+    assert source["artifacts"] == [{
+        "asset": "leak-lock-{version}.vsix",
+        "sha256_var": "leak_lock_sha256",
+    }]
+
+    main = yaml.safe_load((REPO / "vars" / "main.yml").read_text(encoding="utf-8"))
+    for extensions in ("nikos_vscode_extensions", "nikos_vscode_ai_extensions"):
+        assert "nikolareljin.leak-lock" not in main[extensions]
+
+    tasks = _role_tasks("editors")
+    download = next(t for t in tasks if t["name"].startswith("Download Leak Lock"))
+    assert _module(download, "get_url") == {
+        "url": "https://github.com/nikolareljin/leak-lock/releases/download/v{{ leak_lock_version }}/leak-lock-{{ leak_lock_version }}.vsix",
+        "dest": "{{ nikos_user_download_dir }}/leak-lock-{{ leak_lock_version }}.vsix",
+        "checksum": "sha256:{{ leak_lock_sha256 }}",
+        "mode": "0600",
+    }
+    install = next(t for t in tasks if t["name"].startswith("Install Leak Lock"))
+    assert _module(install, "command") == (
+        "code --install-extension {{ nikos_user_download_dir }}/leak-lock-{{ leak_lock_version }}.vsix --force"
+    )
+
+
 def test_install_sh_carries_the_same_ansible_ppa_fingerprint() -> None:
     text = (REPO / "install.sh").read_text(encoding="utf-8")
     value = re.search(r'^ANSIBLE_PPA_KEY_FINGERPRINT="([0-9A-F]{40})"$', text, re.M).group(1)
