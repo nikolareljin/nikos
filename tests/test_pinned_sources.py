@@ -265,6 +265,32 @@ def test_leak_lock_uses_the_verified_release_vsix() -> None:
     )
 
 
+def test_foxguard_uses_the_shared_verified_release_pin() -> None:
+    versions = _versions()
+    source = versions["nikos_pin_sources"]["foxguard"]
+    assert source == {
+        "type": "github-release",
+        "repo": "0sec-labs/foxguard",
+        "tag_prefix": "v",
+        "version_var": "foxguard_version",
+        "artifacts": [{
+            "asset": "foxguard-linux-x86_64",
+            "sha256_var": "foxguard_sha256",
+            "checksums": "checksums.txt",
+        }],
+    }
+
+    tasks = _role_tasks("dev-tools")
+    install = next(t for t in tasks if t["name"].startswith("Install foxguard"))
+    assert _module(install, "get_url") == {
+        "url": "https://github.com/0sec-labs/foxguard/releases/download/v{{ foxguard_version }}/foxguard-linux-x86_64",
+        "dest": "{{ nikos_home }}/.local/bin/foxguard",
+        "checksum": "sha256:{{ foxguard_sha256 }}",
+        "force": True,
+        "mode": "0755",
+    }
+
+
 def test_install_sh_carries_the_same_ansible_ppa_fingerprint() -> None:
     text = (REPO / "install.sh").read_text(encoding="utf-8")
     value = re.search(r'^ANSIBLE_PPA_KEY_FINGERPRINT="([0-9A-F]{40})"$', text, re.M).group(1)

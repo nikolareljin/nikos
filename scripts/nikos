@@ -1156,6 +1156,7 @@ cmd_doctor() {
   optional_check "git-lantern has 'hooks'" lantern hooks --help
   optional_check "agentvault installed" command -v agentvault
   optional_check "gitleaks installed" command -v gitleaks
+  optional_check "foxguard installed" command -v foxguard
   optional_check "script-helpers.owners set (nikos hooks)" git config --global --get script-helpers.owners
   echo ""
   if [[ ${issues} -eq 0 ]]; then

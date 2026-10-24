@@ -22,7 +22,7 @@ def env(tmp_path):
     bindir.mkdir()
     log = tmp_path / "calls"
     log.write_text("")
-    for name in ("lantern", "agentvault", "gitleaks"):
+    for name in ("lantern", "agentvault", "gitleaks", "foxguard"):
         (bindir / name).write_text(
             f'#!/bin/sh\necho "{name} $*" >> "{log}"\n'
             'case "$*" in "hooks export "*) echo \'{"kind":"lantern-hooks","owners":["me","my-llc"]}\' > "$3" ;;\n'
@@ -61,6 +61,7 @@ def test_status_is_the_default_and_lists_the_tools(env):
     assert r.returncode == 0, r.stderr
     assert "script-helpers:" in r.stdout and "0.50.0" in r.stdout
     assert "owners:         unset" in r.stdout
+    assert "foxguard:" in r.stdout
     assert calls(env)[-1] == f"lantern hooks status --root {env['tmp'] / 'Projects'}"
 
 

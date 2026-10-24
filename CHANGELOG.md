@@ -4,6 +4,12 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+## [1.5.2] - 2026-10-24
+
+### Added
+- `nikos update` installs foxguard 0.14.1 beside gitleaks. `nikos hooks` and
+  `nikos doctor` show whether its advisory static-analysis scan can run.
+
 ### Changed
 - script-helpers submodule 0.54.0 -> 0.58.0, including the current hook
   checks and model-selection helpers. Shared CI workflows continue to use the
