@@ -25,6 +25,7 @@ def env(tmp_path):
     for name in ("lantern", "agentvault", "gitleaks", "foxguard"):
         (bindir / name).write_text(
             f'#!/bin/sh\necho "{name} $*" >> "{log}"\n'
+            f'[ "{name}:$*" = "foxguard:--version" ] && echo "foxguard 0.14.1"\n'
             'case "$*" in "hooks export "*) echo \'{"kind":"lantern-hooks","owners":["me","my-llc"]}\' > "$3" ;;\n'
             '  "export "*) : > "$2" ;; "hooks --help") [ -n "$NO_HOOKS" ] && exit 2; exit 0 ;; esac\n'
             'exit "${STUB_RC:-0}"\n')
@@ -62,6 +63,7 @@ def test_status_is_the_default_and_lists_the_tools(env):
     assert "script-helpers:" in r.stdout and "0.50.0" in r.stdout
     assert "owners:         unset" in r.stdout
     assert "foxguard:" in r.stdout
+    assert "foxguard:       foxguard 0.14.1" in r.stdout
     status_calls = calls(env)
     assert "foxguard --version" in status_calls
     assert status_calls[-1] == f"lantern hooks status --root {env['tmp'] / 'Projects'}"
