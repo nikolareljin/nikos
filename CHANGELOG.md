@@ -4,6 +4,17 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+## [1.5.3] - 2026-10-26
+
+### Changed
+- The default local-model module now pulls `OLLAMA_CODE_MODEL` with the general
+  model, using one tier-resolved model per role.
+- `ai-models.env` was regenerated from the fleet registry. Small machines use
+  `granite4.1:3b` for code; larger classes use the current code and reasoning
+  models selected for their hardware.
+- script-helpers pins merged commit `d891cfa`, which selects the same small
+  code model for callers that use its built-in model tiers.
+
 ## [1.5.2] - 2026-10-24
 
 ### Added

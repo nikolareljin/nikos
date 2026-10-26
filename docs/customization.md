@@ -108,8 +108,8 @@ without reinstalling those packages.
 
 Models come in modules, and each module pulls **one model per role, the one this
 machine can run**. The model per role and class of machine is the fleet's approved set,
-in `ai-models.env` (ADR-0058). The default module is always pulled; the others when
-you ask:
+in `ai-models.env` (ADR-0058). The default module is always pulled and includes the
+resolved general and code models. The others are pulled when you ask:
 
 ```bash
 nikos add ollama-text        # general, creative, extract, classify
@@ -127,8 +127,8 @@ nikos add model qwen3:14b    # any other model, on purpose; updates keep it
 | text | creative | `qwen3.5:4b` | `gemma4:latest` | `gemma4:latest` | `gemma4:latest` |
 | text | extract | `qwen3.5:2b` | `qwen3.5:4b` | `qwen3.5:9b` | `qwen3.5:9b` |
 | text | classify | `qwen3:1.7b` | `qwen3:1.7b` | `qwen3:1.7b` | `qwen3:1.7b` |
-| reasoning | reasoning | `qwen3.5:4b` | `qwen3:8b` | `qwen3:8b` | `gpt-oss:20b` |
-| coding | code | `qwen3.5:4b` | `qwen2.5-coder:7b` | `qwen2.5-coder:7b` | `qwen3-coder:30b` |
+| reasoning | reasoning | `qwen3.5:4b` | `qwen3:8b` | `gemma4:26b` | `qwen3.6:27b` |
+| default, coding | code | `granite4.1:3b` | `qwen2.5-coder:7b` | `qwen3-coder:30b` | `qwen3.6:27b-coding` |
 | vision | vision | `qwen3-vl:4b` | `qwen3-vl:4b` | `qwen3-vl:8b` | `qwen3-vl:8b` |
 | embedding | embed | `nomic-embed-text` | `nomic-embed-text` | `nomic-embed-text` | `nomic-embed-text` |
 
