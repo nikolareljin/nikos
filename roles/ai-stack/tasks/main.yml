@@ -327,7 +327,7 @@
 # and updates replay it. `nikos update` first offers to remove models that are
 # not approved for this machine (scripts/nikos).
 
-- name: Pull this machine's the default model Ollama models
+- name: Pull this machine's default Ollama models
   ansible.builtin.command:
     argv: "{{ [playbook_dir ~ '/scripts/script-helpers/scripts/ollama_models.sh', 'ensure',
               playbook_dir ~ '/ai-models.env', 'http://' ~ nikos_ollama_host] + ai_stack_model_modules.default }}"
@@ -339,7 +339,7 @@
     AI_MODEL_TIER: "{{ nikos_ai_model_tier | default('') }}"
   when: nikos_ollama_mode == 'local'
 
-- name: Say which of the the default model models were not pulled
+- name: Say which default Ollama models were not pulled
   ansible.builtin.debug:
     msg: "{{ (ai_stack_models_default.stderr_lines | default([]))[-6:] }}"
   when:
