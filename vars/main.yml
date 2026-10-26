@@ -192,10 +192,11 @@ nikos_chromium_dark: true
 # Name the class instead of measuring it (small, standard, large or xlarge):
 nikos_ai_model_tier: ""
 
-# The modules: which roles of ai-models.env each one pulls. The default always;
-# the others with `nikos add ollama-<module>`.
+# The modules: which roles of ai-models.env each one pulls. The default is
+# always present for the local clients, including the coding model used by
+# aider, Continue and ai-runner. The others use `nikos add ollama-<module>`.
 ai_stack_model_modules:
-  default: [OLLAMA_MODEL]
+  default: [OLLAMA_MODEL, OLLAMA_CODE_MODEL]
   text: [OLLAMA_MODEL, OLLAMA_CREATIVE_MODEL, OLLAMA_EXTRACT_MODEL, OLLAMA_CLASSIFY_MODEL]
   reasoning: [OLLAMA_REASONING_MODEL]
   coding: [OLLAMA_CODE_MODEL]

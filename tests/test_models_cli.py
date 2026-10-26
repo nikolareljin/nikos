@@ -159,7 +159,7 @@ def run_play(tmp_path, tags=None, tier=""):
 def test_a_plain_run_pulls_only_the_default_module(tmp_path):
     r, calls = run_play(tmp_path)
     assert r.returncode == 0, r.stdout[-2000:]
-    assert len(calls) == 1 and calls[0].endswith("http://127.0.0.1:11434 OLLAMA_MODEL")
+    assert len(calls) == 1 and calls[0].endswith("http://127.0.0.1:11434 OLLAMA_MODEL OLLAMA_CODE_MODEL")
     assert calls[0].startswith("|1|ensure ") and "/ai-models.env " in calls[0]
 
 
@@ -168,6 +168,27 @@ def test_a_selected_module_pulls_its_roles_with_the_class_named(tmp_path):
     assert r.returncode == 0, r.stdout[-2000:]
     assert calls == [c for c in calls if c.startswith("large|1|")] and len(calls) == 1
     assert calls[0].endswith(" OLLAMA_CODE_MODEL")
+
+
+@pytest.mark.parametrize(
+    ("tier", "expected"),
+    [
+        ("small", "granite4.1:3b"),
+        ("standard", "qwen2.5-coder:7b"),
+        ("large", "qwen3-coder:30b"),
+        ("xlarge", "qwen3.6:27b-coding"),
+    ],
+)
+def test_hosts_resolve_the_approved_code_model_for_their_tier(tier, expected):
+    result = subprocess.run(
+        [str(ROOT / "scripts/script-helpers/scripts/ollama_models.sh"), "pick", str(ROOT / "ai-models.env"), "OLLAMA_CODE_MODEL"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, "AI_MODEL_TIER": tier},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == expected
 
 
 def test_ollama_models_pulls_every_role(tmp_path):
