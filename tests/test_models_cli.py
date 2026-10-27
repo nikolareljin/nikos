@@ -185,7 +185,9 @@ def test_a_selected_module_pulls_its_roles_with_the_class_named(tmp_path):
 )
 def test_hosts_resolve_the_approved_code_model_for_their_tier(home, tier, expected):
     local = Path(home["NIKOS_HOME"]) / "vars/local.yml"
-    local.write_text(local.read_text() + f'nikos_ai_model_tier: "{tier}"\n')
+    local.write_text(
+        local.read_text().replace('nikos_ai_model_tier: "standard"', f'nikos_ai_model_tier: "{tier}"')
+    )
     result = nikos(home, "models")
     assert result.returncode == 0, result.stderr
     assert f"OLLAMA_CODE_MODEL={expected}" in result.stdout
