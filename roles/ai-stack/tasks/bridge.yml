@@ -170,7 +170,14 @@
       # Managed by NikOS (roles/ai-stack). The socket requires it.
       [Unit]
       Description=NikOS: the Ollama forwarder answers only on Docker's bridges
-      Before=nikos-ollama-bridge.socket
+      # sockets.target pulls this in, and a target starts after what it wants.
+      # A service's default dependencies order it after basic.target, which
+      # comes after sockets.target: a cycle, which systemd breaks at boot by
+      # dropping this job, and the socket that requires it never listens.
+      DefaultDependencies=no
+      After=sysinit.target
+      Before=nikos-ollama-bridge.socket shutdown.target
+      Conflicts=shutdown.target
       # nftables.service flushes the whole ruleset when it (re)starts; load
       # after it, and again whenever it restarts.
       After=nftables.service

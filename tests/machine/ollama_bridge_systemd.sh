@@ -14,6 +14,7 @@
 #      from_docker (behind docker0) gets the stand-in Ollama and from_lan, with
 #      a route to the bridge address, gets nothing;
 #   C. a second run changes nothing;
+#   E. after a reboot the socket and its filter are active (no ordering cycle);
 #   D. nikos_ollama_bridge=off removes every unit and file; nothing listens.
 # A stand-in docker CLI names docker0 as Docker's bridge; there is no Docker
 # daemon in the image.
@@ -118,6 +119,23 @@ changed="$(echo "${again}" | sed -n 's/.*changed=\([0-9]*\).*/\1/p' | head -1)"
 echo "C: second run: changed=${changed}"
 [[ "${changed}" == 0 ]] || { echo "${again}" | grep -B1 "changed:" | head -20; echo "FAIL: a second run changed something"; exit 1; }
 
+# E: what a reboot does. The play starts the units by hand; only a boot shows
+# whether systemd starts them itself (an ordering cycle drops the job).
+docker restart "${name}" >/dev/null
+for _ in $(seq 1 120); do
+  state="$(docker exec "${name}" systemctl is-system-running 2>/dev/null || true)"
+  [[ "${state}" == running || "${state}" == degraded ]] && break
+  sleep 2
+done
+inside 'systemctl is-active nikos-ollama-bridge.socket nikos-ollama-bridge-filter.service' \
+  || { inside 'journalctl -b --no-pager | grep -i -E "ordering cycle|nikos-ollama" | head -5' || true
+       echo "FAIL: after a reboot the forwarder is not listening"; exit 1; }
+# systemd breaks an ordering cycle by dropping one job of its choosing, so the
+# units may come up by luck; the cycle is logged either way.
+cycle="$(docker exec "${name}" journalctl -b --no-pager 2>/dev/null | grep -A3 'Found ordering cycle' | grep -m1 nikos-ollama || true)"
+[[ -z "${cycle}" ]] || { echo "${cycle}"; echo "FAIL: the forwarder's units are in an ordering cycle at boot"; exit 1; }
+echo "E: after a reboot the socket and its filter are active, no ordering cycle"
+
 off="$(play off 2>&1)" || { echo "${off}" | tail -20; echo "FAIL: the run with off failed"; exit 1; }
 # shellcheck disable=SC2016  # expanded inside the container
 inside 'for f in /etc/systemd/system/nikos-ollama-bridge.socket /etc/systemd/system/nikos-ollama-bridge.service \
@@ -127,4 +145,4 @@ inside 'for f in /etc/systemd/system/nikos-ollama-bridge.socket /etc/systemd/sys
     ! nft list table inet nikos_ollama_bridge >/dev/null 2>&1' \
   || { echo "FAIL: off left something behind"; exit 1; }
 echo "D: off removed every unit and file"
-echo "ok: warned about a shared range, installed, answered a container, refused the LAN, idempotent, removed by off"
+echo "ok: warned about a shared range, installed, answered a container, refused the LAN, idempotent, up after a reboot, removed by off"

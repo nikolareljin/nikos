@@ -166,6 +166,36 @@ def test_the_units_listen_on_the_bridge_and_forward_to_loopback(tmp_path, bindir
     assert "ExecCondition=+/usr/local/libexec/nikos-ollama-bridge-check" in svc
 
 
+# Units an early boot target pulls in: the target is ordered after each of
+# them, so a service there with default dependencies (after basic.target,
+# itself after sockets.target) is a cycle. systemd breaks it at boot by
+# dropping a job, and systemd-analyze verify does not report it.
+EARLY_TARGETS = {"sysinit.target", "sockets.target", "basic.target", "local-fs.target", "paths.target", "timers.target"}
+
+
+def _ini(text):
+    keys = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith(("#", "[")) and "=" in line:
+            key, value = line.split("=", 1)
+            keys.setdefault(key.strip(), []).extend(value.split())
+    return keys
+
+
+def test_no_service_an_early_target_wants_keeps_default_dependencies(tmp_path, bindir):
+    units = _write_units(tmp_path, bindir)
+    checked = 0
+    for unit in units.glob("*.service"):
+        keys = _ini(unit.read_text())
+        early = EARLY_TARGETS.intersection(keys.get("WantedBy", []) + keys.get("RequiredBy", []))
+        if early:
+            checked += 1
+            assert keys.get("DefaultDependencies") == ["no"], (
+                f"{unit.name} is wanted by {sorted(early)} with default dependencies: an ordering cycle at boot")
+    assert checked, "the filter service is wanted by sockets.target; nothing was checked"
+
+
 @pytest.mark.skipif(not shutil.which("systemd-analyze") or not Path("/usr/lib/systemd/systemd-socket-proxyd").exists(),
                     reason="needs systemd-analyze and systemd-socket-proxyd")
 def test_the_units_pass_systemd_analyze_verify(tmp_path, bindir):

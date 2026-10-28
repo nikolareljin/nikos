@@ -4,6 +4,20 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Fixed
+- The Ollama forwarder for containers starts at boot again. Its filter
+  service is wanted by `sockets.target` and kept the default dependencies,
+  which order a service after `basic.target`, itself after `sockets.target`.
+  systemd broke that cycle at every boot by dropping the filter's start job
+  ("Found ordering cycle on nikos-ollama-bridge-filter.service/start"), so the
+  socket that requires it never listened: containers using the host's Ollama
+  got "connection refused" until someone started it by hand. The filter
+  service now has `DefaultDependencies=no` and runs after `sysinit.target`.
+  `nikos update` rewrites and restarts it. Tests: a pytest refuses any
+  service an early boot target wants with default dependencies (fails on the
+  old unit); `tests/machine/ollama_bridge_systemd.sh` reboots its systemd
+  container and requires the socket and filter active (step E).
+
 ## [1.5.2] - 2026-10-24
 
 ### Added
