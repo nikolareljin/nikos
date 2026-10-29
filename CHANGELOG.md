@@ -4,7 +4,7 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
-## [1.5.3] - 2026-10-26
+## [1.5.3] - 2026-10-29
 
 ### Changed
 - The default local-model module now pulls `OLLAMA_CODE_MODEL` with the general
