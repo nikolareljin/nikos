@@ -122,7 +122,8 @@
       <tr>
         <td><strong>Installs Ollama</strong></td>
         <td>From its pinned, sha256-checked release archive (not a piped install script). Runs as a system service
-        on 127.0.0.1:11434 and pulls one model by default (<code>qwen3.5:4b</code>, 3.4&nbsp;GB). Nothing else is
+        on 127.0.0.1:11434 and pulls two models by default, a general and a code model sized for the machine
+        (on most laptops <code>qwen3.5:4b</code> and <code>qwen2.5-coder:7b</code>, about 8&nbsp;GB). Nothing else is
         downloaded unless you ask for it. On an NVIDIA GPU with no driver loaded, Ubuntu's
         <code>ubuntu-drivers install</code> adds one (turn off with <code>nikos_nvidia_drivers: false</code>).</td>
       </tr>
@@ -211,7 +212,7 @@
     <div class="card">
       <h3>Running models locally</h3>
       <p>Ollama with model groups you opt into by capability — reasoning, coding, text, vision, embeddings.
-      The default model, <code>qwen3.5:4b</code>, is 3.4&nbsp;GB and runs on an 8&nbsp;GB laptop.</p>
+      The default general and code models are sized for the machine, down to an 8&nbsp;GB laptop.</p>
     </div>
     <div class="card">
       <h3>Building on top of them</h3>

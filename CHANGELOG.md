@@ -4,6 +4,22 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+## [1.5.3] - 2026-10-29
+
+### Changed
+- The default local-model module now pulls `OLLAMA_CODE_MODEL` with the general
+  model, using one tier-resolved model per role. README, docs and the site
+  give the new model tables and the two default models.
+- `ai-models.env` was regenerated from the fleet registry. Small machines use
+  `granite4.1:3b` for code; larger classes use the current code and reasoning
+  models selected for their hardware.
+- script-helpers submodule 0.58.0 -> 0.60.0. Machine classes are measured in
+  usable memory: memory less 20% and the largest GPU less 1 GiB. Small is
+  now under 9 GiB usable (was 11 GiB), large from 24 GiB usable memory (was
+  30 GiB) or the role's usable GPU figure: 23 GiB for reasoning and code
+  (was 19), 31 GiB for their xlarge models (was 23). `medium` is accepted as
+  another name for `standard` in `nikos_ai_model_tier`.
+
 ### Fixed
 - The Ollama forwarder for containers starts at boot again. Its filter
   service is wanted by `sockets.target` and kept the default dependencies,

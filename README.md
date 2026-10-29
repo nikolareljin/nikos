@@ -79,7 +79,7 @@ At the end, you should end up with something like:
 ### AI stack
 | Tool | Purpose |
 |---|---|
-| [Ollama](https://ollama.com) | Local LLM runtime, `qwen3.5:4b` pre-pulled |
+| [Ollama](https://ollama.com) | Local LLM runtime, resolved general and code models pre-pulled |
 | [aider](https://aider.chat) | AI pair programmer in the terminal, in its own `nikos-aider` env; run `aider` |
 | [Miniforge](https://github.com/conda-forge/miniforge) | Python distribution (conda) |
 | `nikos-ai` conda env | Python 3.11-3.13 + PyTorch CPU + Jupyter + transformers + pandas |
@@ -96,8 +96,8 @@ At the end, you should end up with something like:
 
 Models come in modules, and each module pulls **one model per role, the one this
 machine can run**. The model per role and class of machine is the fleet's approved set,
-in `ai-models.env` (ADR-0058). The default module is always pulled; the others when
-you ask:
+in `ai-models.env` (ADR-0058). The default module is always pulled and includes the
+resolved general and code models. The other modules are pulled when you ask:
 
 ```bash
 nikos add ollama-text        # general, creative, extract, classify
@@ -115,22 +115,25 @@ nikos add model qwen3:14b    # any other model, on purpose; updates keep it
 | text | creative | `qwen3.5:4b` | `gemma4:latest` | `gemma4:latest` | `gemma4:latest` |
 | text | extract | `qwen3.5:2b` | `qwen3.5:4b` | `qwen3.5:9b` | `qwen3.5:9b` |
 | text | classify | `qwen3:1.7b` | `qwen3:1.7b` | `qwen3:1.7b` | `qwen3:1.7b` |
-| reasoning | reasoning | `qwen3.5:4b` | `qwen3:8b` | `qwen3:8b` | `gpt-oss:20b` |
-| coding | code | `qwen3.5:4b` | `qwen2.5-coder:7b` | `qwen2.5-coder:7b` | `qwen3-coder:30b` |
+| reasoning | reasoning | `qwen3.5:4b` | `qwen3:8b` | `gemma4:26b` | `qwen3.6:27b` |
+| default, coding | code | `granite4.1:3b` | `qwen2.5-coder:7b` | `qwen3-coder:30b` | `qwen3.6:27b-coding` |
 | vision | vision | `qwen3-vl:4b` | `qwen3-vl:4b` | `qwen3-vl:8b` | `qwen3-vl:8b` |
 | embedding | embed | `nomic-embed-text` | `nomic-embed-text` | `nomic-embed-text` | `nomic-embed-text` |
 
-Class of machine, measured by script-helpers (whole GiB):
+Class of machine, measured by script-helpers in whole usable GiB: memory less
+20%, and the largest GPU less 1 GiB (`AI_TIER_RAM_RESERVE_PERCENT`,
+`AI_TIER_GPU_RESERVE_GB` in `ai-models.env`):
 
-- small: less than 11 GiB of memory and of GPU memory
-- standard: the default
-- large: a GPU with the role's large figure (11 GiB), or 30 GiB of memory
-- xlarge: a GPU with the role's xlarge figure (15 GiB for reasoning, 23 for code)
+- small: less than 9 GiB of usable memory and of usable GPU memory
+- standard (or medium): the default
+- large: a GPU with the role's large figure (11 GiB usable; 23 for reasoning
+  and code), or 24 GiB of usable memory
+- xlarge: a GPU with the role's xlarge figure (31 GiB usable, reasoning and code)
 
 A role with no model for a class uses the next one down.
 
 Before each pull, script-helpers checks disk and memory; a model that does not fit
-falls back one class. `nikos_ai_model_tier: small|standard|large|xlarge` in
+falls back one class. `nikos_ai_model_tier: small|standard|medium|large|xlarge` in
 `vars/local.yml` names the class instead of measuring it. `nikos models` shows the
 class and the model per role.
 
@@ -250,7 +253,7 @@ editing tracked files:
 
 ```yaml
 nikos_timezone: "Europe/London"     # override this for your timezone
-nikos_ai_model_tier: ""            # small|standard|large|xlarge; empty measures the machine
+nikos_ai_model_tier: ""            # small|standard|medium|large|xlarge; empty measures the machine
 nikos_desktop_flavor: "xubuntu-minimal"   # or xubuntu-full / xfce
 nikos_remove_gnome: false           # true purges GNOME instead of keeping it selectable
 nikos_vscode_extensions:            # add/remove VS Code extensions

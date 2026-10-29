@@ -69,7 +69,7 @@
       <tr><td><code>desktop</code></td><td>The Xubuntu desktop package set, LightDM and its GTK greeter. Detects an existing GNOME install, hands <code>display-manager.service</code> to LightDM, and sets the account's default session.</td></tr>
       <tr><td><code>theming</code></td><td>Nord GTK theme and icons, a generated wallpaper, GRUB theme, Plymouth boot splash (<a href="https://github.com/nikolareljin/nikos/blob/main/THIRD-PARTY-NOTICES.md">GPL-3.0-or-later</a>, derived from Xubuntu's theme), an autostart entry that applies the wallpaper across every connected monitor, and dark Firefox, Chromium and Google Chrome in the desktop colour (existing profiles only).</td></tr>
       <tr><td><code>github-setup</code></td><td>GitHub CLI from GitHub's apt repository, plus the first-run wizard for auth, SSH keys and git identity.</td></tr>
-      <tr><td><code>ai-stack</code></td><td>Ollama as a user service, the default model, Miniforge, the <code>nikos-ai</code> conda environment, PyTorch (CPU), and llama.cpp binaries.</td></tr>
+      <tr><td><code>ai-stack</code></td><td>Ollama as a system service, the default general and code models, Miniforge, the <code>nikos-ai</code> conda environment, PyTorch (CPU), and llama.cpp binaries.</td></tr>
       <tr><td><code>editors</code></td><td>VS Code from Microsoft's apt repository, plus the extension set.</td></tr>
       <tr><td><code>cloud-ai-cli</code></td><td>Gemini CLI, GitHub Copilot CLI, shell-gpt and glances via pipx. Provides the Node the npm-only CLIs run on: the system one when it is new enough, otherwise a pinned Node under your home through nvm.</td></tr>
       <tr><td><code>agent-dev</code></td><td>The agent frameworks, ML libraries and image analysis stack in the conda environment, plus Claude Code.</td></tr>
@@ -247,17 +247,19 @@
       <tr><td>text</td><td>creative</td><td><code>qwen3.5:4b</code></td><td><code>gemma4:latest</code></td><td><code>gemma4:latest</code></td><td><code>gemma4:latest</code></td></tr>
       <tr><td>text</td><td>extract</td><td><code>qwen3.5:2b</code></td><td><code>qwen3.5:4b</code></td><td><code>qwen3.5:9b</code></td><td><code>qwen3.5:9b</code></td></tr>
       <tr><td>text</td><td>classify</td><td><code>qwen3:1.7b</code></td><td><code>qwen3:1.7b</code></td><td><code>qwen3:1.7b</code></td><td><code>qwen3:1.7b</code></td></tr>
-      <tr><td>reasoning</td><td>reasoning</td><td><code>qwen3.5:4b</code></td><td><code>qwen3:8b</code></td><td><code>qwen3:8b</code></td><td><code>gpt-oss:20b</code></td></tr>
-      <tr><td>coding</td><td>code</td><td><code>qwen3.5:4b</code></td><td><code>qwen2.5-coder:7b</code></td><td><code>qwen2.5-coder:7b</code></td><td><code>qwen3-coder:30b</code></td></tr>
+      <tr><td>reasoning</td><td>reasoning</td><td><code>qwen3.5:4b</code></td><td><code>qwen3:8b</code></td><td><code>gemma4:26b</code></td><td><code>qwen3.6:27b</code></td></tr>
+      <tr><td>default, coding</td><td>code</td><td><code>granite4.1:3b</code></td><td><code>qwen2.5-coder:7b</code></td><td><code>qwen3-coder:30b</code></td><td><code>qwen3.6:27b-coding</code></td></tr>
       <tr><td>vision</td><td>vision</td><td><code>qwen3-vl:4b</code></td><td><code>qwen3-vl:4b</code></td><td><code>qwen3-vl:8b</code></td><td><code>qwen3-vl:8b</code></td></tr>
       <tr><td>embedding</td><td>embed</td><td><code>nomic-embed-text</code></td><td><code>nomic-embed-text</code></td><td><code>nomic-embed-text</code></td><td><code>nomic-embed-text</code></td></tr>
     </tbody>
   </table>
   </div>
 
-  <p>The class is measured: <strong>small</strong> has less than 11&nbsp;GiB of memory and of GPU memory;
-  <strong>large</strong> has a GPU with 11&nbsp;GiB or 30&nbsp;GiB of memory; <strong>xlarge</strong> has a GPU
-  with 15&nbsp;GiB (reasoning) or 23&nbsp;GiB (code); <strong>standard</strong> is the rest. Disk and memory
+  <p>The class is measured in usable memory: memory less 20%, and the largest GPU less 1&nbsp;GiB.
+  <strong>small</strong> has less than 9&nbsp;GiB usable of memory and of GPU memory;
+  <strong>large</strong> has a GPU with 11&nbsp;GiB usable (23&nbsp;GiB for reasoning and code) or 24&nbsp;GiB
+  of usable memory; <strong>xlarge</strong> has a GPU with 31&nbsp;GiB usable (reasoning and code);
+  <strong>standard</strong> (or medium) is the rest. Disk and memory
   are checked before each pull, and a model that does not fit falls back one class.
   <code>nikos_ai_model_tier</code> names the class instead; <code>nikos models</code> shows it.</p>
 
