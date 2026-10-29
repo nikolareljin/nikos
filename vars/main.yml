@@ -193,8 +193,8 @@ nikos_chromium_dark: true
 nikos_ai_model_tier: ""
 
 # The modules: which roles of ai-models.env each one pulls. The default is
-# always present for the local clients, including the coding model used by
-# aider, Continue and ai-runner. The others use `nikos add ollama-<module>`.
+# always pulled: the general model and the code model, so a local coding
+# client has one installed. The others with `nikos add ollama-<module>`.
 ai_stack_model_modules:
   default: [OLLAMA_MODEL, OLLAMA_CODE_MODEL]
   text: [OLLAMA_MODEL, OLLAMA_CREATIVE_MODEL, OLLAMA_EXTRACT_MODEL, OLLAMA_CLASSIFY_MODEL]
