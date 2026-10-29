@@ -12,8 +12,12 @@ All notable changes to NikOS are documented here.
 - `ai-models.env` was regenerated from the fleet registry. Small machines use
   `granite4.1:3b` for code; larger classes use the current code and reasoning
   models selected for their hardware.
-- script-helpers pins merged commit `d891cfa`, which selects the same small
-  code model for callers that use its built-in model tiers.
+- script-helpers submodule 0.58.0 -> 0.60.0. Machine classes are measured in
+  usable memory: memory less 20% and the largest GPU less 1 GiB. Small is
+  now under 9 GiB usable (was 11 GiB), large from 24 GiB usable memory (was
+  30 GiB) or the role's usable GPU figure: 23 GiB for reasoning and code
+  (was 19), 31 GiB for their xlarge models (was 23). `medium` is accepted as
+  another name for `standard` in `nikos_ai_model_tier`.
 
 ## [1.5.2] - 2026-10-24
 
