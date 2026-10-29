@@ -178,18 +178,18 @@ nikos_chromium_dark: true
 # ── Ollama models ────────────────────────────────────────────────────────────
 # One model per role (general, reasoning, code, vision, embedding, ...), this
 # machine's column of the fleet's approved set in ai-models.env (ADR-0058).
-# script-helpers picks the column from memory and the largest GPU:
-#   small     less than 11 GiB of memory and of GPU memory
+# script-helpers picks the column from usable memory and the largest usable GPU:
+#   small     less than 9 GiB of usable memory and GPU memory
 #   standard  the default
-#   large     a GPU with the role's NAME_LARGE_VRAM_GB, or 30 GiB of memory
-#   xlarge    a GPU with the role's NAME_XLARGE_VRAM_GB
+#   large     a GPU with the role's NAME_LARGE_MIN_USABLE_VRAM_GB, or 24 GiB usable memory
+#   xlarge    a GPU with the role's NAME_XLARGE_MIN_USABLE_VRAM_GB
 # `nikos setup` and `nikos update` pull the default module and the modules
 # selected with `nikos add ollama-<module>`. `nikos update` first offers to
 # remove installed models not approved for this machine, one question each.
 # `nikos add model <name>` installs another model on purpose, and updates keep
 # it. `nikos models` shows the class and the model per role.
 #
-# Name the class instead of measuring it (small, standard, large or xlarge):
+# Name the class instead of measuring it (small, standard or medium, large or xlarge):
 nikos_ai_model_tier: ""
 
 # The modules: which roles of ai-models.env each one pulls. The default is

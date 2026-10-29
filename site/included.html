@@ -255,9 +255,11 @@
   </table>
   </div>
 
-  <p>The class is measured: <strong>small</strong> has less than 11&nbsp;GiB of memory and of GPU memory;
-  <strong>large</strong> has a GPU with 11&nbsp;GiB or 30&nbsp;GiB of memory; <strong>xlarge</strong> has a GPU
-  with 15&nbsp;GiB (reasoning) or 23&nbsp;GiB (code); <strong>standard</strong> is the rest. Disk and memory
+  <p>The class is measured in usable memory: memory less 20%, and the largest GPU less 1&nbsp;GiB.
+  <strong>small</strong> has less than 9&nbsp;GiB usable of memory and of GPU memory;
+  <strong>large</strong> has a GPU with 11&nbsp;GiB usable (23&nbsp;GiB for reasoning and code) or 24&nbsp;GiB
+  of usable memory; <strong>xlarge</strong> has a GPU with 31&nbsp;GiB usable (reasoning and code);
+  <strong>standard</strong> (or medium) is the rest. Disk and memory
   are checked before each pull, and a model that does not fit falls back one class.
   <code>nikos_ai_model_tier</code> names the class instead; <code>nikos models</code> shows it.</p>
 

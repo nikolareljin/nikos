@@ -179,6 +179,7 @@ def test_a_selected_module_pulls_its_roles_with_the_class_named(tmp_path):
     [
         ("small", "granite4.1:3b"),
         ("standard", "qwen2.5-coder:7b"),
+        ("medium", "qwen2.5-coder:7b"),
         ("large", "qwen3-coder:30b"),
         ("xlarge", "qwen3.6:27b-coding"),
     ],

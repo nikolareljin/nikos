@@ -12,8 +12,32 @@ All notable changes to NikOS are documented here.
 - `ai-models.env` was regenerated from the fleet registry. Small machines use
   `granite4.1:3b` for code; larger classes use the current code and reasoning
   models selected for their hardware.
-- script-helpers pins merged commit `d891cfa`, which selects the same small
-  code model for callers that use its built-in model tiers.
+- script-helpers submodule 0.58.0 -> 0.60.0. Machine classes are measured in
+  usable memory: memory less 20% and the largest GPU less 1 GiB. Small is
+  now under 9 GiB usable (was 11 GiB), large from 24 GiB usable memory (was
+  30 GiB) or the role's usable GPU figure: 23 GiB for reasoning and code
+  (was 19), 31 GiB for their xlarge models (was 23). `medium` is accepted as
+  another name for `standard` in `nikos_ai_model_tier`.
+
+### Fixed
+- The Ollama forwarder for containers starts at boot again. Its filter
+  service is wanted by `sockets.target` and kept the default dependencies,
+  which order a service after `basic.target`, itself after `sockets.target`.
+  systemd broke that cycle at every boot by dropping the filter's start job
+  ("Found ordering cycle on nikos-ollama-bridge-filter.service/start"), so the
+  socket that requires it never listened: containers using the host's Ollama
+  got "connection refused" until someone started it by hand. The filter
+  service now has `DefaultDependencies=no` and runs after `sysinit.target`.
+  It no longer runs the refresh at start: that asks Docker, which starts
+  after `basic.target`, so once the cycle was gone the boot would wait on it
+  forever. The watcher, ordered after `docker.service`, fills the filter's
+  sets on every start. `nikos update` rewrites and restarts both. Tests:
+  pytests refuse a service an early boot target wants with default
+  dependencies, or one that asks Docker (each fails on the old unit);
+  `tests/machine/ollama_bridge_systemd.sh` reboots its systemd container,
+  with a stand-in Docker that answers only after `basic.target`, and requires
+  the boot to finish, the socket and filter active and the bridges loaded
+  (step E; on the unit before this change the boot hangs).
 
 ## [1.5.2] - 2026-10-24
 
