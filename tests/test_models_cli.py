@@ -149,8 +149,12 @@ def run_play(tmp_path, tags=None, tier=""):
                       "nikos_ollama_host": "127.0.0.1:11434", "nikos_ai_model_tier": tier},
              "tasks": tasks}]
     (tmp_path / "play.yml").write_text(yaml.safe_dump(play))
-    cmd = ["ansible-playbook", "-i", "localhost,", "play.yml"] + (["--tags", tags] if tags else [])
-    r = subprocess.run(cmd, cwd=tmp_path, capture_output=True, text=True, timeout=180,
+    commands = {
+        None: ["ansible-playbook", "-i", "localhost,", "play.yml"],
+        "ollama-coding": ["ansible-playbook", "-i", "localhost,", "play.yml", "--tags", "ollama-coding"],
+        "ollama-models": ["ansible-playbook", "-i", "localhost,", "play.yml", "--tags", "ollama-models"],
+    }
+    r = subprocess.run(commands[tags], cwd=tmp_path, capture_output=True, text=True, timeout=180,
                        env={**os.environ, "ANSIBLE_NOCOLOR": "1"}, stdin=subprocess.DEVNULL)
     calls = (tmp_path / "calls").read_text().splitlines() if (tmp_path / "calls").exists() else []
     return r, calls
@@ -175,20 +179,19 @@ def test_a_selected_module_pulls_its_roles_with_the_class_named(tmp_path):
     [
         ("small", "granite4.1:3b"),
         ("standard", "qwen2.5-coder:7b"),
+        ("medium", "qwen2.5-coder:7b"),
         ("large", "qwen3-coder:30b"),
         ("xlarge", "qwen3.6:27b-coding"),
     ],
 )
-def test_hosts_resolve_the_approved_code_model_for_their_tier(tier, expected):
-    result = subprocess.run(
-        [str(ROOT / "scripts/script-helpers/scripts/ollama_models.sh"), "pick", str(ROOT / "ai-models.env"), "OLLAMA_CODE_MODEL"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        env={**os.environ, "AI_MODEL_TIER": tier},
+def test_hosts_resolve_the_approved_code_model_for_their_tier(home, tier, expected):
+    local = Path(home["NIKOS_HOME"]) / "vars/local.yml"
+    local.write_text(
+        local.read_text().replace('nikos_ai_model_tier: "standard"', f'nikos_ai_model_tier: "{tier}"')
     )
+    result = nikos(home, "models")
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == expected
+    assert f"OLLAMA_CODE_MODEL={expected}" in result.stdout
 
 
 def test_ollama_models_pulls_every_role(tmp_path):
