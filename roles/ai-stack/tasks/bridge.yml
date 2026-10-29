@@ -187,8 +187,10 @@
       Type=oneshot
       RemainAfterExit=yes
       ExecStart=/usr/sbin/nft -f /etc/nikos/ollama-bridge.nft
-      # Docker may not be up yet at boot; the watcher refreshes once it is.
-      ExecStartPost=-/usr/local/libexec/nikos-ollama-bridge-refresh
+      # No refresh here: it asks Docker, and at boot Docker starts after
+      # basic.target, which waits on this unit, so the boot would hang. The
+      # watcher (after docker.service, PartOf this unit) fills the sets on
+      # every start of this unit.
       ExecStop=/usr/sbin/nft delete table inet nikos_ollama_bridge
 
       [Install]

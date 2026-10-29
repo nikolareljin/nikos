@@ -13,10 +13,16 @@ All notable changes to NikOS are documented here.
   socket that requires it never listened: containers using the host's Ollama
   got "connection refused" until someone started it by hand. The filter
   service now has `DefaultDependencies=no` and runs after `sysinit.target`.
-  `nikos update` rewrites and restarts it. Tests: a pytest refuses any
-  service an early boot target wants with default dependencies (fails on the
-  old unit); `tests/machine/ollama_bridge_systemd.sh` reboots its systemd
-  container and requires the socket and filter active (step E).
+  It no longer runs the refresh at start: that asks Docker, which starts
+  after `basic.target`, so once the cycle was gone the boot would wait on it
+  forever. The watcher, ordered after `docker.service`, fills the filter's
+  sets on every start. `nikos update` rewrites and restarts both. Tests:
+  pytests refuse a service an early boot target wants with default
+  dependencies, or one that asks Docker (each fails on the old unit);
+  `tests/machine/ollama_bridge_systemd.sh` reboots its systemd container,
+  with a stand-in Docker that answers only after `basic.target`, and requires
+  the boot to finish, the socket and filter active and the bridges loaded
+  (step E; on the unit before this change the boot hangs).
 
 ## [1.5.2] - 2026-10-24
 

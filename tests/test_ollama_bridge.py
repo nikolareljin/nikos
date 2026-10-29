@@ -196,6 +196,18 @@ def test_no_service_an_early_target_wants_keeps_default_dependencies(tmp_path, b
     assert checked, "the filter service is wanted by sockets.target; nothing was checked"
 
 
+def test_no_unit_before_basic_target_asks_docker(tmp_path, bindir):
+    # Docker starts after basic.target. A unit basic.target waits on that runs
+    # the refresh (it calls docker) hangs the boot.
+    units = _write_units(tmp_path, bindir)
+    for unit in units.glob("*.service"):
+        keys = _ini(unit.read_text())
+        if EARLY_TARGETS.intersection(keys.get("WantedBy", []) + keys.get("RequiredBy", [])):
+            execs = " ".join(" ".join(v) for k, v in keys.items() if k.startswith("Exec"))
+            assert "refresh" not in execs and "docker" not in execs, (
+                f"{unit.name} runs before basic.target and asks Docker: the boot hangs")
+
+
 @pytest.mark.skipif(not shutil.which("systemd-analyze") or not Path("/usr/lib/systemd/systemd-socket-proxyd").exists(),
                     reason="needs systemd-analyze and systemd-socket-proxyd")
 def test_the_units_pass_systemd_analyze_verify(tmp_path, bindir):
@@ -997,7 +1009,7 @@ def test_refresh_without_docker_networks_lets_nothing_in(tmp_path, bindir):
 
 
 def test_refresh_fails_when_docker_cannot_be_read(tmp_path, bindir):
-    """The filter unit ignores it (ExecStartPost=-) and the watcher retries."""
+    """The watcher retries on the next Docker network event."""
     (bindir / "docker").write_text("#!/bin/sh\nexit 1\n")
     (bindir / "docker").chmod(0o755)
     r, nft, calls = _refresh(tmp_path, bindir)
@@ -1011,8 +1023,9 @@ def test_the_watcher_refreshes_on_docker_network_changes(tmp_path, bindir):
     assert "ExecStart=/usr/local/libexec/nikos-ollama-bridge-refresh --watch" in w
     assert "docker events --filter type=network --filter event=create --filter event=destroy" in REFRESH.read_text()
     assert "ExecStartPre=/usr/local/libexec/nikos-ollama-bridge-refresh" in w and "Restart=always" in w
-    flt = FILTER_UNIT["ansible.builtin.copy"]["content"]
-    assert "ExecStartPost=-/usr/local/libexec/nikos-ollama-bridge-refresh" in flt
+    # Every (re)load of the filter empties the sets; the watcher restarts with
+    # it and its ExecStartPre fills them again.
+    assert "PartOf=nikos-ollama-bridge-filter.service" in w and "After=nikos-ollama-bridge-filter.service docker.service" in w
 
 
 def test_a_removed_forwarder_takes_the_watcher_and_refresh_with_it():

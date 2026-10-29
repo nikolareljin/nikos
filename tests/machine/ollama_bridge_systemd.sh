@@ -14,7 +14,8 @@
 #      from_docker (behind docker0) gets the stand-in Ollama and from_lan, with
 #      a route to the bridge address, gets nothing;
 #   C. a second run changes nothing;
-#   E. after a reboot the socket and its filter are active (no ordering cycle);
+#   E. a reboot finishes, with the socket and its filter active (no ordering
+#      cycle, no wait on Docker) and the watcher loading Docker's bridges;
 #   D. nikos_ollama_bridge=off removes every unit and file; nothing listens.
 # A stand-in docker CLI names docker0 as Docker's bridge; there is no Docker
 # daemon in the image.
@@ -58,7 +59,9 @@ inside '
   ip -n from_lan addr add 172.20.0.2/24 dev l1;   ip -n from_lan link set l1 up
   ip -n from_lan route add 172.17.0.1/32 via 172.20.0.1
   # A stand-in docker CLI: one bridge network, named docker0, on 172.17.0.0/16.
-  printf "%s\n" "#!/bin/sh" "case \"\$*\" in *\"network ls\"*) echo aaaaaaaaaaaa ;; *Subnet*) echo \"172.17.0.0/16 \" ;; *\"network inspect\"*) echo docker0 ;; esac" > /usr/local/bin/docker
+  # Like the real one at boot, it answers only once basic.target is reached:
+  # docker.socket accepts early, but docker.service starts after it.
+  printf "%s\n" "#!/bin/sh" "until systemctl is-active -q basic.target; do sleep 1; done" "case \"\$*\" in *\"network ls\"*) echo aaaaaaaaaaaa ;; *Subnet*) echo \"172.17.0.0/16 \" ;; *\"network inspect\"*) echo docker0 ;; esac" > /usr/local/bin/docker
   chmod +x /usr/local/bin/docker
   # The stand-in Ollama, on loopback only.
   systemd-run --unit fake-ollama python3 -m http.server 11434 --bind 127.0.0.1 >/dev/null
@@ -122,11 +125,12 @@ echo "C: second run: changed=${changed}"
 # E: what a reboot does. The play starts the units by hand; only a boot shows
 # whether systemd starts them itself (an ordering cycle drops the job).
 docker restart "${name}" >/dev/null
-for _ in $(seq 1 120); do
+for _ in $(seq 1 60); do
   state="$(docker exec "${name}" systemctl is-system-running 2>/dev/null || true)"
   [[ "${state}" == running || "${state}" == degraded ]] && break
   sleep 2
 done
+[[ "${state}" == running || "${state}" == degraded ]] || { echo "FAIL: boot did not finish in 120 s (${state:-none})"; exit 1; }
 inside 'systemctl is-active nikos-ollama-bridge.socket nikos-ollama-bridge-filter.service' \
   || { inside 'journalctl -b --no-pager | grep -i -E "ordering cycle|nikos-ollama" | head -5' || true
        echo "FAIL: after a reboot the forwarder is not listening"; exit 1; }
@@ -134,7 +138,11 @@ inside 'systemctl is-active nikos-ollama-bridge.socket nikos-ollama-bridge-filte
 # units may come up by luck; the cycle is logged either way.
 cycle="$(docker exec "${name}" journalctl -b --no-pager 2>/dev/null | grep -A3 'Found ordering cycle' | grep -m1 nikos-ollama || true)"
 [[ -z "${cycle}" ]] || { echo "${cycle}"; echo "FAIL: the forwarder's units are in an ordering cycle at boot"; exit 1; }
-echo "E: after a reboot the socket and its filter are active, no ordering cycle"
+# The filter loads with empty sets; the watcher, after Docker, fills them.
+# shellcheck disable=SC2016  # expanded inside the container
+inside 'for _ in $(seq 1 30); do nft list set inet nikos_ollama_bridge docker_ifs | grep -q docker0 && exit 0; sleep 1; done; exit 1' \
+  || { echo "FAIL: after a reboot the watcher did not load Docker's bridges"; exit 1; }
+echo "E: after a reboot the socket and its filter are active, no ordering cycle, bridges loaded"
 
 off="$(play off 2>&1)" || { echo "${off}" | tail -20; echo "FAIL: the run with off failed"; exit 1; }
 # shellcheck disable=SC2016  # expanded inside the container
