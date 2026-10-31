@@ -4,6 +4,11 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Fixed
+- Mousepad, Xfce Terminal, and VS Code now use the same Nord frost `#88C0D0`
+  focused-tab accent and `#4C566A` unfocused-tab color. The dark Nordic editor
+  surfaces remain unchanged.
+
 ## [1.5.3] - 2026-10-29
 
 ### Changed

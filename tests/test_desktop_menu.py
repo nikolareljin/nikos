@@ -13,6 +13,7 @@ missing entry fails in CI rather than on someone's desktop.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -25,7 +26,9 @@ VARS = REPO_ROOT / "vars/main.yml"
 TEXT_EDITOR = REPO_ROOT / "roles/desktop/files/nikos-text-editor.desktop"
 CODING_IDE = REPO_ROOT / "roles/desktop/files/nikos-coding-ide.desktop"
 MIMEAPPS = REPO_ROOT / "roles/desktop/files/mimeapps.list"
-TERMINAL_TABS = REPO_ROOT / "roles/theming/files/nikos-terminal-tabs.css"
+GTK_TABS = REPO_ROOT / "roles/theming/files/nikos-terminal-tabs.css"
+VSCODE_SETTINGS = REPO_ROOT / "roles/editors/files/vscode-settings.json"
+VSCODE_SETTINGS_TEMPLATE = REPO_ROOT / "roles/editors/templates/vscode-settings.json.j2"
 
 # Binaries that arrive with the Xfce or Xubuntu metapackages NikOS already
 # installs, so they need no separate entry. Anything not listed here has to be
@@ -144,9 +147,10 @@ def test_system_mime_defaults_keep_user_overrides_possible() -> None:
     ).read_text(encoding="utf-8")
 
 
-def test_terminal_tabs_have_distinct_active_and_inactive_colours() -> None:
-    css = TERMINAL_TABS.read_text(encoding="utf-8")
-    assert "#xfce4-terminal-notebook" in css
+def test_gtk_tabs_share_the_focused_and_unfocused_editor_palette() -> None:
+    css = GTK_TABS.read_text(encoding="utf-8")
+    assert "notebook > header > tabs > tab:checked" in css
+    assert "#xfce4-terminal-notebook" not in css
     assert "tab:checked" in css
     assert "#88C0D0" in css
     assert "tab:checked:backdrop" in css
@@ -155,3 +159,21 @@ def test_terminal_tabs_have_distinct_active_and_inactive_colours() -> None:
         encoding="utf-8"
     )
     assert theming_tasks.count("when: not ansible_check_mode") >= 3
+
+
+def test_vscode_tabs_keep_nord_and_match_the_gtk_palette() -> None:
+    static_settings = json.loads(VSCODE_SETTINGS.read_text(encoding="utf-8"))
+    template = VSCODE_SETTINGS_TEMPLATE.read_text(encoding="utf-8")
+    template_settings = json.loads(
+        template.replace("{{ nikos_home }}", "/home/user").replace(
+            "{{ nikos_conda_env }}", "nikos-ai"
+        )
+    )
+
+    for settings in (static_settings, template_settings):
+        assert settings["workbench.colorTheme"] == "Nord"
+        colors = settings["workbench.colorCustomizations"]
+        assert colors["tab.activeBackground"] == "#88C0D0"
+        assert colors["tab.unfocusedActiveBackground"] == "#4C566A"
+        assert colors["tab.activeForeground"] == "#2E3440"
+        assert colors["tab.unfocusedActiveForeground"] == "#ECEFF4"
