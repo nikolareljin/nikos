@@ -480,11 +480,12 @@ To use a different icon, set `button-icon` to any icon name or absolute path in
 `/etc/xdg/xdg-xubuntu/xfce4/whiskermenu/defaults.rc` are read before the NikOS
 ones, so the desktop role rewrites the `button-icon` line there as well.
 
-## Terminal tabs and default editors
+## Editor tabs and default editors
 
-Xfce Terminal uses a blue selected-tab background while its window has focus.
-When another application is active, the selected tab switches to gray. Restart
-open Terminal windows after `nikos update` to load the theme CSS.
+Mousepad and Xfce Terminal use the NikOS accent `#88C0D0` for the selected tab
+when their window has focus, and `#4C566A` when it does not. VS Code keeps the
+Nord color theme and uses the same tab colors. Restart open editors after
+`nikos update` to load the settings and theme CSS.
 
 The first Whisker Menu Favorites are Terminal, Text Editor and Coding IDE.
 Text Editor opens Mousepad; Coding IDE opens VS Code. NikOS sets Mousepad as

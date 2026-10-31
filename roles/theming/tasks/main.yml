@@ -100,7 +100,7 @@
     creates: /usr/share/themes/Nordic
   when: not ansible_check_mode
 
-- name: Install NikOS Xfce Terminal tab styling
+- name: Install NikOS GTK tab styling
   ansible.builtin.copy:
     src: nikos-terminal-tabs.css
     dest: /usr/share/themes/Nordic/gtk-3.0/nikos-terminal-tabs.css
@@ -109,10 +109,11 @@
     mode: "0644"
   when: not ansible_check_mode
 
-# GTK requires @import before normal CSS rules. The selector is scoped to the
-# notebook name assigned by xfce4-terminal, so Nordic's other GTK apps keep
-# their existing tab styling.
-- name: Load NikOS Xfce Terminal tab styling into Nordic
+# GTK requires @import before normal CSS rules. The stylesheet keeps focused
+# and unfocused notebook tabs consistent across Mousepad and Xfce Terminal.
+# Keep the existing marker so updates replace the terminal-only import instead
+# of leaving a second import in gtk.css.
+- name: Load NikOS GTK tab styling into Nordic
   ansible.builtin.blockinfile:
     path: /usr/share/themes/Nordic/gtk-3.0/gtk.css
     insertbefore: BOF
