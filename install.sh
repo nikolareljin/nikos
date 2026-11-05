@@ -1050,7 +1050,9 @@ _pinned_distrodeck_version() {
 
 _distrodeck_for_catalog() {
   local ver="$1" dir
-  [[ -n "${ver}" ]] || return 1
+  # The version names a cache directory that is removed with rm -rf below, so
+  # only a plain tag or branch name is accepted: no slash, no "..".
+  [[ "${ver}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "${ver}" != *..* ]] || return 1
   dir="${XDG_CACHE_HOME:-${HOME}/.cache}/nikos/distrodeck-${ver}"
   # install-tools sources scripts/script-helpers, a submodule: without it the
   # catalog request fails and the selection screen is skipped on every run.

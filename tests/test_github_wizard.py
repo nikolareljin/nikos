@@ -595,3 +595,30 @@ def test_wizard_link_survives_check_mode():
     # target has not run; without force the link task fails on a fresh host.
     link = [t for t in _tasks() if t.get("ansible.builtin.file", {}).get("state") == "link"]
     assert link and all(t["ansible.builtin.file"].get("force") is True for t in link)
+
+
+import pytest
+
+
+@pytest.mark.parametrize(
+    "answer,cloned",
+    [
+        ("https://example.com/u/dotfiles.git", True),
+        ("git@example.com:u/dotfiles.git", True),
+        ("ext::sh -c touch% /tmp/pwned@x", False),
+        ("file:///etc", False),
+        ("a@b", False),
+    ],
+)
+def test_dotfiles_clone_takes_only_https_ssh_and_scp_urls(tmp_path, monkeypatch, answer, cloned):
+    monkeypatch.setattr(wizard.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(wizard, "ask", lambda _msg: answer)
+    calls = []
+    monkeypatch.setattr(
+        wizard.subprocess, "run", lambda cmd, check=False: calls.append(cmd) or MagicMock(returncode=0)
+    )
+    wizard.step_dotfiles("GitLab", "example.com", 22, "git")
+    if cloned:
+        assert calls == [["git", "clone", "--", answer, str(tmp_path / "dotfiles")]]
+    else:
+        assert calls == []

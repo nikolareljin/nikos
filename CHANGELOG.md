@@ -18,6 +18,10 @@ All notable changes to NikOS are documented here.
   a model that is this machine's tier pick for any type, or that a repository's
   `.env` names (`*MODEL=` or a stored `*_CHOICE=`) one level under
   `NIKOS_PROJECTS_DIRS` (default `~/Projects`).
+- The installer accepts only a plain tag or branch name for the distrodeck
+  catalog clone, whose cache directory it removes and re-creates.
+- The GitHub wizard clones a dotfiles repository only from an `https://`,
+  `ssh://` or `user@host:path` URL, and ends git's options before it.
 
 ## [1.5.3] - 2026-10-29
 

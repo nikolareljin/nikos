@@ -616,3 +616,27 @@ def test_an_opt_in_need_is_asked_once(tmp_path: Path, answer: str, expected: str
     )
     assert result.stdout.strip() == expected, result.stderr
     assert result.stderr.count("ASKED") == 1, result.stderr
+
+
+@pytest.mark.parametrize("ver", ["x/../../../victim", "a/b", "..", "-rf", ""])
+def test_installer_catalog_refuses_a_version_that_is_not_a_plain_name(tmp_path: Path, ver: str) -> None:
+    # The version names the cache directory removed with rm -rf. With
+    # "x/../../../victim" that path resolves to cache/victim, outside nikos/.
+    text = (REPO / "install.sh").read_text(encoding="utf-8")
+    func = re.search(r"^_distrodeck_for_catalog\(\) \{.*?^\}", text, re.M | re.S)
+    cache = tmp_path / "cache"
+    victim = cache / "victim"
+    victim.mkdir(parents=True)
+    (victim / "keep").write_text("x", encoding="utf-8")
+    (cache / "x" / "nikos" / "distrodeck-x").mkdir(parents=True)
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "git").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    (fake / "git").chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-c", f'{func.group(0)}\n_distrodeck_for_catalog "$1"', "_", ver],
+        capture_output=True, text=True, timeout=30,
+        env={"PATH": f"{fake}:/usr/bin:/bin", "HOME": str(tmp_path), "XDG_CACHE_HOME": str(cache / "x")},
+    )
+    assert result.returncode != 0
+    assert (victim / "keep").exists(), "rm -rf reached outside the cache"

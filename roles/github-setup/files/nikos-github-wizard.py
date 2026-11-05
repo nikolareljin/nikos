@@ -253,8 +253,10 @@ def step_dotfiles(provider: str, host: str, port: int, user: str) -> None:
     if dest.exists():
         print(f"  [!] {dest} already exists, not cloning.")
         return
-    if "://" in answer or "@" in answer:
-        cmd = ["git", "clone", answer, str(dest)]
+    if re.match(r"(https|ssh)://", answer) or re.fullmatch(r"[\w.-]+@[\w.-]+:[\w./-]+", answer):
+        # Only https, ssh and scp-style URLs: other git transports can run
+        # commands or read local paths. "--" ends git's options.
+        cmd = ["git", "clone", "--", answer, str(dest)]
     elif re.fullmatch(r"[\w.-]+/[\w.-]+", answer):
         if provider == "GitHub":
             cmd = ["gh", "repo", "clone", answer, str(dest)]
