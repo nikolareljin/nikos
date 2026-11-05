@@ -244,8 +244,8 @@ def _doctor(tmp_path, units, path, extra_vars="", ufw_conf=None):
     home = _fake_home(tmp_path, "server")
     (home / "roles").symlink_to(ROOT / "roles")
     if extra_vars:
-        with open(home / "vars" / "local.yml", "a", encoding="utf-8") as fh:
-            fh.write(extra_vars)
+        local_vars = home / "vars" / "local.yml"
+        local_vars.write_text(local_vars.read_text(encoding="utf-8") + extra_vars, encoding="utf-8")
     env = dict(os.environ, NIKOS_HOME=str(home), HOME=str(tmp_path), PATH=path,
                NIKOS_SYSTEMD_DIR=str(units),
                NIKOS_UFW_CONF=str(ufw_conf or tmp_path / "no-ufw.conf"))
@@ -493,7 +493,7 @@ def _check(bindir, path_extra=True):
     if not (bindir / "nft").exists():
         _stub_nft(bindir, NEW_FILTER)  # the filter is loaded; never the host's real nft
     env = {"PATH": f"{bindir}:/usr/bin:/bin" if path_extra else str(bindir)}
-    return subprocess.run([str(CHECK)], capture_output=True, text=True, env=env, timeout=30)
+    return subprocess.run(["bash", str(CHECK)], capture_output=True, text=True, env=env, timeout=30)
 
 
 def test_check_passes_dockers_own_networks(bindir):
@@ -542,15 +542,15 @@ def test_check_without_docker_lists_no_bridges_and_only_warns(tmp_path, bindir):
     for tool in ("bash", "python3", "sh", "cat"):
         (bindir / tool).symlink_to(shutil.which(tool))
     env = {"PATH": str(bindir)}
-    r = subprocess.run([str(CHECK), "--docker-ifs"], capture_output=True, text=True, env=env, timeout=30)
+    r = subprocess.run(["bash", str(CHECK), "--docker-ifs"], capture_output=True, text=True, env=env, timeout=30)
     assert (r.returncode, r.stdout) == (0, ""), r
-    r = subprocess.run([str(CHECK)], capture_output=True, text=True, env=env, timeout=30)
+    r = subprocess.run(["bash", str(CHECK)], capture_output=True, text=True, env=env, timeout=30)
     assert r.returncode == 0 and "warning: docker0 172.17.0.1/16" in r.stderr, r
 
 
 def test_check_lists_dockers_bridges(bindir):
     _stub_docker(bindir, rootless=False, gateway="172.17.0.1")
-    r = subprocess.run([str(CHECK), "--docker-ifs"], capture_output=True, text=True,
+    r = subprocess.run(["bash", str(CHECK), "--docker-ifs"], capture_output=True, text=True,
                        env={"PATH": f"{bindir}:/usr/bin:/bin"}, timeout=30)
     assert r.returncode == 0 and r.stdout.split() == ["docker0", "br-646c6b405144"], r
 
@@ -966,7 +966,7 @@ def _refresh(tmp_path, bindir, *args):
     (bindir / "nft").chmod(0o755)
     (bindir / "systemctl").write_text(f'#!/bin/sh\necho "$*" >> {calls}\n')
     (bindir / "systemctl").chmod(0o755)
-    r = subprocess.run([str(REFRESH), *args], capture_output=True, text=True, timeout=30,
+    r = subprocess.run(["bash", str(REFRESH), *args], capture_output=True, text=True, timeout=30,
                        env={"PATH": f"{bindir}:/usr/bin:/bin",
                             "NIKOS_OLLAMA_BRIDGE_DROPIN_DIR": str(tmp_path / "socket.d")})
     read = lambda p: p.read_text().splitlines() if p.exists() else []
@@ -1065,7 +1065,7 @@ def test_watch_refreshes_once_per_docker_network_event(tmp_path, bindir):
     (bindir / "nft").chmod(0o755)
     (bindir / "systemctl").write_text("#!/bin/sh\nexit 0\n")
     (bindir / "systemctl").chmod(0o755)
-    r = subprocess.run([str(REFRESH), "--watch"], capture_output=True, text=True, timeout=30,
+    r = subprocess.run(["bash", str(REFRESH), "--watch"], capture_output=True, text=True, timeout=30,
                        env={"PATH": f"{bindir}:/usr/bin:/bin",
                             "NIKOS_OLLAMA_BRIDGE_DROPIN_DIR": str(tmp_path / "socket.d")})
     assert r.returncode == 1, r  # the stream ended: systemd restarts the unit

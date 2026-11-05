@@ -1,5 +1,6 @@
 """Tests for nikos-github-wizard.py."""
 import importlib.util
+import secrets
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -104,7 +105,7 @@ def _tools_present(monkeypatch):
     monkeypatch.setattr(wizard, "have", lambda cmd: True)
 
 ROOT = Path(__file__).parent.parent
-TOKEN = "glpat-SECRET-TOKEN-123"
+TOKEN = "test-" + secrets.token_hex(8)
 
 
 @pytest.fixture
@@ -622,3 +623,16 @@ def test_dotfiles_clone_takes_only_https_ssh_and_scp_urls(tmp_path, monkeypatch,
         assert calls == [["git", "clone", "--", answer, str(tmp_path / "dotfiles")]]
     else:
         assert calls == []
+
+
+def test_run_refuses_a_program_outside_the_list():
+    with pytest.raises(ValueError):
+        wizard.run(["sh", "-c", "true"])
+
+
+def test_rejected_input_is_printed_without_control_characters(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(wizard.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(wizard, "ask", lambda _msg: "nope\x1b[2J\r")
+    wizard.step_dotfiles("GitLab", "example.com", 22, "git")
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and "\r" not in out and "nope[2J" in out

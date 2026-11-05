@@ -389,3 +389,9 @@ def test_a_dist_tag_head_too_new_falls_back_on_its_own_line(vfile: Path) -> None
     assert p.newest_npm({"package": "openclaw", "dist_tag": "extended-stable"}) == "2026.8.34"
     meta["time"]["2026.8.35"] = ago(10)
     assert p.newest_npm({"package": "openclaw", "dist_tag": "extended-stable"}) == "2026.8.35"
+
+
+@pytest.mark.parametrize("url", ["file:///etc/passwd", "http://example.com/x", "https:///nohost"])
+def test_http_refuses_anything_but_https(url):
+    with pytest.raises(ValueError):
+        bump.Http()._open(url)

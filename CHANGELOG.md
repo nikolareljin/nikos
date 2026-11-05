@@ -21,7 +21,12 @@ All notable changes to NikOS are documented here.
 - The installer accepts only a plain tag or branch name for the distrodeck
   catalog clone, whose cache directory it removes and re-creates.
 - The GitHub wizard clones a dotfiles repository only from an `https://`,
-  `ssh://` or `user@host:path` URL, and ends git's options before it.
+  `ssh://` or `user@host:path` URL, and ends git's options before it. Its
+  helper runs only `git` and `gh`, and rejected input is echoed without
+  control characters.
+- `nikos hooks --global` runs `setup-hooks.sh` only from an absolute path to a
+  file the user owns that other users cannot write.
+- `scripts/bump-versions.py` fetches only `https` URLs.
 
 ## [1.5.3] - 2026-10-29
 

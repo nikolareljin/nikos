@@ -84,7 +84,7 @@ def run(program: Path, tmp_path: Path, *, prefix: str = "", tmpdir: str = "") ->
     command = f"{prefix} PATH={sudobin}:$PATH TMPDIR={tmpdir or tmp_path} bash {program}"
     command = command.strip()
     result = subprocess.run(
-        [SCRIPT, "-qec", command, "/dev/null"],
+        ["script", "-qec", command, "/dev/null"],
         input=b"hunter2\n",
         capture_output=True,
         timeout=60,
@@ -225,7 +225,7 @@ def test_an_interrupt_restores_the_cursor(tmp_path):
         encoding="utf-8",
     )
     result = subprocess.run(
-        [SCRIPT, "-qec", f"bash {program}", "/dev/null"],
+        ["script", "-qec", f"bash {program}", "/dev/null"],
         capture_output=True,
         timeout=60,
     )
@@ -290,7 +290,7 @@ def test_update_asks_once_and_works_with_strict_sudo(tmp_path):
     log = strict_sudo_stub(tmp_path)
     program = write_update_program(tmp_path)
     result = subprocess.run(
-        [SCRIPT, "-qec", f"PATH={tmp_path / 'sudobin'}:$PATH TMPDIR={tmp_path} bash {program}", "/dev/null"],
+        ["script", "-qec", f"PATH={tmp_path / 'sudobin'}:$PATH TMPDIR={tmp_path} bash {program}", "/dev/null"],
         input=b"hunter2\n",
         capture_output=True,
         timeout=60,
@@ -307,7 +307,7 @@ def test_the_sudo_keepalive_is_stopped_on_exit(tmp_path):
     strict_sudo_stub(tmp_path)
     program = write_update_program(tmp_path, calls=1)
     result = subprocess.run(
-        [SCRIPT, "-qec", f"PATH={tmp_path / 'sudobin'}:$PATH TMPDIR={tmp_path} bash {program}", "/dev/null"],
+        ["script", "-qec", f"PATH={tmp_path / 'sudobin'}:$PATH TMPDIR={tmp_path} bash {program}", "/dev/null"],
         input=b"hunter2\n",
         capture_output=True,
         timeout=60,

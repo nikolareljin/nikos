@@ -174,6 +174,11 @@ cmd_global() {
   home="$(helpers_home)"
   script="${home}/scripts/setup-hooks.sh"
   [[ -f "${script}" ]] || die "no setup-hooks.sh in ${home}"
+  # script-helpers.home comes from git config: run only an absolute path to a
+  # file this user owns and other users cannot write (group-writable is the
+  # Ubuntu default under umask 002).
+  [[ "${script}" == /* && -O "${script}" && -z "$(find "${script}" -perm -002 2>/dev/null)" ]] ||
+    die "refusing ${script}: not an absolute path to a file you own that other users cannot write"
   bash "${script}" --global "$@"
 }
 

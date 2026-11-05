@@ -46,8 +46,19 @@ def have(cmd: str) -> bool:
     return shutil.which(cmd) is not None
 
 
+# Programs run() may start; it refuses any other argv[0].
+PROGRAMS = frozenset({"git", "gh"})
+
+
 def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
+    if not cmd or cmd[0] not in PROGRAMS:
+        raise ValueError(f"refusing to run {cmd[:1]!r}")
     return subprocess.run(cmd, check=check, text=True, capture_output=True)
+
+
+def printable(text: str) -> str:
+    """Drops control characters, so typed input cannot rewrite the terminal."""
+    return "".join(ch for ch in text if ch.isprintable())
 
 
 def ask(msg: str) -> str:
@@ -247,27 +258,31 @@ def step_dotfiles(provider: str, host: str, port: int, user: str) -> None:
     if not answer:
         return
     if answer.startswith("-"):
-        print(f"  [!] Not a repo: {answer!r}")
+        print(f"  [!] Not a repo: {printable(answer)!r}")
         return
     dest = Path.home() / "dotfiles"
     if dest.exists():
         print(f"  [!] {dest} already exists, not cloning.")
         return
+    use_gh = False
     if re.match(r"(https|ssh)://", answer) or re.fullmatch(r"[\w.-]+@[\w.-]+:[\w./-]+", answer):
         # Only https, ssh and scp-style URLs: other git transports can run
         # commands or read local paths. "--" ends git's options.
-        cmd = ["git", "clone", "--", answer, str(dest)]
+        args = ["clone", "--", answer, str(dest)]
     elif re.fullmatch(r"[\w.-]+/[\w.-]+", answer):
         if provider == "GitHub":
-            cmd = ["gh", "repo", "clone", answer, str(dest)]
+            use_gh = True
+            args = ["repo", "clone", answer, str(dest)]
         elif port != 22:
-            cmd = ["git", "clone", f"ssh://{user}@{host}:{port}/{answer}.git", str(dest)]
+            args = ["clone", f"ssh://{user}@{host}:{port}/{answer}.git", str(dest)]
         else:
-            cmd = ["git", "clone", f"{user}@{host}:{answer}.git", str(dest)]
+            args = ["clone", f"{user}@{host}:{answer}.git", str(dest)]
     else:
-        print(f"  [!] Not a repo: {answer!r}")
+        print(f"  [!] Not a repo: {printable(answer)!r}")
         return
-    if subprocess.run(cmd, check=False).returncode == 0:
+    # Interactive (gh may prompt), so not run(), which captures output.
+    clone = subprocess.run(["gh", *args] if use_gh else ["git", *args], check=False)
+    if clone.returncode == 0:
         print(f"  [ok] Dotfiles cloned to {dest}")
     else:
         print("  [!] Clone failed, continuing.")

@@ -71,8 +71,12 @@ class Http:
     """The only thing that touches the network; tests replace it."""
 
     def _open(self, url: str, headers: dict | None = None, method: str = "GET"):
+        parsed = urllib.parse.urlparse(url)
+        # Every source is an https URL; anything else (file://, http) is refused.
+        if parsed.scheme != "https" or not parsed.hostname:
+            raise ValueError(f"refusing non-https URL: {url}")
         hdrs = {"User-Agent": UA}
-        host = urllib.parse.urlparse(url).hostname or ""
+        host = parsed.hostname
         token = os.environ.get("GITHUB_TOKEN", "")
         if token and host == "api.github.com":
             hdrs["Authorization"] = f"Bearer {token}"

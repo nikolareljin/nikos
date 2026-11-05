@@ -273,3 +273,11 @@ def test_a_failed_hook_install_warns_and_does_not_stop_the_play():
     block = text.split("- name: Install the Claude Code hook for this user", 1)[1].split("\n- name:", 1)[0]
     assert "failed_when: false" in block
     assert "- name: Warn that the Claude Code hook was not installed" in text
+
+
+def test_global_refuses_a_setup_script_others_can_write(env):
+    script = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
+    script.chmod(0o666)
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
