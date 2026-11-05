@@ -8,6 +8,16 @@ All notable changes to NikOS are documented here.
 - Mousepad, Xfce Terminal, and VS Code now use the same Nord frost `#88C0D0`
   focused-tab accent and `#4C566A` unfocused-tab color. The dark Nordic editor
   surfaces remain unchanged.
+- `nikos update` asks for the sudo password at most once, and the second
+  playbook run (optional bundles) reuses it. The password check and the
+  passwordless probe in `nikos` and `install.sh` run `sudo -k` as its own call
+  and no longer pass `-p`, so they avoid flag combinations where sudo-rs, the
+  default sudo on Ubuntu 26.04, may differ from sudo 1.9. A
+  keepalive refreshes the sudo timestamp during the run and stops on every exit.
+- The removal offer in `nikos update` and `nikos models prune` no longer offers
+  a model that is this machine's tier pick for any type, or that a repository's
+  `.env` names (`*MODEL=` or a stored `*_CHOICE=`) one level under
+  `NIKOS_PROJECTS_DIRS` (default `~/Projects`).
 
 ## [1.5.3] - 2026-10-29
 

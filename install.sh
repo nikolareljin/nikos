@@ -458,10 +458,14 @@ _collect_checked_become_password() {
   local attempt
   _become_pass=""
   # -k ignores a cached timestamp, so this passes only for NOPASSWD sudo.
-  sudo -n -k true 2>/dev/null && return 0
+  # -k runs on its own, not combined with -n, for sudo-rs on Ubuntu 26.04
+  # (see _collect_become_password in scripts/nikos).
+  sudo -k </dev/null >/dev/null 2>&1 || true
+  sudo -n true </dev/null 2>/dev/null && return 0
   for attempt in 1 2 3; do
     _become_pass=$(_collect_become_password_dialog) || { _become_pass=""; return 130; }
-    if printf '%s\n' "${_become_pass}" | sudo -S -k -v -p '' >/dev/null 2>&1; then
+    sudo -k </dev/null >/dev/null 2>&1 || true
+    if printf '%s\n' "${_become_pass}" | sudo -S -v >/dev/null 2>&1; then
       return 0
     fi
     _become_pass=""

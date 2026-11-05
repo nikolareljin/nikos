@@ -508,6 +508,7 @@ GAUGE_CHOICE_BODY = """
     USE_DIALOG=1
     _PROGRESS_LIB_LOADED=true
     BECOME_PASSWORD_FILE=""
+    NIKOS_BECOME_MODE=""
     use_gauge=false
     playbook_args=(-i inv site.yml)
     _can_use_gauge() {{ return 0; }}
@@ -531,7 +532,8 @@ def test_update_gauge_choice(tmp_path, sudo_rc):
     )
     program = tmp_path / "choice.sh"
     program.write_text(
-        extract_cli_helper("_plain_view_notice") + "\n" + textwrap.dedent(body)
+        extract_cli_helper("_plain_view_notice") + "\n"
+        + extract_cli_helper("_ensure_become_password") + "\n" + textwrap.dedent(body)
         .replace("local ask_pass", "ask_pass"),
         encoding="utf-8",
     )
@@ -543,9 +545,10 @@ def test_update_gauge_choice(tmp_path, sudo_rc):
         assert "--ask-become-pass" not in field(out, "ARGS"), out
         assert "--become-password-file" not in field(out, "ARGS"), out
         assert "COLLECTED" not in out, out
-        # Without -k a cached timestamp from an earlier sudo passes the probe
-        # for a user who does need a password.
-        assert (tmp_path / "sudo.log").read_text().split("\n")[0] == "SUDO -n -k true"
+        # -k first, on its own: without it a cached timestamp passes the probe
+        # for a user who does need a password, and sudo-rs is not given -k
+        # combined with -n.
+        assert (tmp_path / "sudo.log").read_text().split("\n")[:2] == ["SUDO -k", "SUDO -n true"]
     else:
         assert field(out, "GAUGE") == "false", out
         assert "--ask-become-pass" in field(out, "ARGS"), out
@@ -644,7 +647,7 @@ def _checked_pw(tmp_path, answers, nopasswd="0"):
 def test_install_skips_the_prompt_for_passwordless_sudo(tmp_path):
     out, args = _checked_pw(tmp_path, "unused,", nopasswd="1")
     assert "RC=0 PW=" in out and "ASKED=0" in out, out
-    assert "-n -k true" in args
+    assert "-n true" in args and "-n -k" not in args
 
 
 def test_install_retries_a_rejected_password(tmp_path):
@@ -673,6 +676,7 @@ def test_update_stops_after_three_rejected_passwords(tmp_path):
     program = tmp_path / "choice.sh"
     program.write_text(
         extract_cli_helper("_plain_view_notice") + "\n"
+        + extract_cli_helper("_ensure_become_password") + "\n"
         + textwrap.dedent(body).replace(
             "print_info() {", "print_error() { echo \"ERR $*\"; }\nprint_info() {", 1),
         encoding="utf-8",

@@ -206,3 +206,38 @@ def test_every_module_names_roles_the_models_file_has(module):
     names = {line.split("=")[0] for line in (ROOT / "ai-models.env").read_text().splitlines()
              if line and not line.startswith("#")}
     assert set(VARS["ai_stack_model_modules"][module]) <= names
+
+
+def test_a_model_a_repository_remembers_is_not_offered(home, tmp_path, ollama):
+    """A repository's .env choice keeps its model off the removal offer."""
+    repo = tmp_path / "Projects" / "some-app"
+    repo.mkdir(parents=True)
+    (repo / ".env").write_text('OLLAMA_CODE_MODEL_CHOICE="qwen2.5:7b"\nOTHER=1\n')
+    out = on_tty(home, ["y"], "models", "prune")
+    assert "Remove gpt-oss:20b?" in out
+    assert "qwen2.5:7b" not in out.split("outside")[-1]
+    assert ollama[1] == ["gpt-oss:20b"]
+
+
+def test_a_tier_pick_for_any_type_is_not_offered(home, ollama):
+    """qwen2.5:7b stays installed when it is a tier pick, not only a role pick."""
+    nikos_home = Path(home["NIKOS_HOME"])
+    (nikos_home / "scripts").unlink()
+    (nikos_home / "scripts").mkdir()
+    for child in (ROOT / "scripts").iterdir():
+        if child.name != "script-helpers":
+            (nikos_home / "scripts" / child.name).symlink_to(child)
+    helpers = nikos_home / "scripts" / "script-helpers"
+    helpers.mkdir()
+    for child in (ROOT / "scripts/script-helpers").iterdir():
+        if child.name != "config":
+            (helpers / child.name).symlink_to(child)
+    (helpers / "config").mkdir()
+    tiers = (ROOT / "scripts/script-helpers/config/ollama_model_tiers.txt").read_text()
+    (helpers / "config/ollama_model_tiers.txt").write_text(
+        tiers + "type extra-test qwen2.5:7b qwen2.5:7b qwen2.5:7b qwen2.5:7b\n"
+    )
+    r = nikos(home, "models")
+    assert r.returncode == 0, r.stderr
+    outside = r.stdout.split("outside the set")[1].split()
+    assert "gpt-oss:20b" in outside and "qwen2.5:7b" not in outside
