@@ -151,3 +151,9 @@ def test_a_cancelled_or_spaced_argument_returns_to_the_menu(tmp_path):
         calls = (case / "dialog.log").read_text().splitlines()
         assert not any("--yesno" in c for c in calls), script
         assert "finished, exit" not in out
+
+
+def test_a_dialog_that_cannot_draw_falls_back_to_usage(tmp_path):
+    out, rc = run_in_pty(tmp_path, {}, menu_script='[ "$DIALOG_ERROR" = 3 ] && exit 3; exit 255')
+    assert rc == 0, out
+    assert "Usage:" in out and "nikos update --ref <r>" in out

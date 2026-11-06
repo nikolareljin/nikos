@@ -520,8 +520,17 @@ cmd_menu() {
     items+=("${i}" "${_cmd_synopsis}: ${_cmd_about}")
   done
   while true; do
-    choice="$(dialog --stdout --title "NikOS ${NIKOS_VERSION}" --cancel-label "Exit" \
-      --menu "Choose a command" 22 100 14 "${items[@]}" 2>/dev/tty)" || break
+    # DIALOG_ERROR gives a failed dialog (a terminal too small to draw on) an
+    # exit code of its own; by default it is 255, the same as Esc.
+    rc=0
+    choice="$(DIALOG_ERROR=3 dialog --stdout --title "NikOS ${NIKOS_VERSION}" --cancel-label "Exit" \
+      --menu "Choose a command" 22 100 14 "${items[@]}" 2>/dev/tty)" || rc=$?
+    if (( rc == 3 )); then
+      clear
+      usage
+      return 0
+    fi
+    (( rc == 0 )) || break
     _command_row "${rows[choice]}"
     argv=()
     while IFS= read -r row; do argv+=("${row}"); done < <(_menu_argv "${_cmd_menu}"; echo "rc=$?")
