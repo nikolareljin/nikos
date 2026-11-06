@@ -50,35 +50,46 @@ helpers_home() {
 # would look for its own vendored copy, which an installed lantern lacks.
 run_lantern() { SCRIPT_HELPERS_HOME="$(helpers_home)" lantern "$@"; }
 
-# setup_script_trusted <path>: script-helpers.home comes from git config, so
-# setup-hooks.sh is run only from an absolute path, when the file (a symlink is
-# followed) is owned by this user and neither it nor its directory can be
-# written by other users. Group-writable is the Ubuntu default under umask 002.
-setup_script_trusted() {
-  local real
+# trusted_setup_script <path>: script-helpers.home comes from git config, so
+# setup-hooks.sh is run only when it can be trusted. Prints the resolved path
+# (symlinks followed), which is the one to run: what is checked is what runs.
+# Fails unless the path is absolute, this user owns the file, other users can
+# write neither it nor the helpers.sh and lib/ it sources, and no directory
+# above it is world-writable without the sticky bit (/tmp has it).
+# Group-writable is the Ubuntu default under umask 002.
+trusted_setup_script() {
+  local real root dir
   [[ "$1" == /* ]] || return 1
   real="$(readlink -f -- "$1" 2>/dev/null)" || return 1
   [[ -f "${real}" && -O "${real}" ]] || return 1
-  [[ -z "$(find "${real}" "$(dirname -- "${real}")" -maxdepth 0 -perm -002 2>/dev/null)" ]]
+  root="$(dirname -- "$(dirname -- "${real}")")"
+  [[ -z "$(find "${real}" "${root}/helpers.sh" "${root}/lib" ! -type l -perm -002 2>/dev/null)" ]] || return 1
+  dir="$(dirname -- "${real}")"
+  while :; do
+    [[ -z "$(find "${dir}" -maxdepth 0 -perm -002 ! -perm -1000 2>/dev/null)" ]] || return 1
+    [[ "${dir}" != "/" ]] || break
+    dir="$(dirname -- "${dir}")"
+  done
+  printf '%s\n' "${real}"
 }
-UNTRUSTED_REASON="not an absolute path to a file you own, or other users can write it or its directory"
+UNTRUSTED_REASON="not an absolute path to a file you own, or other users can write it, the files it loads or a directory above it"
 
 # claude_state: the user's Claude Code hook as script-helpers sees it: ok,
 # absent, broken (the file it runs is missing), stale (it runs a file outside
 # the installed copy, such as a checkout a branch switch removes), unknown (no
 # Python to read the settings), missing (no setup-hooks.sh in script-helpers.home),
-# untrusted (setup-hooks.sh fails setup_script_trusted, so it is not run),
+# untrusted (setup-hooks.sh fails trusted_setup_script, so it is not run),
 # old (a copy without --claude porcelain cannot tell), or failed (the check did not run). Second field: the file.
 claude_state() {
-  local script out state
+  local script real out state
   script="$(helpers_home)/scripts/setup-hooks.sh"
   # Older copies read --status --porcelain --claude as an install: never run it there.
   [[ -f "${script}" ]] || { printf 'missing\t\n'; return 0; }
-  setup_script_trusted "${script}" || { printf 'untrusted\t%s\n' "${script}"; return 0; }
-  if ! grep -q 'claude_user=' "${script}"; then
+  real="$(trusted_setup_script "${script}")" || { printf 'untrusted\t%s\n' "${script}"; return 0; }
+  if ! grep -q 'claude_user=' "${real}"; then
     printf 'old\t\n'; return 0
   fi
-  out="$(bash "${script}" --status --porcelain --claude 2>/dev/null | tail -n 1)" || true
+  out="$(bash "${real}" --status --porcelain --claude 2>/dev/null | tail -n 1)" || true
   state="$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^claude_user=//p')"
   printf '%s\t%s\n' "${state:-failed}" "$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^hook=//p')"
 }
@@ -87,7 +98,7 @@ claude_state() {
 # is ok. The hook is copied out of that tree, so a branch switch there never
 # removes it. Needs owners; says so when they are unset.
 fix_claude() {
-  local state
+  local state real
   state="$(claude_state | cut -f1)"
   # old, unknown or failed: install anyway; --claude is idempotent.
   [[ "${state}" == ok ]] && return 0
@@ -102,7 +113,12 @@ fix_claude() {
   fi
   info "claude hook ${state}: installing it from $(helpers_home)"
   [[ -f "$(helpers_home)/scripts/setup-hooks.sh" ]] || { echo "nikos hooks: no setup-hooks.sh in $(helpers_home)" >&2; return 1; }
-  bash "$(helpers_home)/scripts/setup-hooks.sh" --claude
+  # Resolved again here: this is the path that runs.
+  real="$(trusted_setup_script "$(helpers_home)/scripts/setup-hooks.sh")" || {
+    echo "nikos hooks: refusing $(helpers_home)/scripts/setup-hooks.sh: ${UNTRUSTED_REASON}" >&2
+    return 1
+  }
+  bash "${real}" --claude
 }
 
 need_lantern() {
@@ -193,13 +209,13 @@ cmd_lantern() {
 }
 
 cmd_global() {
-  local home script
+  local home script real
   [[ $# -eq 0 || ( $# -eq 1 && "$1" == "--uninstall" ) ]] || die "--global takes only --uninstall"
   home="$(helpers_home)"
   script="${home}/scripts/setup-hooks.sh"
   [[ -f "${script}" ]] || die "no setup-hooks.sh in ${home}"
-  setup_script_trusted "${script}" || die "refusing ${script}: ${UNTRUSTED_REASON}"
-  bash "${script}" --global "$@"
+  real="$(trusted_setup_script "${script}")" || die "refusing ${script}: ${UNTRUSTED_REASON}"
+  bash "${real}" --global "$@"
 }
 
 cmd_export() {

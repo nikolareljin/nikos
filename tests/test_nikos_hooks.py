@@ -320,9 +320,11 @@ def test_global_follows_a_symlink_to_a_setup_script_the_user_owns(env):
     real = env["tmp"] / "real-setup-hooks.sh"
     script.rename(real)
     script.symlink_to(real)
+    real.write_text(f'echo "ran $0 $*" >> "{env["log"]}"\n')
     r = run(env, "--global")
     assert r.returncode == 0, r.stderr
-    assert calls(env) == ["setup-hooks --global"]
+    # The resolved file is the one that runs: what was checked is what ran.
+    assert calls(env) == [f"ran {real} --global"]
 
 
 def test_global_refuses_a_relative_script_helpers_home(env):
@@ -331,3 +333,26 @@ def test_global_refuses_a_relative_script_helpers_home(env):
                        capture_output=True, text=True)
     assert r.returncode != 0 and "refusing" in r.stderr
     assert calls(env) == []
+
+
+@pytest.mark.parametrize("loaded", ["helpers.sh", "lib/logging.sh"])
+def test_global_refuses_when_others_can_write_a_file_the_setup_script_loads(env, loaded):
+    target = env["tmp"] / "sh" / loaded
+    target.parent.mkdir(exist_ok=True)
+    target.write_text("# sourced by setup-hooks.sh\n")
+    target.chmod(0o666)
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
+
+
+def test_global_refuses_when_a_directory_above_the_setup_script_is_open_to_others(env):
+    home = env["tmp"] / "sh"
+    home.chmod(0o777)
+    r = run(env, "--global")
+    home.chmod(0o1777)                      # world-writable with the sticky bit, as /tmp
+    sticky = run(env, "--global")
+    home.chmod(0o755)
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert sticky.returncode == 0, sticky.stderr
+    assert calls(env) == ["setup-hooks --global"]

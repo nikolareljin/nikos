@@ -32,7 +32,9 @@ All notable changes to NikOS are documented here.
   options before it. Its helper runs only `git` and `gh`.
 - `nikos hooks` runs `setup-hooks.sh` (for `status`, `apply`, `repair` and
   `--global`) only from an absolute path to a file the user owns, when other
-  users can write neither the file nor its directory. A symlink is followed.
+  users can write neither the file, the `helpers.sh` and `lib/` it loads, nor
+  a directory above it (a sticky directory such as `/tmp` is accepted). A
+  symlink is followed, and the resolved file is the one that runs.
 - `scripts/bump-versions.py` fetches only `https` URLs and follows a redirect
   only to `https`.
 
