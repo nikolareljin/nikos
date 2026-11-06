@@ -1,6 +1,5 @@
 """`nikos update` on a terminal with `dialog` runs the repository sync and the
-Ansible collection install behind a progressbox, so nothing is printed between
-the boxes; their output goes to a log. These tests run the real `cmd_update`,
+Ansible collection install behind a progressbox; their output goes to a log. These tests run the real `cmd_update`,
 `_playbook` and `_boxed_step` from scripts/nikos under a pty (`script`), with
 stub sync, sudo, ansible-galaxy and ansible-playbook on PATH and, in most of
 them, a stub `dialog` that records its arguments. One test drives the real
@@ -24,7 +23,16 @@ pytestmark = pytest.mark.skipif(
     shutil.which("script") is None, reason="util-linux `script` is required to provide a /dev/tty"
 )
 
-BOX_FUNCTIONS = ("_leave_box", "_boxed_step", "_boxed_step_tail")
+BOX_FUNCTIONS = (
+    "_leave_box",
+    "_boxed_step",
+    "_boxed_step_tail",
+    "_url_may_use_ssh",
+    "_sync_may_ask_over_ssh",
+    "_publish_run_log",
+)
+# Fails after reading everything, as tee does on a full disk.
+TEE_FAILS = "#!/bin/sh\ncat >/dev/null\nexit 1\n"
 PLAYBOOK_FUNCTIONS = (
     "_restore_terminal_cursor",
     "_cleanup_become_password_file",
@@ -59,6 +67,8 @@ COMMON = (
     'print_info() { echo "[info] $*"; }\n'
     'print_warn() { echo "[warn] $*"; }\n'
     "_logfile() { :; }\n"
+    # No user or system git config: a test's remotes are the only ones.
+    "export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1\n"
     f'source "{PROGRESS_LIB}"\n'
 )
 
@@ -107,17 +117,47 @@ def make_bindir(work: Path, dialog_stub: str | None) -> Path:
 # -- cmd_update: the repository sync ------------------------------------------
 
 
+def git(*args: str, cwd: Path) -> None:
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        env={"PATH": "/usr/bin:/bin", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"},
+    )
+
+
 def drive_update(
-    tmp_path: Path, *, gauge: bool, sync_rc: int = 0, sync_lines: int = 2, dialog_stub: str | None = DIALOG_STUB
+    tmp_path: Path,
+    *,
+    gauge: bool,
+    sync_rc: int = 0,
+    sync_lines: int = 2,
+    dialog_stub: str | None = DIALOG_STUB,
+    origin: str = "https://example.invalid/nikos.git",
+    setup: str = "",
+    sync_extra: str = "",
+    tee_fails: bool = False,
+    gitmodules: str = "",
 ) -> dict:
     work = tmp_path
     bindir = make_bindir(work, dialog_stub)
-    (work / "home" / ".git").mkdir(parents=True)
+    if tee_fails:
+        (bindir / "tee").write_text(TEE_FAILS)
+        (bindir / "tee").chmod(0o755)
+    (bindir / "ssh").write_text(f'#!/bin/sh\necho "$*" >> "{work}/ssh.log"\nexit 255\n')
+    (bindir / "ssh").chmod(0o755)
+    (work / "home").mkdir()
+    git("init", "-q", cwd=work / "home")
+    git("remote", "add", "origin", origin, cwd=work / "home")
+    if gitmodules:
+        (work / "home" / ".gitmodules").write_text(gitmodules)
     (work / "logs").mkdir()
     calls = work / "calls.log"
     program = work / "probe.sh"
     program.write_text(
         COMMON
+        + setup
         + f'NIKOS_HOME="{work}/home"\nNIKOS_LOG_DIR="{work}/logs"\n'
         'REPO_URL="https://example.invalid/nikos"\nREPO_SYNC_HELPERS="/nonexistent"\n'
         f'CALLS="{calls}"\n'
@@ -126,6 +166,9 @@ def drive_update(
         # The sync prints what git would, coloured, and ends with its own status.
         "_sync_repo_to_ref() {\n"
         '  echo "sync:$* prompt=${GIT_TERMINAL_PROMPT:-unset}" >> "${CALLS}"\n'
+        '  echo "sshcmd=${GIT_SSH_COMMAND:-unset}" >> "${CALLS}.env"\n'
+        '  if [[ /dev/stdin -ef /dev/null ]]; then echo "stdin=null" >> "${CALLS}.env"; else echo "stdin=open" >> "${CALLS}.env"; fi\n'
+        + sync_extra +
         f'  seq -f "git: line %g" {sync_lines}\n'
         '  printf "\\033[31mgit: fatal: could not fetch\\033[0m\\n"\n'
         f"  return {sync_rc}\n"
@@ -140,6 +183,10 @@ def drive_update(
     )
     r = run_in_pty(work, program, bindir)
     r["calls"] = calls.read_text().splitlines() if calls.exists() else []
+    env_log = work / "calls.log.env"
+    r["env"] = env_log.read_text().splitlines() if env_log.exists() else []
+    ssh_log = work / "ssh.log"
+    r["ssh"] = ssh_log.read_text() if ssh_log.exists() else ""
     logs = sorted((work / "logs").glob("nikos-*-sync.log"))
     r["sync_log"] = logs[0] if logs else None
     return r
@@ -151,7 +198,7 @@ def test_with_the_gauge_the_sync_runs_behind_a_box_with_its_output_in_a_log(tmp_
     boxes = [line for line in r["dialog"] if "--progressbox" in line]
     assert len(boxes) == 1, r["dialog"]
     assert "--keep-tite" in boxes[0] and "Updating NikOS repo and submodules to 0.6.5..." in boxes[0], boxes
-    # Nothing between the boxes: neither the step's caption nor git's output.
+    # Neither the step's caption nor git's output on the terminal.
     assert "Updating NikOS repo" not in r["out"] and "git: line" not in r["out"], r["out"]
     assert r["sync_log"] is not None, "the sync wrote no log"
     assert "git: line 1" in r["sync_log"].read_text() and "could not fetch" in r["sync_log"].read_text()
@@ -197,21 +244,135 @@ def test_a_box_that_cannot_draw_does_not_stop_the_sync(tmp_path):
     assert r["sync_log"].read_text().count("git: line ") == 50000
 
 
+def test_the_boxed_sync_has_no_stdin_to_wait_on(tmp_path):
+    r = drive_update(tmp_path, gauge=True)
+    assert "stdin=null" in r["env"], r["env"]
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["git@github.com:o/nikos.git", "ssh://git@example.invalid/o/nikos.git", "git+ssh://example.invalid/nikos", "example.invalid:nikos"],
+)
+def test_an_ssh_origin_syncs_plain_so_a_passphrase_can_be_typed(tmp_path, origin):
+    r = drive_update(tmp_path, gauge=True, origin=origin)
+    assert "END" in r["out"], r["out"]
+    assert not [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+    assert "git: line 1" in r["out"] and r["sync_log"] is None, r["out"]
+    # Nothing is set that would fail a key with a passphrase and no agent.
+    assert r["calls"][0].endswith("prompt=unset") and "sshcmd=unset" in r["env"], (r["calls"], r["env"])
+
+
+def test_an_ssh_submodule_syncs_plain(tmp_path):
+    r = drive_update(
+        tmp_path, gauge=True,
+        gitmodules='[submodule "s"]\n\tpath = s\n\turl = git@example.invalid:o/s.git\n',
+    )
+    assert not [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+
+
+def test_a_local_submodule_url_override_over_ssh_syncs_plain(tmp_path):
+    r = drive_update(
+        tmp_path, gauge=True,
+        setup=f'git -C "{tmp_path}/home" config submodule.s.url git@example.invalid:o/s.git\n',
+    )
+    assert not [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+
+
+def test_an_initialised_submodule_whose_own_origin_is_ssh_syncs_plain(tmp_path):
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    git("init", "-q", cwd=upstream)
+    git("commit", "-q", "--allow-empty", "-m", "first", cwd=upstream)
+    r = drive_update(
+        tmp_path, gauge=True,
+        setup=(
+            f'git -C "{tmp_path}/home" -c protocol.file.allow=always submodule --quiet add "{upstream}" s\n'
+            f'git -C "{tmp_path}/home/s" remote set-url origin git@example.invalid:o/s.git\n'
+        ),
+    )
+    assert not [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+
+
+def test_an_https_submodule_stays_boxed(tmp_path):
+    r = drive_update(
+        tmp_path, gauge=True,
+        gitmodules='[submodule "s"]\n\tpath = s\n\turl = https://example.invalid/s.git\n',
+    )
+    assert [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+
+
+def test_an_https_submodule_rewritten_to_ssh_by_insteadof_syncs_plain(tmp_path):
+    (tmp_path / "gitconfig").write_text('[url "git@example.invalid:"]\n\tinsteadOf = https://example.invalid/\n')
+    r = drive_update(
+        tmp_path, gauge=True,
+        origin="https://other.invalid/nikos.git",
+        setup=f'export GIT_CONFIG_GLOBAL="{tmp_path}/gitconfig"\n',
+        gitmodules='[submodule "s"]\n\tpath = s\n\turl = https://example.invalid/s.git\n',
+    )
+    assert not [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+
+
+def test_a_git_ssh_wrapper_syncs_plain(tmp_path):
+    r = drive_update(tmp_path, gauge=True, setup='export GIT_SSH=/bin/true\n')
+    assert not [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+
+
+def test_an_ssh_url_the_check_could_not_see_gets_batchmode_on_the_users_ssh_command(tmp_path):
+    """A submodule only the target ref declares. Real git, stub ssh."""
+    r = drive_update(
+        tmp_path, gauge=True,
+        setup="export GIT_SSH_COMMAND='ssh -i /k'\n",
+        sync_extra='  git ls-remote ssh://example.invalid/x || true\n',
+    )
+    assert [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+    assert "-i /k -o BatchMode=yes" in r["ssh"], r["ssh"]
+
+
+def test_core_sshcommand_is_kept_under_batchmode(tmp_path):
+    work = tmp_path
+    r = drive_update(
+        work, gauge=True,
+        setup=f'git -C "{work}/home" config core.sshCommand "ssh -i /c"\n',
+        sync_extra='  git ls-remote ssh://example.invalid/x || true\n',
+    )
+    assert "-i /c -o BatchMode=yes" in r["ssh"], r["ssh"]
+
+
+def test_a_failed_boxed_sync_says_how_to_allow_credential_prompts(tmp_path):
+    r = drive_update(tmp_path, gauge=True, sync_rc=2)
+    assert "NIKOS_USE_DIALOG=0 nikos update prints the steps and allows credential prompts." in r["out"], r["out"]
+
+
+def test_a_sync_log_that_cannot_be_written_is_not_reported_as_a_git_failure(tmp_path):
+    r = drive_update(tmp_path, gauge=True, tee_fails=True)
+    assert r["rc"] == 1 and "END" not in r["out"], r["out"]
+    assert "The repository sync finished, but its log" in r["out"], r["out"]
+    assert "Review the git output" not in r["out"] and "Failed to update" not in r["out"], r["out"]
+    assert "continuation" not in r["calls"], r["calls"]
+
+
 # -- _playbook: the collection install ----------------------------------------
 
 
-def drive_playbook(tmp_path: Path, *, gauge: bool, galaxy_rc: int = 0) -> dict:
+def drive_playbook(
+    tmp_path: Path, *, gauge: bool, galaxy_rc: int = 0, override: str = "", previous_log: bool = False, tee_fails: bool = False
+) -> dict:
     work = tmp_path
     bindir = make_bindir(work, DIALOG_STUB)
     (work / "home" / ".git").mkdir(parents=True)
     (work / "logs").mkdir()
     (work / "home" / "requirements.yml").write_text("")
+    if previous_log:
+        (work / "logs" / "previous-run.log").write_text("the last real run\n")
+        (work / "logs" / "playbook-latest.log").symlink_to(work / "logs" / "previous-run.log")
     ansible_log = work / "ansible.log"
     # Passwordless sudo: no password question in this flow.
     (bindir / "sudo").write_text("#!/bin/sh\nexit 0\n")
     (bindir / "ansible-playbook").write_text(
         "#!/bin/bash\n" f'echo "$*" >> "{ansible_log}"\n' 'echo "PLAY RECAP"\n'
     )
+    if tee_fails:
+        (bindir / "tee").write_text(TEE_FAILS)
     (bindir / "ansible-galaxy").write_text(
         "#!/bin/sh\n"
         'echo "galaxy: installing community.general"\n'
@@ -235,9 +396,11 @@ def drive_playbook(tmp_path: Path, *, gauge: bool, galaxy_rc: int = 0) -> dict:
         # Planning fails, so the playbook itself takes the plain view here.
         "nikos_progress_plan() { return 1; }\n"
         + "\n\n".join(extract(name) for name in BOX_FUNCTIONS + PLAYBOOK_FUNCTIONS)
+        + "\n"
+        + override
         + "\n\ntrap '_cleanup_run' EXIT\n"
         # As cmd_update calls it: errexit is suspended inside _playbook.
-        '_playbook -e nikos_update_mode=true || { echo "PLAYBOOK_FAILED rc=$?"; exit 9; }\n'
+        '_playbook -e nikos_update_mode=true || { rc=$?; echo "LAST_LOG=${NIKOS_LAST_RUN_LOG:-none}"; echo "PLAYBOOK_FAILED rc=${rc}"; exit 9; }\n'
         'echo "END"\n',
         encoding="utf-8",
     )
@@ -289,6 +452,39 @@ def test_without_the_gauge_a_failed_collection_install_stops_the_run_with_its_co
     assert "PLAYBOOK_FAILED rc=5" in r["out"], r["out"]
     assert r["ansible"] == [], "the playbook ran without the collections"
     assert "Failed to install required Ansible collections (exit 5)" in r["out"], r["out"]
+
+
+@pytest.mark.parametrize("gauge", [True, False])
+def test_a_failed_collection_install_names_a_log_that_exists(tmp_path, gauge):
+    r = drive_playbook(tmp_path, gauge=gauge, galaxy_rc=5)
+    assert r["run_log"] is not None, "playbook-latest.log dangles"
+    assert f"LAST_LOG={r['run_log']}" in r["out"], r["out"]
+    assert "[FAILED] ansible collections install (rc=5)" in r["run_log"].read_text()
+
+
+@pytest.mark.parametrize("gauge", [True, False])
+@pytest.mark.parametrize("become_rc", [130, 7])
+def test_a_cancel_or_early_become_failure_keeps_the_last_real_runs_log(tmp_path, gauge, become_rc):
+    r = drive_playbook(
+        tmp_path, gauge=gauge, previous_log=True,
+        override=f"_ensure_become_password() {{ return {become_rc}; }}\n",
+    )
+    assert r["ansible"] == [], r["ansible"]
+    assert r["run_log"] == tmp_path / "logs" / "previous-run.log", r["out"]
+
+
+def test_the_latest_link_does_not_dangle_when_tee_writes_nothing(tmp_path):
+    drive_playbook(tmp_path, gauge=False, tee_fails=True)
+    latest = tmp_path / "logs" / "playbook-latest.log"
+    assert latest.is_symlink() and latest.exists()
+
+
+def test_a_collection_log_that_cannot_be_written_is_not_reported_as_a_failed_install(tmp_path):
+    r = drive_playbook(tmp_path, gauge=True, tee_fails=True)
+    assert "PLAYBOOK_FAILED rc=74" in r["out"], r["out"]
+    assert "The Ansible collections installed, but the log" in r["out"], r["out"]
+    assert "Failed to install" not in r["out"] and r["ansible"] == [], r["out"]
+    assert "LAST_LOG=none" in r["out"], r["out"]
 
 
 # -- the real dialog ----------------------------------------------------------

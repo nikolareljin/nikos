@@ -28,7 +28,10 @@ All notable changes to NikOS are documented here.
   output goes to `~/.config/nikos/logs/nikos-<time>-sync.log`, the collection
   output to the run's playbook log. A failed step prints its error, the last
   lines of that log and the log path after the box. Exit codes are unchanged.
-  Without the gauge both steps print as before.
+  Without the gauge both steps print as before. The sync also prints as before
+  when `origin` or a submodule uses SSH, so a key passphrase or host key question
+  can be answered. A boxed HTTPS sync that needs credentials fails instead of
+  prompting; `NIKOS_USE_DIALOG=0` allows the prompt, and the failure says so.
 
 ### Fixed
 - A failed Ansible collection install stops `nikos update` with the

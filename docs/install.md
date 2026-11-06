@@ -131,12 +131,18 @@ nikos update --ref release/0.6.0  # a specific branch or tag
 updates submodules and re-runs the playbook. All roles are idempotent —
 already-installed components are skipped.
 
-On a terminal with `dialog` installed the whole update runs in `dialog` boxes:
-the repository sync, the model checklist, the collection install, the sudo
-password and the per-role gauge. The sync output goes to
+On a terminal with `dialog` installed the update runs in `dialog` boxes: the
+repository sync, the model checklist, the collection install, the sudo password
+and the per-role gauge. Short status lines such as `Re-running playbook...` still
+print between the boxes. The sync output goes to
 `~/.config/nikos/logs/nikos-<time>-sync.log` and the collection output to the
 playbook log (`nikos log` shows it); a failed step prints its error and the log
 path. `NIKOS_USE_DIALOG=0` prints every step as plain text instead.
+
+The sync prints as plain text when `origin` or a submodule uses SSH, including
+through `url.insteadOf`, so a key passphrase or host key question can be answered.
+A boxed sync over HTTPS cannot prompt: if the remote needs credentials it fails.
+Run `NIKOS_USE_DIALOG=0 nikos update` to allow the prompt.
 
 Everything NikOS downloads is pinned in `vars/versions.yml`: release files to
 a version and a sha256, registry packages to an exact version, git checkouts to

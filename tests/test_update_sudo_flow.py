@@ -38,6 +38,7 @@ FUNCTIONS = (
     "_leave_box",
     "_boxed_step",
     "_boxed_step_tail",
+    "_publish_run_log",
     "_playbook",
 )
 
