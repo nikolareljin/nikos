@@ -4,6 +4,15 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Added
+- Bare `nikos` on a terminal opens a `dialog` menu of the commands (all but
+  `help` and `hooks export|import`). It asks for any argument, confirms
+  commands that change the system, and returns after each one until Exit.
+  Piped stdin, no terminal, no `dialog`, a `dialog` that cannot draw (a very
+  small terminal) or `NIKOS_USE_DIALOG=0` print usage and exit 0. `usage()` and the menu come from one command table in
+  `scripts/nikos`; `tests/test_command_menu.py` fails when the dispatch has a
+  command the table does not.
+
 ### Fixed
 - Mousepad, Xfce Terminal, and VS Code now use the same Nord frost `#88C0D0`
   focused-tab accent and `#4C566A` unfocused-tab color. The dark Nordic editor

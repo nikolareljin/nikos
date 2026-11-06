@@ -216,6 +216,7 @@ nikos hooks          # security hooks: tools, owners, every clone you own
 nikos hooks apply    # set them up per repository (--dry-run first); --global is opt-in
 nikos hooks export ~/carry ; nikos hooks import ~/carry   # same setup on another computer
 nikos log [N]        # tail the latest playbook log
+nikos                # on a terminal with dialog: a menu of these commands; otherwise this list
 ```
 
 `nikos update` reads its target from what is checked out: a release install

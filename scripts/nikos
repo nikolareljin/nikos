@@ -423,32 +423,129 @@ _ensure_become_password() {
   fi
 }
 
-usage() {
-  cat <<EOF
-nikos ${NIKOS_VERSION} — Neural Innovation for Knowledge OS
+# Every command the CLI accepts, one row each. Fields, separated by ";":
+#   command   first word, as the dispatch below matches it
+#   synopsis  what usage() prints after "nikos "
+#   menu      argv the menu runs; {Prompt} asks for one word, "-" keeps the
+#             row out of the menu
+#   changes   yes: changes the system, so the menu asks before running it
+#   about     one-line description
+# usage() and the menu are both built from this table; a test fails when the
+# dispatch has a command the table does not.
+NIKOS_COMMANDS=(
+  "setup;setup;setup;yes;Run full NikOS playbook (first install)"
+  "update;update;update;yes;Move to the newest release, then re-run playbook (idempotent)"
+  "update;update --ref <r>;update --ref {Branch or tag};yes;Update to a specific branch or tag instead"
+  "add;add tools;add tools;yes;Choose distrodeck tools by category and install them"
+  "add;add <name>;add {Optional role};yes;Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | openclaw"
+  "add;add ollama-<m>;add ollama-{Role: text, reasoning, coding, vision, embedding or models};yes;Ollama module, this machine's model per role: text | reasoning | coding | vision | embedding | models (all)"
+  "add;add model <m>;add model {Ollama model};yes;Install an Ollama model outside the approved set; updates keep it"
+  "status;status;status;no;Show NikOS version, Ollama models, installed roles"
+  "models;models [show];models show;no;This machine's class and approved model per role"
+  "models;models prune;models prune;yes;Offer each installed model outside the set for removal"
+  "doctor;doctor;doctor;no;Check for broken configs and missing dependencies"
+  "clean;clean;clean;no;Dry run: list old Docker build cache, idle node_modules and unused package caches"
+  "clean;clean --apply;clean --apply;yes;Free that disk space; never Docker volumes"
+  "hooks;hooks;hooks;no;Security hooks: status of the tools and every clone you own"
+  "hooks;hooks apply;hooks apply;yes;Set them up in your clones (--dry-run, --batch N, --agents)"
+  "hooks;hooks --global;hooks --global;yes;Machine-wide git hooks (opt-in; install/update never run it)"
+  "hooks;hooks export|import DIR;-;yes;Carry the setup to another computer"
+  "log;log [N];log;no;Show last N lines of the latest playbook log (default 50)"
+  "log;log list;log list;no;List available log files"
+  "help;help;-;no;Show this message"
+)
 
-Usage:
-  nikos setup            Run full NikOS playbook (first install)
-  nikos update           Move to the newest release, then re-run playbook (idempotent)
-  nikos update --ref <r> Update to a specific branch or tag instead
-  nikos add tools        Choose distrodeck tools by category and install them
-  nikos add <name>       Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | openclaw
-  nikos add ollama-<m>   Ollama module, this machine's model per role: text | reasoning | coding | vision | embedding | models (all)
-  nikos add model <m>    Install an Ollama model outside the approved set; updates keep it
-  nikos status           Show NikOS version, Ollama models, installed roles
-  nikos models [show]    This machine's class and approved model per role
-  nikos models prune     Offer each installed model outside the set for removal
-  nikos doctor           Check for broken configs and missing dependencies
-  nikos clean [--apply]  Free disk: old Docker build cache, idle node_modules, unused
-                         package caches. A dry run unless --apply; never Docker volumes
-  nikos hooks            Security hooks: status of the tools and every clone you own
-  nikos hooks apply      Set them up in your clones (--dry-run, --batch N, --agents)
-  nikos hooks --global   Machine-wide git hooks (opt-in; install/update never run it)
-  nikos hooks export|import DIR   Carry the setup to another computer
-  nikos log [N]          Show last N lines of the latest playbook log (default 50)
-  nikos log list         List available log files
-  nikos help             Show this message
-EOF
+# Splits one NIKOS_COMMANDS row into _cmd_name, _cmd_synopsis, _cmd_menu,
+# _cmd_changes and _cmd_about. The description may contain ";", so the first
+# four fields are taken from the front.
+_command_row() {
+  local rest="$1"
+  _cmd_name="${rest%%;*}"; rest="${rest#*;}"
+  _cmd_synopsis="${rest%%;*}"; rest="${rest#*;}"
+  _cmd_menu="${rest%%;*}"; rest="${rest#*;}"
+  _cmd_changes="${rest%%;*}"; _cmd_about="${rest#*;}"
+}
+
+usage() {
+  local row
+  printf 'nikos %s - Neural Innovation for Knowledge OS\n\nUsage:\n' "${NIKOS_VERSION}"
+  for row in "${NIKOS_COMMANDS[@]}"; do
+    _command_row "${row}"
+    printf '  nikos %-24s %s\n' "${_cmd_synopsis}" "${_cmd_about}"
+  done
+}
+
+# True when bare `nikos` should open the menu rather than print usage: stdin
+# and stdout are a terminal, dialog is installed, and NIKOS_USE_DIALOG is not 0.
+_menu_available() {
+  [[ -t 0 && -t 1 && "${USE_DIALOG}" != "0" && "${TERM:-dumb}" != "dumb" ]] &&
+    command -v dialog >/dev/null 2>&1
+}
+
+# Fills each {Prompt} of a menu template from a dialog input box and prints
+# the argv, one word per line. Returns 1 when the user cancels, or gives an
+# empty value or one with spaces (each prompt stands for one word).
+_menu_argv() {
+  local template="$1" word prompt value pre post
+  local -a words
+  # Template words are split on spaces; a {Prompt} may contain spaces, so
+  # they are rejoined until the closing brace.
+  read -r -a words <<<"${template}"
+  local i=0 n=${#words[@]}
+  while (( i < n )); do
+    word="${words[i]}"
+    while [[ "${word}" == *"{"* && "${word}" != *"}"* ]] && (( i + 1 < n )); do
+      i=$((i + 1)); word="${word} ${words[i]}"
+    done
+    while [[ "${word}" == *"{"*"}"* ]]; do
+      pre="${word%%\{*}"; prompt="${word#*\{}"; prompt="${prompt%%\}*}"; post="${word#*\}}"
+      value="$(dialog --stdout --inputbox "${prompt}" 8 70 "" 2>/dev/tty)" || return 1
+      [[ -n "${value}" && "${value}" != *[[:space:]]* ]] || return 1
+      word="${pre}${value}${post}"
+    done
+    printf '%s\n' "${word}"
+    i=$((i + 1))
+  done
+}
+
+# The menu bare `nikos` opens on a terminal. Each choice runs as a child
+# process, so a command that exits comes back here; Exit or Esc leaves.
+cmd_menu() {
+  local -a items=() rows=() argv=()
+  local row choice rc i=0
+  for row in "${NIKOS_COMMANDS[@]}"; do
+    _command_row "${row}"
+    [[ "${_cmd_menu}" == "-" ]] && continue
+    i=$((i + 1)); rows[i]="${row}"
+    items+=("${i}" "${_cmd_synopsis}: ${_cmd_about}")
+  done
+  while true; do
+    # DIALOG_ERROR gives a failed dialog (a terminal too small to draw on) an
+    # exit code of its own; by default it is 255, the same as Esc.
+    rc=0
+    choice="$(DIALOG_ERROR=3 dialog --stdout --title "NikOS ${NIKOS_VERSION}" --cancel-label "Exit" \
+      --menu "Choose a command" 22 100 14 "${items[@]}" 2>/dev/tty)" || rc=$?
+    if (( rc == 3 )); then
+      clear
+      usage
+      return 0
+    fi
+    (( rc == 0 )) || break
+    _command_row "${rows[choice]}"
+    argv=()
+    while IFS= read -r row; do argv+=("${row}"); done < <(_menu_argv "${_cmd_menu}"; echo "rc=$?")
+    [[ "${argv[${#argv[@]}-1]}" == "rc=0" ]] || continue
+    unset 'argv[${#argv[@]}-1]'
+    if [[ "${_cmd_changes}" == "yes" ]]; then
+      dialog --yesno "Run 'nikos ${argv[*]}'? It changes this system." 7 70 2>/dev/tty || continue
+    fi
+    clear
+    rc=0
+    bash "${NIKOS_CLI_PATH}" "${argv[@]}" || rc=$?
+    printf '\n[nikos %s finished, exit %s] Press Enter to return to the menu. ' "${argv[*]}" "${rc}"
+    read -r _ </dev/tty || true
+  done
+  clear
 }
 
 _get_default_skip_tags() {
@@ -1316,7 +1413,14 @@ cmd_log() {
 
 _print_logo
 
-case "${1:-help}" in
+if [[ $# -eq 0 ]]; then
+  # Bare `nikos`: the menu on a terminal; usage, exit 0, everywhere else
+  # (piped stdin, no terminal, NIKOS_USE_DIALOG=0, no dialog).
+  if _menu_available; then cmd_menu; else usage; fi
+  exit 0
+fi
+
+case "${1}" in
   setup)  cmd_setup ;;
   update)
     case "${2:-}" in
