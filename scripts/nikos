@@ -76,9 +76,11 @@ _leave_tui() {
 # need --keep-tite for that: without it dialog drops the alternate screen and
 # draws over the normal one. A terminal with no alternate screen (TERM=linux)
 # keeps the box until later output scrolls it away.
+# No rmcup here: dialog has already restored the screen, and on rxvt, konsole and
+# gnome a second rmcup erases it.
 _leave_box() {
   if [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null; then
-    { tput rmcup 2>/dev/null; tput cnorm 2>/dev/null || printf '\033[?25h'; } >/dev/tty 2>/dev/null || true
+    { tput cnorm 2>/dev/null || printf '\033[?25h'; } >/dev/tty 2>/dev/null || true
   fi
 }
 

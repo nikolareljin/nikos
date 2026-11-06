@@ -382,3 +382,10 @@ def test_the_question_boxes_keep_the_normal_screen():
         assert "--keep-tite" in text[line:start], call
         after = text[start:]
         assert after.index("_leave_box") < after.find("_leave_tui") or "_leave_tui" not in after
+
+
+def test_leaving_a_box_does_not_restore_the_screen_twice():
+    text = (Path(__file__).resolve().parent.parent / "scripts" / "nikos").read_text()
+    body = text[text.index("_leave_box() {"):]
+    body = body[: body.index("\n}\n")]
+    assert "rmcup" not in body and "clear" not in body
