@@ -121,8 +121,9 @@
 # of systemd, and 25.10 and later ship chrony instead, so a minimal install, a
 # `--no-install-recommends` one, or one where `apt remove chrony` ran has no
 # time daemon at all. Install the one this release ships, then enable NTP.
-# ntpsec and openntpd keep the clock without an ntp-units.d entry, and every
-# time daemon conflicts with the others, so nothing is installed next to one.
+# On 24.04 ntpsec and openntpd keep the clock without an ntp-units.d entry
+# (26.04's ntpsec ships one), and every time daemon conflicts with the others,
+# so nothing is installed next to one.
 # A container cannot run either unit (ConditionVirtualization=!container), so
 # it gets no package and a note instead of a failed playbook.
 - name: Enable NTP time synchronization

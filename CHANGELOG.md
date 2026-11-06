@@ -48,7 +48,8 @@ All notable changes to NikOS are documented here.
   conflicts with. A container, where neither unit can run, gets no package
   and one note in the output; any other `set-ntp` error still fails the run.
   An image build skips the step. `nikos doctor` checks that NTP is on and
-  warns, without failing, on a host with no time sync service.
+  warns, without failing, in a container running systemd and on a host where
+  systemd has no NTP unit to drive, naming any installed time-daemon package.
 - A failed Ansible collection install stops `nikos update` with the
   installer's exit code and a message. It was printed and the playbook ran
   anyway, because `cmd_update` suspends `set -e` around `_playbook`.

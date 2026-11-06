@@ -24,7 +24,7 @@ NTP = next(t for t in TASKS if t["name"] == "Enable NTP time synchronization")
 TIMEDATECTL = """#!/bin/sh
 printf '%s\\n' "$*" >> "${CALLS}"
 case "$*" in
-  "show --property=CanNTP --value") echo "${CAN_NTP}" ;;
+  "show --property=CanNTP --value") echo "${CAN_NTP}"; exit "${CAN_NTP_RC:-0}" ;;
   "set-ntp true")
     if [ -n "${SET_NTP_ERROR}" ]; then
       echo "Failed to set ntp: ${SET_NTP_ERROR}" >&2
@@ -59,7 +59,15 @@ def _stub_dpkg_query(bindir: Path, body: str = "#!/bin/sh\nexit 0\n") -> None:
     stub.chmod(0o755)
 
 
-def _run_role(tmp_path: Path, *, can_ntp: str, set_error: str = "", version: str = "24.04",
+def _stub_detect_virt(bindir: Path, container: bool) -> None:
+    stub = bindir / "systemd-detect-virt"
+    code = 0 if container else 1
+    stub.write_text(f'#!/bin/sh\n[ "$*" = "--container --quiet" ] || exit 2\nexit {code}\n')
+    stub.chmod(0o755)
+
+
+def _run_role(tmp_path: Path, *, can_ntp: str, can_ntp_rc: int = 0, set_error: str = "",
+              version: str = "24.04",
               container: bool = False, extra: dict | None = None,
               dpkg: str = "#!/bin/sh\nexit 0\n") -> tuple[int, str, Path]:
     """Run the real NTP block; apt and systemd become debug lines that keep their `when`."""
@@ -81,7 +89,8 @@ def _run_role(tmp_path: Path, *, can_ntp: str, set_error: str = "", version: str
     play = [{
         "hosts": "localhost", "connection": "local", "gather_facts": False,
         "environment": {"PATH": f"{bindir}:/usr/bin:/bin", "CALLS": str(calls),
-                        "CAN_NTP": can_ntp, "SET_NTP_ERROR": set_error},
+                        "CAN_NTP": can_ntp, "CAN_NTP_RC": str(can_ntp_rc),
+                        "SET_NTP_ERROR": set_error},
         "vars": {"ansible_facts": facts, **(extra or {})},
         "tasks": [block],
     }]
@@ -104,6 +113,8 @@ def test_a_host_with_a_time_service_just_turns_ntp_on(tmp_path):
 @pytest.mark.parametrize("version,package", [
     ("22.04", "systemd-timesyncd"),
     ("24.04", "systemd-timesyncd"),
+    ("25.04", "systemd-timesyncd"),
+    ("25.10", "chrony"),
     ("26.04", "chrony"),
 ])
 def test_a_host_without_one_gets_the_daemon_its_release_ships(tmp_path, version, package):
@@ -116,14 +127,34 @@ def test_a_host_without_one_gets_the_daemon_its_release_ships(tmp_path, version,
 
 
 def test_another_time_daemon_is_left_alone(tmp_path):
-    """ntpsec provides time-daemon without an ntp-units.d entry; installing
-    systemd-timesyncd next to it would remove it (Conflicts: time-daemon)."""
+    """On 24.04 ntpsec provides time-daemon without an ntp-units.d entry;
+    installing systemd-timesyncd next to it would remove it (Conflicts: time-daemon)."""
     rc, out, _ = _run_role(tmp_path, can_ntp="no", set_error="NTP not supported", dpkg=DPKG_QUERY)
     assert rc == 0, out
     assert "INSTALL=" not in out, out
     assert "RESTART=" not in out, out
     assert "ntpsec is installed" in out, out
     assert "chrony" not in out, out
+
+
+@pytest.mark.parametrize("provides", [
+    "time-daemon (= 1)",
+    "time-daemon(= 1)",
+    "foo, time-daemon",
+])
+def test_a_versioned_or_listed_provides_counts_as_a_time_daemon(tmp_path, provides):
+    dpkg = f"#!/bin/sh\nprintf 'ntpsec install ok installed\\t{provides}\\n'\n"
+    rc, out, _ = _run_role(tmp_path, can_ntp="no", set_error="NTP not supported", dpkg=dpkg)
+    assert rc == 0, out
+    assert "INSTALL=" not in out, out
+    assert "ntpsec is installed" in out, out
+
+
+def test_a_failed_can_ntp_probe_installs_nothing(tmp_path):
+    rc, out, calls = _run_role(tmp_path, can_ntp="", can_ntp_rc=1)
+    assert rc == 0, out
+    assert "INSTALL=" not in out, out
+    assert calls.read_text().splitlines()[-1] == "set-ntp true"
 
 
 def test_a_container_gets_no_package_and_one_note(tmp_path):
@@ -155,20 +186,25 @@ def test_an_image_build_leaves_the_clock_alone(tmp_path):
     assert not calls.exists(), calls.read_text()
 
 
-def test_the_probe_runs_in_check_mode_and_set_ntp_does_not():
+def test_the_probes_run_in_check_mode_and_set_ntp_does_not():
     probe = next(t for t in NTP["block"] if "CanNTP" in t.get("ansible.builtin.command", ""))
     assert probe["check_mode"] is False
     assert probe["failed_when"] is False
+    dpkg = next(t for t in NTP["block"] if "dpkg-query" in t.get("ansible.builtin.shell", ""))
+    assert dpkg["check_mode"] is False
     turn_on = next(t for t in NTP["block"] if "set-ntp" in t.get("ansible.builtin.command", ""))
     assert "check_mode" not in turn_on
 
 
 # --- nikos doctor -----------------------------------------------------------
 
-def _doctor(tmp_path: Path, can_ntp: str, ntp_on: str) -> str:
+def _doctor(tmp_path: Path, can_ntp: str, ntp_on: str, *, container: bool = False,
+            dpkg: str = "#!/bin/sh\nexit 0\n") -> str:
     home = _fake_home(tmp_path, "server")
     (home / "roles").symlink_to(ROOT / "roles")
     bindir, _ = _stub_timedatectl(tmp_path)
+    _stub_detect_virt(bindir, container)
+    _stub_dpkg_query(bindir, dpkg)
     env = dict(os.environ, NIKOS_HOME=str(home), HOME=str(tmp_path),
                PATH=f"{bindir}:/usr/bin:/bin", CALLS=str(tmp_path / "calls"),
                CAN_NTP=can_ntp, NTP_ON=ntp_on, SET_NTP_ERROR="")
@@ -191,7 +227,27 @@ def test_doctor_flags_a_host_that_could_sync_but_does_not(tmp_path):
     assert line.startswith(("[error]", "[Error!]")), line
 
 
-def test_doctor_warns_not_fails_without_a_time_service(tmp_path):
-    out = _doctor(tmp_path, "no", "no")
-    assert "No time sync service on this host" in out, out
+def test_doctor_warns_in_a_container_with_a_daemon_package(tmp_path):
+    out = _doctor(tmp_path, "yes", "no", container=True)
+    line = _line(out, "a container running systemd")
+    assert not line.startswith(("[error]", "[Error!]")), line
     assert "NTP time sync enabled" not in out
+
+
+def test_doctor_passes_a_container_with_ntp_on(tmp_path):
+    line = _line(_doctor(tmp_path, "yes", "yes", container=True), "NTP time sync enabled")
+    assert not line.startswith(("[error]", "[Error!]")), line
+
+
+def test_doctor_warns_not_fails_without_an_ntp_unit(tmp_path):
+    out = _doctor(tmp_path, "no", "no")
+    line = _line(out, "systemd has no NTP unit to drive")
+    assert not line.startswith(("[error]", "[Error!]")), line
+    assert "installed time daemon" not in line
+    assert "NTP time sync enabled" not in out
+
+
+def test_doctor_names_an_installed_time_daemon(tmp_path):
+    line = _line(_doctor(tmp_path, "no", "no", dpkg=DPKG_QUERY), "systemd has no NTP unit to drive")
+    assert "installed time daemon: ntpsec (NTP off)" in line, line
+    assert "chrony" not in line, line

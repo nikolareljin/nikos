@@ -1607,14 +1607,25 @@ cmd_doctor() {
   fi
   check "SSH server installed" test -x /usr/sbin/sshd
   check "SSH accepting connections" ssh_listening
-  # The base role turns NTP on where systemd has a time sync service. A host
-  # with none (a container) answers CanNTP=no; that is a warning, since
-  # `nikos update` cannot change it.
+  # The base role turns NTP on where systemd has a time sync unit to drive.
+  # CanNTP=no is a warning, since `nikos update` cannot change it. So is NTP
+  # off in a container running systemd: a daemon package can give CanNTP=yes
+  # there, but ConditionVirtualization keeps its unit stopped.
   ntp_property() { timedatectl show --property="$1" --value 2>/dev/null; }
-  if [[ "$(ntp_property CanNTP)" == "yes" ]]; then
-    check "NTP time sync enabled" test "$(ntp_property NTP)" = yes
+  time_daemon_packages() {
+    dpkg-query -W -f='${Package} ${Status}\t${Provides}\n' 2>/dev/null |
+      awk -F'\t' '$1 ~ / installed$/ && $2 ~ /(^|[ ,])time-daemon($|[ ,(])/ {
+        sub(/ .*/, "", $1); names = names (names == "" ? "" : ", ") $1
+      } END { if (names != "") print names }'
+  }
+  if [[ "$(ntp_property CanNTP)" != "yes" ]]; then
+    local ntp_daemons
+    ntp_daemons="$(time_daemon_packages || true)"
+    print_warn "systemd has no NTP unit to drive${ntp_daemons:+; installed time daemon: ${ntp_daemons}} (NTP off)"
+  elif [[ "$(ntp_property NTP)" != "yes" ]] && systemd-detect-virt --container --quiet; then
+    print_warn "NTP off: a container running systemd does not start the time sync unit"
   else
-    print_warn "No time sync service on this host (NTP off)"
+    check "NTP time sync enabled" test "$(ntp_property NTP)" = yes
   fi
   optional_check "Git setup done or skipped (nikos-git-setup)" test -f "${HOME}/.config/nikos/github-configured"
   check "NikOS repo present" test -d "${NIKOS_HOME}/.git"
