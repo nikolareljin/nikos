@@ -59,6 +59,8 @@ def write_program(tmp_path: Path) -> Path:
         + "\n\n"
         + 'BECOME_PASSWORD_FILE=""\n'
         + 'print_error() { echo "[error] $*" >&2; }\n'
+        # No gauge here, so the password is asked with the plain prompt.
+        + "_can_use_gauge() { return 1; }\n_leave_tui() { :; }\n"
         # The real call site: an `&&` condition, where errexit is suspended.
         + "if true && _collect_become_password; then\n"
         + '  echo "RESULT=ok mode=$(stat -c %a "${BECOME_PASSWORD_FILE}")"\n'
@@ -258,6 +260,7 @@ def write_update_program(tmp_path: Path, calls: int = 2) -> Path:
         + '\n\nBECOME_PASSWORD_FILE=""\nNIKOS_BECOME_MODE=""\nSUDO_KEEPALIVE_PID=""\n'
         + 'print_error() { echo "[error] $*" >&2; }\n'
         + '_logfile() { :; }\n'
+        + "_can_use_gauge() { return 1; }\n_leave_tui() { :; }\n"
         + body
         + '\necho "FILE=$(cat "${BECOME_PASSWORD_FILE}")"\n'
         + 'echo "KEEPALIVE=${SUDO_KEEPALIVE_PID}"\n'

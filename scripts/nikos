@@ -314,19 +314,44 @@ _offer_dialog_install() {
 #
 # Each answer is checked with `sudo -S -v`, fed on stdin (never argv), so a
 # typo is caught here with three tries instead of failing the playbook later.
+# Asks for the sudo password in a dialog box. $1 is the attempt number: from
+# the second on, the box says the last answer was wrong. Prints the answer.
+# Returns 4 when dialog could not draw (DIALOG_ERROR; by default that is 255,
+# the same as Esc) and another non-zero code when the user cancels.
+_become_password_box() {
+  local text="Sudo password for ${USER:-$(id -un)}. It is asked once and used for the whole command."
+  (( $1 > 1 )) && text="Sorry, try again.\n\n${text}"
+  DIALOG_ERROR=4 dialog --stdout --title "NikOS ${NIKOS_VERSION}: sudo password" \
+    --passwordbox "${text}" 10 66 </dev/tty 2>/dev/tty
+}
+
 _collect_become_password() {
-  local pw="" attempt
+  local pw="" attempt use_box=false box_rc
 
   [[ -e /dev/tty ]] || { NIKOS_PROGRESS_SKIP_REASON="no controlling terminal /dev/tty"; return 1; }
+  # The same condition as the gauge: a run that draws the gauge asks in a box.
+  _can_use_gauge && use_box=true
   for attempt in 1 2 3; do
-    printf 'Sudo password for %s: ' "${USER:-$(id -un)}" >/dev/tty 2>/dev/null ||
-      { NIKOS_PROGRESS_SKIP_REASON="no controlling terminal /dev/tty"; return 1; }
-    if ! read -rs pw </dev/tty; then
-      printf '\n' >/dev/tty
-      NIKOS_PROGRESS_SKIP_REASON="empty sudo password"
-      return 1
+    if [[ "${use_box}" == true ]]; then
+      box_rc=0
+      pw="$(_become_password_box "${attempt}")" || box_rc=$?
+      _leave_tui
+      # dialog could not draw: ask with the plain prompt from here on.
+      (( box_rc != 4 )) || use_box=false
+      # 3: the user cancelled, which ends the command instead of falling back
+      # to ansible's own prompt.
+      (( box_rc == 0 || box_rc == 4 )) || return 3
     fi
-    printf '\n' >/dev/tty
+    if [[ "${use_box}" != true ]]; then
+      printf 'Sudo password for %s: ' "${USER:-$(id -un)}" >/dev/tty 2>/dev/null ||
+        { NIKOS_PROGRESS_SKIP_REASON="no controlling terminal /dev/tty"; return 1; }
+      if ! read -rs pw </dev/tty; then
+        printf '\n' >/dev/tty
+        NIKOS_PROGRESS_SKIP_REASON="empty sudo password"
+        return 1
+      fi
+      printf '\n' >/dev/tty
+    fi
     if [[ -z "${pw}" ]]; then
       NIKOS_PROGRESS_SKIP_REASON="empty sudo password"
       return 1
@@ -339,7 +364,7 @@ _collect_become_password() {
       break
     fi
     pw=""
-    (( attempt < 3 )) && printf 'Sorry, try again.\n' >/dev/tty
+    [[ "${use_box}" == true ]] || { (( attempt < 3 )) && printf 'Sorry, try again.\n' >/dev/tty; }
   done
   if [[ -z "${pw}" ]]; then
     # 2, not 1: a fourth try through --ask-become-pass would only repeat this.
@@ -389,7 +414,8 @@ _collect_become_password() {
 # NIKOS_BECOME_MODE to nopass, file (BECOME_PASSWORD_FILE holds a checked
 # password, so `nikos update` asks once although it runs the playbook twice)
 # or ask (no terminal, or an empty answer: ansible prompts itself on each
-# run). Returns 1 only when sudo rejected the password three times.
+# run). Returns 1 when sudo rejected the password three times and 130 when
+# the user cancelled the password box.
 _ensure_become_password() {
   if [[ "${NIKOS_BECOME_MODE}" == "ask" ]]; then
     NIKOS_PROGRESS_SKIP_REASON="${NIKOS_BECOME_ASK_REASON}"
@@ -416,6 +442,10 @@ _ensure_become_password() {
     print_error "Sudo rejected the password three times; the playbook did not run."
     _logfile "[FAILED] sudo password rejected 3 times"
     return 1
+  elif (( pw_rc == 3 )); then
+    print_info "Cancelled at the sudo password; the playbook did not run."
+    _logfile "[CANCELLED] at the sudo password"
+    return 130
   else
     NIKOS_PROGRESS_SKIP_REASON="${NIKOS_PROGRESS_SKIP_REASON:-could not store the sudo password}"
     NIKOS_BECOME_ASK_REASON="${NIKOS_PROGRESS_SKIP_REASON}"
@@ -709,7 +739,7 @@ _playbook() {
   NIKOS_PROGRESS_SKIP_REASON=""
   # Before the dialog offer: its `sudo apt-get install` then runs on the
   # checked password instead of asking for it a second time.
-  _ensure_become_password || return 1
+  _ensure_become_password || return $?
   _offer_dialog_install
   case "${NIKOS_BECOME_MODE}" in
     file) playbook_args+=(--become-password-file "${BECOME_PASSWORD_FILE}") ;;
@@ -930,6 +960,8 @@ cmd_update() {
   # and exit code, and the optional replay is not run on top of a failure.
   local rc=0
   _playbook -e nikos_update_mode=true || rc=$?
+  # Cancelled at the password box: said there, and nothing ran.
+  [[ "${rc}" -ne 130 ]] || exit 130
   if [[ "${rc}" -ne 0 ]]; then
     print_error "nikos update failed (exit ${rc}); optional bundles were not refreshed. Log: ${NIKOS_LAST_RUN_LOG:-${NIKOS_LOG_DIR:-~/.config/nikos/logs}}"
     exit "${rc}"
@@ -1110,6 +1142,12 @@ _models_outside() {
 # Offers each installed model outside the set for removal, one question per
 # model, on a terminal. Without one it only lists them: nothing is removed
 # without a yes.
+# Asks the Ollama at $1 to delete model $2.
+_models_remove_one() {
+  curl -fsS --max-time 60 -X DELETE "${1%/}/api/delete" \
+    -H 'Content-Type: application/json' -d "{\"model\":\"$2\",\"name\":\"$2\"}" >/dev/null
+}
+
 _models_offer_removal() {
   local endpoint outside m answer removed=0
   [[ "$(_nikos_var nikos_ollama_mode local)" == "local" ]] || return 0
@@ -1126,6 +1164,33 @@ _models_offer_removal() {
     echo "  Run 'nikos models prune' on a terminal to choose, or 'nikos add model <name>' to keep one."
     return 0
   fi
+  if _can_use_gauge; then
+    # One checklist, nothing checked: OK with no mark, Cancel and Esc keep
+    # every model.
+    local -a items=()
+    local picked="" list_rc=0
+    while IFS= read -r m; do
+      [[ -z "${m}" ]] || items+=("${m}" "" off)
+    done <<<"${outside}"
+    picked="$(DIALOG_ERROR=4 dialog --stdout --separate-output --title "NikOS: models outside the approved set" \
+      --checklist "Check the models to remove. A project that still names one pulls it again when it starts. 'nikos add model <name>' keeps one for good." \
+      20 76 10 "${items[@]}" </dev/tty 2>/dev/tty)" || list_rc=$?
+    _leave_tui
+    # 4: dialog could not draw, so the text questions below ask instead.
+    if (( list_rc != 4 )); then
+      (( list_rc == 0 )) || picked=""
+      while IFS= read -r m; do
+        [[ -n "${m}" ]] || continue
+        if _models_remove_one "${endpoint}" "${m}"; then
+          echo "  removed ${m}"; removed=$((removed + 1))
+        else
+          print_error "  could not remove ${m}"
+        fi
+      done <<<"${picked}"
+      [[ "${removed}" -eq 0 ]] || print_info "Removed ${removed} model(s)."
+      return 0
+    fi
+  fi
   print_info "Installed models outside this machine's approved set. A project that still"
   echo "  names one pulls it again when it starts."
   while IFS= read -r m; do
@@ -1133,8 +1198,7 @@ _models_offer_removal() {
     read -r -p "  Remove ${m}? [y/N] " answer </dev/tty || answer=""
     case "${answer,,}" in
       y | yes)
-        if curl -fsS --max-time 60 -X DELETE "${endpoint%/}/api/delete" \
-          -H 'Content-Type: application/json' -d "{\"model\":\"${m}\",\"name\":\"${m}\"}" >/dev/null; then
+        if _models_remove_one "${endpoint}" "${m}"; then
           echo "    removed"; removed=$((removed + 1))
         else
           print_error "    could not remove ${m}"
