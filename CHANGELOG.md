@@ -30,8 +30,9 @@ All notable changes to NikOS are documented here.
   lines of that log and the log path after the box. Exit codes are unchanged.
   Without the gauge both steps print as before. The sync also prints as before
   when `origin` or a submodule uses SSH, so a key passphrase or host key question
-  can be answered. A boxed HTTPS sync that needs credentials fails instead of
-  prompting; `NIKOS_USE_DIALOG=0` allows the prompt, and the failure says so.
+  can be answered, and when the ssh command contains a `#`. A boxed sync that
+  needs credentials fails instead of prompting; `NIKOS_USE_DIALOG=0` allows the
+  prompt, and an authentication failure says so.
 
 ### Fixed
 - A failed Ansible collection install stops `nikos update` with the

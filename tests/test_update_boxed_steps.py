@@ -28,6 +28,8 @@ BOX_FUNCTIONS = (
     "_boxed_step",
     "_boxed_step_tail",
     "_url_may_use_ssh",
+    "_sync_ssh_command",
+    "_sync_log_shows_auth_failure",
     "_sync_may_ask_over_ssh",
     "_publish_run_log",
 )
@@ -134,7 +136,9 @@ def drive_update(
     sync_rc: int = 0,
     sync_lines: int = 2,
     dialog_stub: str | None = DIALOG_STUB,
-    origin: str = "https://example.invalid/nikos.git",
+    origin: str | None = "https://example.invalid/nikos.git",
+    real_logfile: bool = False,
+    log_dir: str = "logs",
     setup: str = "",
     sync_extra: str = "",
     tee_fails: bool = False,
@@ -149,7 +153,8 @@ def drive_update(
     (bindir / "ssh").chmod(0o755)
     (work / "home").mkdir()
     git("init", "-q", cwd=work / "home")
-    git("remote", "add", "origin", origin, cwd=work / "home")
+    if origin is not None:
+        git("remote", "add", "origin", origin, cwd=work / "home")
     if gitmodules:
         (work / "home" / ".gitmodules").write_text(gitmodules)
     (work / "logs").mkdir()
@@ -158,7 +163,7 @@ def drive_update(
     program.write_text(
         COMMON
         + setup
-        + f'NIKOS_HOME="{work}/home"\nNIKOS_LOG_DIR="{work}/logs"\n'
+        + f'NIKOS_HOME="{work}/home"\nNIKOS_LOG_DIR="{work}/{log_dir}"\n'
         'REPO_URL="https://example.invalid/nikos"\nREPO_SYNC_HELPERS="/nonexistent"\n'
         f'CALLS="{calls}"\n'
         f"_can_use_gauge() {{ return {0 if gauge else 1}; }}\n"
@@ -177,6 +182,7 @@ def drive_update(
         '_models_offer_removal() { echo "models:offer-removal" >> "${CALLS}"; }\n'
         '_exec_update_continuation() { echo "continuation" >> "${CALLS}"; }\n'
         '_get_saved_optional_tags() { printf "\\n"; }\n'
+        + (extract("_logfile") + "\n\n" if real_logfile else "")
         + "\n\n".join(extract(name) for name in BOX_FUNCTIONS + ("cmd_update",))
         + '\n\necho BEFORE\ncmd_update\necho "END"\n',
         encoding="utf-8",
@@ -338,9 +344,71 @@ def test_core_sshcommand_is_kept_under_batchmode(tmp_path):
     assert "-i /c -o BatchMode=yes" in r["ssh"], r["ssh"]
 
 
-def test_a_failed_boxed_sync_says_how_to_allow_credential_prompts(tmp_path):
-    r = drive_update(tmp_path, gauge=True, sync_rc=2)
-    assert "NIKOS_USE_DIALOG=0 nikos update prints the steps and allows credential prompts." in r["out"], r["out"]
+def test_a_hash_in_git_ssh_command_syncs_plain_as_a_comment_would_swallow_batchmode(tmp_path):
+    r = drive_update(tmp_path, gauge=True, setup="export GIT_SSH_COMMAND='ssh -i /k # work key'\n")
+    assert "END" in r["out"], r["out"]
+    assert not [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+    assert "sshcmd=ssh -i /k # work key" in r["env"], r["env"]
+
+
+def test_a_hash_in_core_sshcommand_syncs_plain(tmp_path):
+    r = drive_update(
+        tmp_path, gauge=True,
+        setup=f"""git -C "{tmp_path}/home" config core.sshCommand 'ssh -i /c # work key'\n""",
+    )
+    assert not [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+
+
+def test_an_empty_core_sshcommand_still_names_ssh_under_batchmode(tmp_path):
+    r = drive_update(tmp_path, gauge=True, setup=f'git -C "{tmp_path}/home" config core.sshCommand ""\n')
+    assert "sshcmd=ssh -o BatchMode=yes" in r["env"], r["env"]
+
+
+def test_a_checkout_with_no_origin_syncs_plain(tmp_path):
+    r = drive_update(tmp_path, gauge=True, origin=None)
+    assert "END" in r["out"], r["out"]
+    assert not [line for line in r["dialog"] if "--progressbox" in line], r["dialog"]
+    assert "git: line 1" in r["out"] and r["sync_log"] is None, r["out"]
+
+
+PLAIN_VIEW_HINT = "NIKOS_USE_DIALOG=0 nikos update prints the steps and allows credential prompts."
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        "fatal: could not read Username for 'https://example.invalid': terminal prompts disabled",
+        "fatal: could not read Password for 'https://u@example.invalid': No such device or address",
+        "Host key verification failed.",
+        "git@example.invalid: Permission denied (publickey).",
+    ],
+)
+def test_a_boxed_sync_that_failed_on_auth_says_how_to_allow_credential_prompts(tmp_path, error):
+    r = drive_update(tmp_path, gauge=True, sync_rc=2, sync_extra=f'  echo "{error}" >&2\n')
+    assert r["rc"] == 1 and PLAIN_VIEW_HINT in r["out"], r["out"]
+
+
+@pytest.mark.parametrize("sync_rc", [1, 2, 3])
+def test_a_boxed_sync_that_failed_on_anything_else_does_not_offer_the_plain_view(tmp_path, sync_rc):
+    """rc 1 is a stash conflict: credential prompts have nothing to do with it."""
+    r = drive_update(tmp_path, gauge=True, sync_rc=sync_rc, sync_extra='  echo "CONFLICT (content): a.txt"\n')
+    assert r["rc"] == 1 and "[error]" in r["out"], r["out"]
+    assert "Last lines of" in r["out"] and PLAIN_VIEW_HINT not in r["out"], r["out"]
+
+
+def test_a_log_dir_that_cannot_be_created_keeps_the_rc_74_message(tmp_path):
+    (tmp_path / "blocked").write_text("a file, not a directory")
+    r = drive_update(tmp_path, gauge=True, real_logfile=True, log_dir="blocked/logs")
+    assert r["rc"] == 1 and "The repository sync finished, but its log" in r["out"], r["out"]
+    assert "continuation" not in r["calls"], r["calls"]
+
+
+@pytest.mark.parametrize("gauge", [True, False])
+def test_a_log_dir_that_cannot_be_created_keeps_the_failure_message(tmp_path, gauge):
+    (tmp_path / "blocked").write_text("a file, not a directory")
+    r = drive_update(tmp_path, gauge=gauge, sync_rc=2, real_logfile=True, log_dir="blocked/logs")
+    assert r["rc"] == 1 and "[error] Failed to update" in r["out"], r["out"]
+    assert PLAIN_VIEW_HINT not in r["out"], r["out"]
 
 
 def test_a_sync_log_that_cannot_be_written_is_not_reported_as_a_git_failure(tmp_path):

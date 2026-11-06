@@ -142,7 +142,7 @@ path. `NIKOS_USE_DIALOG=0` prints every step as plain text instead.
 The sync prints as plain text when `origin` or a submodule uses SSH, including
 through `url.insteadOf`, so a key passphrase or host key question can be answered.
 A boxed sync over HTTPS cannot prompt: if the remote needs credentials it fails.
-Run `NIKOS_USE_DIALOG=0 nikos update` to allow the prompt.
+The failure then says to run `NIKOS_USE_DIALOG=0 nikos update`, which allows the prompt.
 
 Everything NikOS downloads is pinned in `vars/versions.yml`: release files to
 a version and a sha256, registry packages to an exact version, git checkouts to

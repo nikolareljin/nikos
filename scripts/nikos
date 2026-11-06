@@ -146,15 +146,29 @@ _url_may_use_ssh() {
   return 0
 }
 
+# The ssh command git would run for this checkout.
+_sync_ssh_command() {
+  local command="${GIT_SSH_COMMAND:-}"
+  [[ -n "${command}" ]] || command="$(git -C "${NIKOS_HOME}" config core.sshCommand 2>/dev/null || true)"
+  printf '%s\n' "${command:-ssh}"
+}
+
+# Whether a boxed sync failed for lack of a prompt: only then does the plain view help.
+_sync_log_shows_auth_failure() {
+  grep -Eq 'terminal prompts disabled|could not read (Username|Password)|Host key verification failed|Permission denied \(publickey' -- "$1" 2>/dev/null
+}
+
 # Whether the sync could reach ssh, which prompts on /dev/tty (passphrase, host
 # key) whatever stdin and GIT_TERMINAL_PROMPT say. Such a sync runs plain, not
 # boxed: BatchMode would stop the prompt but also fail a passphrase key with no
 # agent, which could always update. Checks origin and every submodule URL, after
-# url.insteadOf. An unreadable origin or a GIT_SSH wrapper counts as yes.
+# url.insteadOf. An unreadable origin, a GIT_SSH wrapper or an ssh command with a
+# `#` counts as yes: a comment there would swallow the BatchMode added after it.
 _sync_may_ask_over_ssh() {
   local line url
   local -a urls=()
   [[ -z "${GIT_SSH:-}" ]] || return 0
+  [[ "$(_sync_ssh_command)" != *"#"* ]] || return 0
   url="$(git -C "${NIKOS_HOME}" remote get-url origin 2>/dev/null)" || return 0
   urls+=("${url}")
   while IFS= read -r line; do
@@ -1084,10 +1098,10 @@ cmd_update() {
     # submodule that only the target ref declares, which the check cannot see
     # before the fetch; it is added to the user's own ssh command, not over it.
     if _can_use_gauge && ! _sync_may_ask_over_ssh; then
-      local ssh_command="${GIT_SSH_COMMAND:-}"
-      [[ -n "${ssh_command}" ]] || ssh_command="$(git -C "${NIKOS_HOME}" config core.sshCommand 2>/dev/null || echo ssh)"
+      local ssh_command
+      ssh_command="$(_sync_ssh_command)"
       sync_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-sync.log"
-      _logfile "${sync_text} (log: ${sync_log})"
+      _logfile "${sync_text} (log: ${sync_log})" 2>/dev/null || true
       GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${ssh_command} -o BatchMode=yes" \
         _boxed_step "${sync_text}" "${sync_log}" \
         _sync_repo_to_ref "${target_ref}" "nikos-update-autostash" || update_rc=$?
@@ -1098,9 +1112,11 @@ cmd_update() {
     if [[ "${update_rc}" -ne 0 ]]; then
       if [[ -n "${sync_log}" && "${update_rc}" -ne 74 ]]; then
         _boxed_step_tail "${sync_log}"
-        print_info "NIKOS_USE_DIALOG=0 nikos update prints the steps and allows credential prompts."
+        if _sync_log_shows_auth_failure "${sync_log}"; then
+          print_info "NIKOS_USE_DIALOG=0 nikos update prints the steps and allows credential prompts."
+        fi
       fi
-      _logfile "[FAILED] repo sync (rc=${update_rc})"
+      _logfile "[FAILED] repo sync (rc=${update_rc})" 2>/dev/null || true
       case "${update_rc}" in
         1)
           print_error "Updates were applied, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun 'nikos update'."
