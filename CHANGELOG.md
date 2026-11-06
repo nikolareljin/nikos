@@ -8,25 +8,33 @@ All notable changes to NikOS are documented here.
 - Mousepad, Xfce Terminal, and VS Code now use the same Nord frost `#88C0D0`
   focused-tab accent and `#4C566A` unfocused-tab color. The dark Nordic editor
   surfaces remain unchanged.
-- `nikos update` asks for the sudo password at most once, and the second
-  playbook run (optional bundles) reuses it. The password check and the
-  passwordless probe in `nikos` and `install.sh` run `sudo -k` as its own call
-  and no longer pass `-p`, so they avoid flag combinations where sudo-rs, the
-  default sudo on Ubuntu 26.04, may differ from sudo 1.9. A
-  keepalive refreshes the sudo timestamp during the run and stops on every exit.
+- `nikos update` asks for the sudo password once and both playbook runs (the
+  second refreshes optional bundles) use it, in the gauge and in the plain
+  view. With no terminal, or an empty answer, ansible prompts on each run as
+  before. The password is asked before the `dialog` install offer, so that
+  offer no longer leads to a second prompt.
+- The password check and the passwordless probe in `nikos` and `install.sh`
+  run `sudo -k` as its own call and no longer pass `-p`, so they avoid flag
+  combinations where sudo-rs, the default sudo on Ubuntu 26.04, may differ
+  from sudo 1.9. A keepalive refreshes the sudo timestamp during the run. On
+  every exit it is stopped, the password file is removed and the timestamp is
+  dropped (`sudo -k`).
 - The removal offer in `nikos update` and `nikos models prune` no longer offers
-  a model that is this machine's tier pick for any type, or that a repository's
-  `.env` names (`*MODEL=` or a stored `*_CHOICE=`) one level under
-  `NIKOS_PROJECTS_DIRS` (default `~/Projects`).
-- The installer accepts only a plain tag or branch name for the distrodeck
-  catalog clone, whose cache directory it removes and re-creates.
+  a model that is this machine's tier pick, or a lower tier's pick, for any
+  type, or that a repository's `.env` names in a variable ending in `MODEL` or
+  `_CHOICE` (either case), one level under `NIKOS_PROJECTS_DIRS` (default
+  `~/Projects`).
+- The installer accepts only a tag or branch name (letters, digits and
+  `. _ + - /`, no `..`) for the distrodeck catalog clone, whose cache directory
+  it removes and re-creates.
 - The GitHub wizard clones a dotfiles repository only from an `https://`,
-  `ssh://` or `user@host:path` URL, and ends git's options before it. Its
-  helper runs only `git` and `gh`, and rejected input is echoed without
-  control characters.
-- `nikos hooks --global` runs `setup-hooks.sh` only from an absolute path to a
-  file the user owns that other users cannot write.
-- `scripts/bump-versions.py` fetches only `https` URLs.
+  `ssh://` or `user@host:path` URL, says so for any other URL, and ends git's
+  options before it. Its helper runs only `git` and `gh`.
+- `nikos hooks` runs `setup-hooks.sh` (for `status`, `apply`, `repair` and
+  `--global`) only from an absolute path to a file the user owns, when other
+  users can write neither the file nor its directory. A symlink is followed.
+- `scripts/bump-versions.py` fetches only `https` URLs and follows a redirect
+  only to `https`.
 
 ## [1.5.3] - 2026-10-29
 

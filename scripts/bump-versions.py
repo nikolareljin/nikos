@@ -67,14 +67,26 @@ class ChecksumMismatch(Exception):
     """The download does not match the vendor's checksum or signature: exit 1."""
 
 
+class HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect only to another https URL."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urllib.parse.urlparse(newurl).scheme != "https":
+            raise NetError(f"{req.full_url}: refusing the redirect to {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class Http:
     """The only thing that touches the network; tests replace it."""
 
+    opener = urllib.request.build_opener(HttpsOnlyRedirects)
+
     def _open(self, url: str, headers: dict | None = None, method: str = "GET"):
         parsed = urllib.parse.urlparse(url)
-        # Every source is an https URL; anything else (file://, http) is refused.
+        # Every source is an https URL; anything else (file://, http) is refused,
+        # and so is a redirect that leaves https.
         if parsed.scheme != "https" or not parsed.hostname:
-            raise ValueError(f"refusing non-https URL: {url}")
+            raise NetError(f"refusing non-https URL: {url}")
         hdrs = {"User-Agent": UA}
         host = parsed.hostname
         token = os.environ.get("GITHUB_TOKEN", "")
@@ -83,7 +95,7 @@ class Http:
         hdrs.update(headers or {})
         req = urllib.request.Request(url, headers=hdrs, method=method)
         try:
-            return urllib.request.urlopen(req, timeout=60)
+            return self.opener.open(req, timeout=60)
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
                 raise NotFound(f"{url}: 404 Not Found") from exc

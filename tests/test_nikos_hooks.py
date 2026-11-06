@@ -281,3 +281,53 @@ def test_global_refuses_a_setup_script_others_can_write(env):
     r = run(env, "--global")
     assert r.returncode != 0 and "refusing" in r.stderr
     assert calls(env) == []
+
+
+def test_status_never_runs_a_setup_script_others_can_write(env):
+    fake_claude(env, "ok")
+    script = Path(git_get(env, "script-helpers.home")) / "scripts" / "setup-hooks.sh"
+    script.chmod(0o666)
+    r = run(env)
+    assert r.returncode == 0
+    assert f"claude hook:    not checked: {script} is not an absolute path" in r.stdout
+    assert not [c for c in calls(env) if c.startswith("setup-hooks")]
+
+
+def test_repair_never_runs_a_setup_script_others_can_write(env):
+    fake_claude(env, "absent")
+    subprocess.run(["git", "config", "--global", "script-helpers.owners", "me"], env=env["env"], check=True)
+    script = Path(git_get(env, "script-helpers.home")) / "scripts" / "setup-hooks.sh"
+    script.chmod(0o666)
+    r = run(env, "repair")
+    assert r.returncode == 1 and "refusing" in r.stderr
+    assert not [c for c in calls(env) if c.startswith("setup-hooks")]
+    dry = run(env, "apply", "--dry-run")
+    assert "would not install it" in dry.stdout
+    assert not [c for c in calls(env) if c.startswith("setup-hooks")]
+
+
+def test_global_refuses_a_setup_script_in_a_directory_others_can_write(env):
+    scripts = env["tmp"] / "sh" / "scripts"
+    scripts.chmod(0o777)
+    r = run(env, "--global")
+    scripts.chmod(0o755)
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
+
+
+def test_global_follows_a_symlink_to_a_setup_script_the_user_owns(env):
+    script = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
+    real = env["tmp"] / "real-setup-hooks.sh"
+    script.rename(real)
+    script.symlink_to(real)
+    r = run(env, "--global")
+    assert r.returncode == 0, r.stderr
+    assert calls(env) == ["setup-hooks --global"]
+
+
+def test_global_refuses_a_relative_script_helpers_home(env):
+    subprocess.run(["git", "config", "--global", "script-helpers.home", "sh"], env=env["env"], check=True)
+    r = subprocess.run(["bash", str(SCRIPT), "--global"], env=env["env"], cwd=env["tmp"],
+                       capture_output=True, text=True)
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []

@@ -50,16 +50,31 @@ helpers_home() {
 # would look for its own vendored copy, which an installed lantern lacks.
 run_lantern() { SCRIPT_HELPERS_HOME="$(helpers_home)" lantern "$@"; }
 
+# setup_script_trusted <path>: script-helpers.home comes from git config, so
+# setup-hooks.sh is run only from an absolute path, when the file (a symlink is
+# followed) is owned by this user and neither it nor its directory can be
+# written by other users. Group-writable is the Ubuntu default under umask 002.
+setup_script_trusted() {
+  local real
+  [[ "$1" == /* ]] || return 1
+  real="$(readlink -f -- "$1" 2>/dev/null)" || return 1
+  [[ -f "${real}" && -O "${real}" ]] || return 1
+  [[ -z "$(find "${real}" "$(dirname -- "${real}")" -maxdepth 0 -perm -002 2>/dev/null)" ]]
+}
+UNTRUSTED_REASON="not an absolute path to a file you own, or other users can write it or its directory"
+
 # claude_state: the user's Claude Code hook as script-helpers sees it: ok,
 # absent, broken (the file it runs is missing), stale (it runs a file outside
 # the installed copy, such as a checkout a branch switch removes), unknown (no
 # Python to read the settings), missing (no setup-hooks.sh in script-helpers.home),
+# untrusted (setup-hooks.sh fails setup_script_trusted, so it is not run),
 # old (a copy without --claude porcelain cannot tell), or failed (the check did not run). Second field: the file.
 claude_state() {
   local script out state
   script="$(helpers_home)/scripts/setup-hooks.sh"
   # Older copies read --status --porcelain --claude as an install: never run it there.
   [[ -f "${script}" ]] || { printf 'missing\t\n'; return 0; }
+  setup_script_trusted "${script}" || { printf 'untrusted\t%s\n' "${script}"; return 0; }
   if ! grep -q 'claude_user=' "${script}"; then
     printf 'old\t\n'; return 0
   fi
@@ -76,6 +91,10 @@ fix_claude() {
   state="$(claude_state | cut -f1)"
   # old, unknown or failed: install anyway; --claude is idempotent.
   [[ "${state}" == ok ]] && return 0
+  if [[ "${state}" == untrusted ]]; then
+    echo "nikos hooks: refusing $(helpers_home)/scripts/setup-hooks.sh: ${UNTRUSTED_REASON}" >&2
+    return 1
+  fi
   if [[ -z "$(git config --global --get script-helpers.owners 2>/dev/null || true)" ]]; then
     # lantern refuses without owners too, and says so; one failure, not two.
     echo "nikos hooks: Claude hook ${state}; set owners first: git config --global script-helpers.owners <user-or-org>" >&2
@@ -112,6 +131,7 @@ cmd_status() {
     stale)   info "claude hook:    STALE: runs ${hook}, not the installed copy (nikos hooks repair)" ;;
     failed)  info "claude hook:    could not be checked: $(helpers_home)/scripts/setup-hooks.sh --status --porcelain --claude failed" ;;
     missing) info "claude hook:    not checked: no ${home}/scripts/setup-hooks.sh (check git config --global script-helpers.home)" ;;
+    untrusted) info "claude hook:    not checked: ${hook} is ${UNTRUSTED_REASON}" ;;
     old)     info "claude hook:    not checked: script-helpers $(cat "${home}/VERSION" 2>/dev/null || echo '?') cannot (nikos update)" ;;
     *)       info "claude hook:    unknown: no Python to read the settings" ;;
   esac
@@ -151,8 +171,12 @@ cmd_lantern() {
     if [[ " $* " == *" --only"* ]]; then
       :
     elif [[ " $* " == *" --dry-run "* ]]; then
-      if [[ "$(claude_state | cut -f1)" == ok ]]; then
+      local dry_state
+      dry_state="$(claude_state | cut -f1)"
+      if [[ "${dry_state}" == ok ]]; then
         :
+      elif [[ "${dry_state}" == untrusted ]]; then
+        info "claude hook: would not install it: $(helpers_home)/scripts/setup-hooks.sh is ${UNTRUSTED_REASON}"
       elif [[ -z "$(git config --global --get script-helpers.owners 2>/dev/null || true)" ]]; then
         info "claude hook: would not install it: no owners set"
       else
@@ -174,11 +198,7 @@ cmd_global() {
   home="$(helpers_home)"
   script="${home}/scripts/setup-hooks.sh"
   [[ -f "${script}" ]] || die "no setup-hooks.sh in ${home}"
-  # script-helpers.home comes from git config: run only an absolute path to a
-  # file this user owns and other users cannot write (group-writable is the
-  # Ubuntu default under umask 002).
-  [[ "${script}" == /* && -O "${script}" && -z "$(find "${script}" -perm -002 2>/dev/null)" ]] ||
-    die "refusing ${script}: not an absolute path to a file you own that other users cannot write"
+  setup_script_trusted "${script}" || die "refusing ${script}: ${UNTRUSTED_REASON}"
   bash "${script}" --global "$@"
 }
 

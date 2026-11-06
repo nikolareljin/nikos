@@ -141,8 +141,9 @@ class and the model per role.
 the current approved set. Before it pulls, it offers to remove installed models
 that are not approved for this machine, one question per model (`[y/N]`). Without
 a terminal it lists them and removes nothing; `nikos models prune` asks again.
-It never offers this machine's tier pick for any type of work, or a model that a
-repository's `.env` names (`*MODEL=` or a stored `*_CHOICE=`). Repositories are
+It never offers this machine's tier pick (or a lower tier's) for any type of
+work, or a model that a repository's `.env` names in a variable ending in
+`MODEL` or `_CHOICE`. Repositories are
 searched one level under `NIKOS_PROJECTS_DIRS` (colon-separated, default
 `~/Projects`).
 Models load on demand, so all of this is disk and bandwidth, not idle memory.

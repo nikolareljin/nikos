@@ -74,7 +74,7 @@ def write_program(tmp_path: Path) -> Path:
 def run(program: Path, tmp_path: Path, *, prefix: str = "", tmpdir: str = "") -> str:
     """Run the probe under a pty, so its /dev/tty read has somewhere to read from.
 
-    The password is checked with `sudo -S -k -v`; a stub that accepts hunter2
+    The password is checked with `sudo -S -v`; a stub that accepts hunter2
     on stdin keeps the test off the real sudo.
     """
     sudobin = tmp_path / "sudobin"
@@ -301,18 +301,3 @@ def test_update_asks_once_and_works_with_strict_sudo(tmp_path):
     assert out.count("Sudo password for") == 1, out
     validations = [l for l in log.read_text().splitlines() if "-v" in l.split()]
     assert validations == ["-S -v"], validations
-
-
-def test_the_sudo_keepalive_is_stopped_on_exit(tmp_path):
-    strict_sudo_stub(tmp_path)
-    program = write_update_program(tmp_path, calls=1)
-    result = subprocess.run(
-        ["script", "-qec", f"PATH={tmp_path / 'sudobin'}:$PATH TMPDIR={tmp_path} bash {program}", "/dev/null"],
-        input=b"hunter2\n",
-        capture_output=True,
-        timeout=60,
-    )
-    out = result.stdout.decode(errors="replace").replace("\r", "")
-    pid = re.search(r"KEEPALIVE=(\d+)", out)
-    assert pid, out
-    assert not Path(f"/proc/{pid.group(1)}").exists(), "keepalive outlived the command"

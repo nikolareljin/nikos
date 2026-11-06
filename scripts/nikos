@@ -23,6 +23,7 @@ PROGRESS_LIB="${NIKOS_HOME}/scripts/nikos-progress.sh"
 USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
 BECOME_PASSWORD_FILE=""
 NIKOS_BECOME_MODE=""
+NIKOS_BECOME_ASK_REASON=""
 SUDO_KEEPALIVE_PID=""
 # Used by sourced repo sync helpers.
 # shellcheck disable=SC2034
@@ -260,6 +261,11 @@ _stop_sudo_keepalive() {
 # install.sh's _cleanup_install pairs them for the same reason.
 _cleanup_run() {
   _stop_sudo_keepalive
+  # The password check left a sudo timestamp on this terminal and the
+  # keepalive kept it fresh. Drop it, so sudo asks again after this command.
+  if [[ "${NIKOS_BECOME_MODE}" == "file" ]]; then
+    sudo -k </dev/null >/dev/null 2>&1 || true
+  fi
   _cleanup_become_password_file
   _restore_terminal_cursor
 }
@@ -379,14 +385,18 @@ _collect_become_password() {
   unset pw
 }
 
-# Decides once per process how ansible gets the sudo password, so `nikos
-# update` asks at most once even though it runs the playbook twice. Sets
+# Decides once per process how ansible gets the sudo password. Sets
 # NIKOS_BECOME_MODE to nopass, file (BECOME_PASSWORD_FILE holds a checked
-# password) or ask (ansible prompts itself). Returns 1 only when sudo rejected
-# the password three times.
+# password, so `nikos update` asks once although it runs the playbook twice)
+# or ask (no terminal, or an empty answer: ansible prompts itself on each
+# run). Returns 1 only when sudo rejected the password three times.
 _ensure_become_password() {
+  if [[ "${NIKOS_BECOME_MODE}" == "ask" ]]; then
+    NIKOS_PROGRESS_SKIP_REASON="${NIKOS_BECOME_ASK_REASON}"
+    return 0
+  fi
   if [[ "${NIKOS_BECOME_MODE}" == "file" && -s "${BECOME_PASSWORD_FILE:-}" ]] ||
-    [[ "${NIKOS_BECOME_MODE}" == "nopass" || "${NIKOS_BECOME_MODE}" == "ask" ]]; then
+    [[ "${NIKOS_BECOME_MODE}" == "nopass" ]]; then
     return 0
   fi
   # Cached credentials are dropped first: the cache is per terminal, so the
@@ -408,6 +418,7 @@ _ensure_become_password() {
     return 1
   else
     NIKOS_PROGRESS_SKIP_REASON="${NIKOS_PROGRESS_SKIP_REASON:-could not store the sudo password}"
+    NIKOS_BECOME_ASK_REASON="${NIKOS_PROGRESS_SKIP_REASON}"
     NIKOS_BECOME_MODE="ask"
   fi
 }
@@ -599,8 +610,10 @@ _playbook() {
   # on a non-blocking stdin, which dialog can leave behind.
   local ask_pass=false
   NIKOS_PROGRESS_SKIP_REASON=""
-  _offer_dialog_install
+  # Before the dialog offer: its `sudo apt-get install` then runs on the
+  # checked password instead of asking for it a second time.
   _ensure_become_password || return 1
+  _offer_dialog_install
   case "${NIKOS_BECOME_MODE}" in
     file) playbook_args+=(--become-password-file "${BECOME_PASSWORD_FILE}") ;;
     ask) playbook_args+=(--ask-become-pass) ;;
@@ -935,10 +948,12 @@ _model_norm() {
   printf '%s\n' "${m}"
 }
 
-# This machine's tier pick for every type of work in the tiers file. An unknown
-# tier keeps every column: keeping too much is safe, removing a pick is not.
+# This machine's tier pick for every type of work in the tiers file, and the
+# picks of every lower tier: ollama_models.sh select falls back to a lower
+# tier's model when the host is under a model's size floor. An unknown tier
+# keeps every column: keeping too much is safe, removing a pick is not.
 _models_tier_picks() {
-  local tiers="${NIKOS_HOME}/scripts/script-helpers/config/ollama_model_tiers.txt"
+  local tiers="${OLLAMA_MODEL_TIERS_FILE:-${NIKOS_HOME}/scripts/script-helpers/config/ollama_model_tiers.txt}"
   local tier col=0
   [[ -r "${tiers}" ]] || return 0
   tier="$(_models_tool class 2>/dev/null | sed -n 's/^tier=//p' | head -n 1)"
@@ -949,13 +964,16 @@ _models_tier_picks() {
     xlarge) col=6 ;;
   esac
   awk -v c="${col}" '$1 == "type" {
-    if (c > 0) { print $c } else { for (i = 3; i <= NF; i++) print $i }
+    last = (c > 0 && c < NF) ? c : NF
+    for (i = 3; i <= last; i++) print $i
   }' "${tiers}"
 }
 
-# Models a local repository remembers in its .env: OLLAMA_*MODEL lines and the
-# *_CHOICE answers ollama_models.sh select stores. Searched one level under
-# each directory in NIKOS_PROJECTS_DIRS (colon-separated, default ~/Projects).
+# Models a local repository remembers in its .env: every variable whose name
+# ends in MODEL (OLLAMA_MODEL, EMBED_MODEL) or in _CHOICE, the answer
+# ollama_models.sh select stores (AI_MODEL_CODE_CHOICE by default), in either
+# case. Searched one level under each directory in NIKOS_PROJECTS_DIRS
+# (colon-separated, default ~/Projects).
 _models_repo_choices() {
   local dir env_file
   local IFS=:
@@ -963,7 +981,9 @@ _models_repo_choices() {
     [[ -d "${dir}" ]] || continue
     for env_file in "${dir}"/.env "${dir}"/*/.env; do
       [[ -f "${env_file}" && -r "${env_file}" ]] || continue
-      sed -n -E 's/^[[:space:]]*(export[[:space:]]+)?[A-Z0-9_]*MODEL(_CHOICE)?[[:space:]]*=[[:space:]]*["'"'"']?([A-Za-z0-9._:/-]+)["'"'"']?[[:space:]]*(#.*)?$/\3/p' "${env_file}"
+      LC_ALL=C sed -n -E -e '1s/^\xEF\xBB\xBF//' \
+        -e 's/^[[:space:]]*(export[[:space:]]+)?[A-Za-z0-9_]*([Mm][Oo][Dd][Ee][Ll]|_[Cc][Hh][Oo][Ii][Cc][Ee])[[:space:]]*=[[:space:]]*["'"'"']?([A-Za-z0-9._:/-]+)["'"'"']?[[:space:]]*(#.*)?$/\3/p' \
+        -- "${env_file}"
     done
   done
 }

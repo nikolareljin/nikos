@@ -56,11 +56,6 @@ def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=check, text=True, capture_output=True)
 
 
-def printable(text: str) -> str:
-    """Drops control characters, so typed input cannot rewrite the terminal."""
-    return "".join(ch for ch in text if ch.isprintable())
-
-
 def ask(msg: str) -> str:
     try:
         return input(msg).strip()
@@ -258,27 +253,32 @@ def step_dotfiles(provider: str, host: str, port: int, user: str) -> None:
     if not answer:
         return
     if answer.startswith("-"):
-        print(f"  [!] Not a repo: {printable(answer)!r}")
+        print(f"  [!] Not a repo: {answer!r}")
         return
     dest = Path.home() / "dotfiles"
     if dest.exists():
         print(f"  [!] {dest} already exists, not cloning.")
         return
     use_gh = False
-    if re.match(r"(https|ssh)://", answer) or re.fullmatch(r"[\w.-]+@[\w.-]+:[\w./-]+", answer):
-        # Only https, ssh and scp-style URLs: other git transports can run
-        # commands or read local paths. "--" ends git's options.
+    if re.fullmatch(r"(?i)(https|ssh)://\S+", answer) or re.fullmatch(
+        r"[\w.-]+@(\[[0-9A-Fa-f:.]+\]|[\w.-]+):\S+", answer
+    ):
+        # Only https, ssh and scp-style (user@host:path) URLs: other git
+        # transports can run commands or read local paths. "--" ends git's options.
         args = ["clone", "--", answer, str(dest)]
+    elif "://" in answer or "::" in answer:
+        print("  [!] Only https://, ssh:// and user@host:path URLs are cloned.")
+        return
     elif re.fullmatch(r"[\w.-]+/[\w.-]+", answer):
         if provider == "GitHub":
             use_gh = True
             args = ["repo", "clone", answer, str(dest)]
         elif port != 22:
-            args = ["clone", f"ssh://{user}@{host}:{port}/{answer}.git", str(dest)]
+            args = ["clone", "--", f"ssh://{user}@{host}:{port}/{answer}.git", str(dest)]
         else:
-            args = ["clone", f"{user}@{host}:{answer}.git", str(dest)]
+            args = ["clone", "--", f"{user}@{host}:{answer}.git", str(dest)]
     else:
-        print(f"  [!] Not a repo: {printable(answer)!r}")
+        print(f"  [!] Not a repo: {answer!r}")
         return
     # Interactive (gh may prompt), so not run(), which captures output.
     clone = subprocess.run(["gh", *args] if use_gh else ["git", *args], check=False)

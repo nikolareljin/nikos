@@ -393,5 +393,25 @@ def test_a_dist_tag_head_too_new_falls_back_on_its_own_line(vfile: Path) -> None
 
 @pytest.mark.parametrize("url", ["file:///etc/passwd", "http://example.com/x", "https:///nohost"])
 def test_http_refuses_anything_but_https(url):
-    with pytest.raises(ValueError):
+    with pytest.raises(bump.NetError):
         bump.Http()._open(url)
+
+
+def test_http_follows_a_redirect_only_to_https():
+    import urllib.request
+    handler = bump.HttpsOnlyRedirects()
+    req = urllib.request.Request("https://example.com/a")
+    assert any(isinstance(h, bump.HttpsOnlyRedirects) for h in bump.Http.opener.handlers)
+    with pytest.raises(bump.NetError):
+        handler.redirect_request(req, None, 302, "Found", {}, "http://example.com/b")
+    follow = handler.redirect_request(req, None, 302, "Found", {}, "https://example.org/b")
+    assert follow.full_url == "https://example.org/b"
+
+
+@pytest.fixture(autouse=True)
+def _stop_gpg_agents(tmp_path):
+    """Key generation starts a gpg-agent per GNUPGHOME; stop them with the test."""
+    yield
+    import subprocess
+    for home in tmp_path.glob("gnupg-*"):
+        subprocess.run(["gpgconf", "--homedir", str(home), "--kill", "gpg-agent"], capture_output=True)

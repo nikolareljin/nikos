@@ -618,8 +618,26 @@ def test_an_opt_in_need_is_asked_once(tmp_path: Path, answer: str, expected: str
     assert result.stderr.count("ASKED") == 1, result.stderr
 
 
-@pytest.mark.parametrize("ver", ["x/../../../victim", "a/b", "..", "-rf", ""])
-def test_installer_catalog_refuses_a_version_that_is_not_a_plain_name(tmp_path: Path, ver: str) -> None:
+def test_installer_catalog_takes_a_branch_name_with_a_slash(tmp_path: Path) -> None:
+    text = (REPO / "install.sh").read_text(encoding="utf-8")
+    func = re.search(r"^_distrodeck_for_catalog\(\) \{.*?^\}", text, re.M | re.S)
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "git").write_text(f'#!/bin/sh\necho "$*" > "{tmp_path}/git-args"\nexit 1\n', encoding="utf-8")
+    (fake / "git").chmod(0o755)
+    cache = tmp_path / "cache"
+    subprocess.run(
+        ["bash", "-c", f'{func.group(0)}\n_distrodeck_for_catalog "$1"', "_", "release/0.12.0"],
+        capture_output=True, text=True, timeout=30,
+        env={"PATH": f"{fake}:/usr/bin:/bin", "HOME": str(tmp_path), "XDG_CACHE_HOME": str(cache)},
+    )
+    args = (tmp_path / "git-args").read_text(encoding="utf-8")
+    assert "--branch release/0.12.0 " in args
+    assert args.strip().endswith(f"{cache}/nikos/distrodeck-release_0.12.0")
+
+
+@pytest.mark.parametrize("ver", ["x/../../../victim", "..", "-rf", "", "a//b", "a/", "/a"])
+def test_installer_catalog_refuses_a_version_that_is_not_a_tag_or_branch_name(tmp_path: Path, ver: str) -> None:
     # The version names the cache directory removed with rm -rf. With
     # "x/../../../victim" that path resolves to cache/victim, outside nikos/.
     text = (REPO / "install.sh").read_text(encoding="utf-8")
@@ -631,7 +649,7 @@ def test_installer_catalog_refuses_a_version_that_is_not_a_plain_name(tmp_path: 
     (cache / "x" / "nikos" / "distrodeck-x").mkdir(parents=True)
     fake = tmp_path / "bin"
     fake.mkdir()
-    (fake / "git").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    (fake / "git").write_text(f'#!/bin/sh\n: > "{tmp_path}/git-ran"\nexit 1\n', encoding="utf-8")
     (fake / "git").chmod(0o755)
     result = subprocess.run(
         ["bash", "-c", f'{func.group(0)}\n_distrodeck_for_catalog "$1"', "_", ver],
@@ -639,4 +657,5 @@ def test_installer_catalog_refuses_a_version_that_is_not_a_plain_name(tmp_path: 
         env={"PATH": f"{fake}:/usr/bin:/bin", "HOME": str(tmp_path), "XDG_CACHE_HOME": str(cache / "x")},
     )
     assert result.returncode != 0
+    assert not (tmp_path / "git-ran").exists(), "the version reached git clone"
     assert (victim / "keep").exists(), "rm -rf reached outside the cache"
