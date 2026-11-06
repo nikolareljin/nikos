@@ -35,6 +35,19 @@ All notable changes to NikOS are documented here.
   prompt, and an authentication failure says so.
 
 ### Fixed
+- `nikos setup`, `update`, `add` and `install.sh` failed at Gathering Facts on
+  Ubuntu 26.04 with "Timed out waiting for become success or become password
+  prompt" (exit 4). sudo-rs, the default sudo there, prints the password
+  prompt as `[sudo: <prompt>] Password:`, and the builtin sudo become plugin of
+  ansible-core before 2.20.11 (26.04 ships 2.20.1) waits for a line that
+  starts with its own prompt, so the password was never sent. `ansible.cfg`
+  now selects `plugins/become/nikos_sudo.py`, the builtin plugin plus the
+  sudo-rs prompt form, for every become path: `--become-password-file`,
+  `--ask-become-pass`, passwordless sudo and `become_user`. Classic sudo on
+  22.04 and 24.04 is unchanged. A wrong password fails at once, not at the
+  timeout. `tests/test_become_sudo_rs.py` runs real ansible against a fake
+  sudo with both prompt forms; the ubuntu-26.04 CI leg runs
+  `tests/machine/become_sudo_rs.sh` through real sudo-rs.
 - A failed Ansible collection install stops `nikos update` with the
   installer's exit code and a message. It was printed and the playbook ran
   anyway, because `cmd_update` suspends `set -e` around `_playbook`.
