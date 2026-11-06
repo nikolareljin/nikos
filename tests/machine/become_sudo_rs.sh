@@ -39,10 +39,13 @@ trap cleanup EXIT
 if ! command -v sudo-rs >/dev/null 2>&1; then
   sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y sudo-rs >/dev/null || skip "sudo-rs could not be installed"
 fi
-case "$(readlink -f "$(command -v sudo)")" in
-  */cargo/bin/sudo) ;;
-  *) skip "sudo is not sudo-rs after installing the package: $(readlink -f "$(command -v sudo)")" ;;
-esac
+# The package registers itself as the sudo alternative at a higher priority
+# than classic sudo. If a machine has it installed but not selected, select it.
+if [[ "$(readlink -f "$(command -v sudo)")" != "$(readlink -f "$(command -v sudo-rs)")" ]]; then
+  sudo -n update-alternatives --set sudo "$(readlink -f "$(command -v sudo-rs)")" >/dev/null 2>&1 || true
+fi
+[[ "$(readlink -f "$(command -v sudo)")" == "$(readlink -f "$(command -v sudo-rs)")" ]] ||
+  skip "sudo is not sudo-rs: $(readlink -f "$(command -v sudo)")"
 echo "sudo: $(sudo --version 2>&1 | head -1)"
 echo "ansible: $(ansible-playbook --version | head -1)"
 

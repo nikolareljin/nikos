@@ -44,8 +44,10 @@ All notable changes to NikOS are documented here.
   now selects `plugins/become/nikos_sudo.py`, the builtin plugin plus the
   sudo-rs prompt form, for every become path: `--become-password-file`,
   `--ask-become-pass`, passwordless sudo and `become_user`. Classic sudo on
-  22.04 and 24.04 is unchanged. A wrong password fails at once, not at the
-  timeout. `tests/test_become_sudo_rs.py` runs real ansible against a fake
+  22.04 and 24.04 is unchanged. With ansible-core 2.19 or newer a wrong
+  password fails at once, not at the timeout; older releases wait, as they did
+  with the builtin plugin.
+  `tests/test_become_sudo_rs.py` runs real ansible against a fake
   sudo with both prompt forms; the ubuntu-26.04 CI leg runs
   `tests/machine/become_sudo_rs.sh` through real sudo-rs.
 - A failed Ansible collection install stops `nikos update` with the
