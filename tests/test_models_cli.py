@@ -370,3 +370,15 @@ def test_a_checklist_that_cannot_draw_falls_back_to_the_text_questions(home, tmp
     assert any("--checklist" in c for c in log.read_text().splitlines())
     assert "Remove gpt-oss:20b? [y/N]" in out
     assert ollama[1] == ["gpt-oss:20b"]
+
+
+def test_the_question_boxes_keep_the_normal_screen():
+    # A stub dialog cannot show this: the real one draws over the normal screen
+    # without --keep-tite, and a clear after the box erases the sync output.
+    text = (Path(__file__).resolve().parent.parent / "scripts" / "nikos").read_text()
+    for call in ("--passwordbox", "--checklist"):
+        start = text.index(call)
+        line = text.rfind("dialog ", 0, start)
+        assert "--keep-tite" in text[line:start], call
+        after = text[start:]
+        assert after.index("_leave_box") < after.find("_leave_tui") or "_leave_tui" not in after

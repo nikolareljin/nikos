@@ -72,7 +72,10 @@ _leave_tui() {
 }
 
 # Leaves a question box. Unlike _leave_tui it does not clear: the terminal keeps
-# what the command printed before the box, such as the repository sync.
+# what the command printed before the box, such as the repository sync. The boxes
+# need --keep-tite for that: without it dialog drops the alternate screen and
+# draws over the normal one. A terminal with no alternate screen (TERM=linux)
+# keeps the box until later output scrolls it away.
 _leave_box() {
   if [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null; then
     { tput rmcup 2>/dev/null; tput cnorm 2>/dev/null || printf '\033[?25h'; } >/dev/tty 2>/dev/null || true
@@ -321,7 +324,7 @@ _offer_dialog_install() {
 _become_password_box() {
   local text="Sudo password for ${USER:-$(id -un)}. It is asked once and used for the whole command."
   (( $1 > 1 )) && text="Sorry, try again.\n\n${text}"
-  DIALOG_ERROR=4 dialog --stdout --title "NikOS ${NIKOS_VERSION}: sudo password" \
+  DIALOG_ERROR=4 dialog --keep-tite --stdout --title "NikOS ${NIKOS_VERSION}: sudo password" \
     --passwordbox "${text}" 10 66 </dev/tty 2>/dev/tty
 }
 
@@ -1184,7 +1187,7 @@ _models_offer_removal() {
     while IFS= read -r m; do
       [[ -z "${m}" ]] || items+=("${m}" "" off)
     done <<<"${outside}"
-    picked="$(DIALOG_ERROR=4 dialog --stdout --separate-output --title "NikOS: models outside the approved set" \
+    picked="$(DIALOG_ERROR=4 dialog --keep-tite --stdout --separate-output --title "NikOS: models outside the approved set" \
       --checklist "Check the models to remove. A project that still names one pulls it again when it starts. 'nikos add model <name>' keeps one for good." \
       20 76 10 "${items[@]}" </dev/tty 2>/dev/tty)" || list_rc=$?
     _leave_box
