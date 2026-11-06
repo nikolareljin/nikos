@@ -348,12 +348,20 @@ def test_with_dialog_the_offer_is_one_checklist_and_checked_models_are_removed(h
     assert "Removed 1 model(s)." in out
 
 
-def test_cancel_in_the_checklist_removes_nothing(home, tmp_path, ollama):
-    env, log = with_stub_dialog(home, tmp_path, "exit 1")
+@pytest.mark.parametrize("code", [1, 255])
+def test_cancel_or_esc_in_the_checklist_removes_nothing(home, tmp_path, ollama, code):
+    # Prints a name first, so a result read despite the exit code would remove it.
+    env, log = with_stub_dialog(home, tmp_path, f"echo gpt-oss:20b; exit {code}")
     out = on_tty(env, [], "models", "prune")
     assert any("--checklist" in c for c in log.read_text().splitlines())
     assert ollama[1] == []
     assert "Removed" not in out
+
+
+def test_the_checklist_does_not_erase_the_terminal(home, tmp_path, ollama):
+    env, _ = with_stub_dialog(home, tmp_path, "exit 1")
+    env["TERM"] = "xterm"
+    assert "\x1b[2J" not in on_tty(env, [], "models", "prune")
 
 
 def test_a_checklist_that_cannot_draw_falls_back_to_the_text_questions(home, tmp_path, ollama):

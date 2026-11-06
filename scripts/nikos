@@ -71,6 +71,14 @@ _leave_tui() {
   fi
 }
 
+# Leaves a question box. Unlike _leave_tui it does not clear: the terminal keeps
+# what the command printed before the box, such as the repository sync.
+_leave_box() {
+  if [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null; then
+    { tput rmcup 2>/dev/null; tput cnorm 2>/dev/null || printf '\033[?25h'; } >/dev/tty 2>/dev/null || true
+  fi
+}
+
 # Prints the summary. With use_tui=true and a failed run, also shows it in a
 # dialog box on the terminal, so a TUI run ends on the failure, not a blank screen.
 _playbook_summary() {
@@ -306,14 +314,6 @@ _offer_dialog_install() {
   return 0
 }
 
-# ansible's own --ask-become-pass prompt reads /dev/tty, which the gauge is
-# drawing the mixedgauge on at the same moment. Collect the password first and
-# hand it over in a file, as install.sh does. Returns non-zero when it could not
-# be collected, which drops the run back to --ask-become-pass; the reason is left
-# in NIKOS_PROGRESS_SKIP_REASON for the plain-view notice.
-#
-# Each answer is checked with `sudo -S -v`, fed on stdin (never argv), so a
-# typo is caught here with three tries instead of failing the playbook later.
 # Asks for the sudo password in a dialog box. $1 is the attempt number: from
 # the second on, the box says the last answer was wrong. Prints the answer.
 # Returns 4 when dialog could not draw (DIALOG_ERROR; by default that is 255,
@@ -325,6 +325,15 @@ _become_password_box() {
     --passwordbox "${text}" 10 66 </dev/tty 2>/dev/tty
 }
 
+# ansible's own --ask-become-pass prompt reads /dev/tty, which the gauge is
+# drawing the mixedgauge on at the same moment. Collect the password first and
+# hand it over in a file, as install.sh does. Returns 3 when the user cancelled
+# the box, which ends the command. Another non-zero code means it could not be
+# collected, which drops the run back to --ask-become-pass; the reason is left
+# in NIKOS_PROGRESS_SKIP_REASON for the plain-view notice.
+#
+# Each answer is checked with `sudo -S -v`, fed on stdin (never argv), so a
+# typo is caught here with three tries instead of failing the playbook later.
 _collect_become_password() {
   local pw="" attempt use_box=false box_rc
 
@@ -335,7 +344,7 @@ _collect_become_password() {
     if [[ "${use_box}" == true ]]; then
       box_rc=0
       pw="$(_become_password_box "${attempt}")" || box_rc=$?
-      _leave_tui
+      _leave_box
       # dialog could not draw: ask with the plain prompt from here on.
       (( box_rc != 4 )) || use_box=false
       # 3: the user cancelled, which ends the command instead of falling back
@@ -1142,15 +1151,15 @@ _models_outside() {
   done <<<"${installed}"
 }
 
-# Offers each installed model outside the set for removal, one question per
-# model, on a terminal. Without one it only lists them: nothing is removed
-# without a yes.
 # Asks the Ollama at $1 to delete model $2.
 _models_remove_one() {
   curl -fsS --max-time 60 -X DELETE "${1%/}/api/delete" \
     -H 'Content-Type: application/json' -d "{\"model\":\"$2\",\"name\":\"$2\"}" >/dev/null
 }
 
+# Offers each installed model outside the set for removal on a terminal: one
+# checklist when dialog can draw, otherwise one question per model. Without a
+# terminal it only lists them: nothing is removed without a yes.
 _models_offer_removal() {
   local endpoint outside m answer removed=0
   [[ "$(_nikos_var nikos_ollama_mode local)" == "local" ]] || return 0
@@ -1178,7 +1187,7 @@ _models_offer_removal() {
     picked="$(DIALOG_ERROR=4 dialog --stdout --separate-output --title "NikOS: models outside the approved set" \
       --checklist "Check the models to remove. A project that still names one pulls it again when it starts. 'nikos add model <name>' keeps one for good." \
       20 76 10 "${items[@]}" </dev/tty 2>/dev/tty)" || list_rc=$?
-    _leave_tui
+    _leave_box
     # 4: dialog could not draw, so the text questions below ask instead.
     if (( list_rc != 4 )); then
       (( list_rc == 0 )) || picked=""

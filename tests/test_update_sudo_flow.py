@@ -110,7 +110,7 @@ def drive(
         '_get_default_skip_tags() { echo ""; }\n'
         '_get_saved_tools() { echo ""; }\n'
         "_playbook_summary() { :; }\n"
-        "_leave_tui() { :; }\n"
+        "_leave_tui() { :; }\n_leave_box() { :; }\n"
         + (
             # The gauge can draw, so the password is asked in a box; planning
             # fails, so the run itself still takes the plain view.

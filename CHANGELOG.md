@@ -19,7 +19,7 @@ All notable changes to NikOS are documented here.
   `NIKOS_USE_DIALOG` not `0`), `nikos setup`, `update` and `add` ask for the
   sudo password in a `dialog` box, and `nikos update` and `nikos models prune`
   offer unused models as one checklist with nothing checked. Cancel in the
-  password box ends the command with exit 130 and runs nothing; Cancel in the
+  password box ends the command with exit 130 and the playbook does not run; Cancel in the
   checklist keeps every model. A `dialog` that cannot draw falls back to the
   text questions.
 
