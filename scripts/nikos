@@ -84,6 +84,120 @@ _leave_box() {
   fi
 }
 
+# Runs one step of a command (the repository sync, the collection install)
+# behind a progressbox, with its output appended to a log, so a run that draws
+# the gauge does not print that output between its boxes. $1 is the box text, $2 the log,
+# the rest the command, which may be a function. --keep-tite for the same
+# reason as the question boxes; no rmcup after it (see _leave_box). The one-line
+# captions cmd_update prints between steps stay on the normal screen.
+#
+# The step runs in the foreground, so Ctrl-C reaches it as on the plain path.
+# A box that cannot draw does not stop the step: the `cat` after dialog keeps
+# draining the pipe, so neither tee nor the command gets SIGPIPE, and the step
+# finishes unseen instead of leaving the checkout half-switched. Stdin is
+# /dev/null, so a prompt that reads stdin gets EOF. That does not cover /dev/tty:
+# ssh prompts there, and it would draw across the box. See _sync_may_ask_over_ssh.
+#
+# Returns the command's exit status; EX_IOERR (74) when the command succeeded
+# but the log could not be written, as nikos_progress_run reports a lost log.
+# The caller reports 74: the step itself worked.
+_boxed_step() {
+  local text="$1" log="$2"
+  shift 2
+  local rc=0
+  local -a pipe_status=()
+  mkdir -p "$(dirname -- "${log}")"
+  set +e
+  "$@" </dev/null 2>&1 \
+    | nikos_progress_strip_ansi \
+    | tee -a "${log}" \
+    | {
+        dialog --keep-tite --title "NikOS ${NIKOS_VERSION}" \
+          --progressbox "${text}" "${DIALOG_HEIGHT:-20}" "${DIALOG_WIDTH:-72}" >/dev/tty 2>/dev/tty
+        cat >/dev/null
+      }
+  pipe_status=("${PIPESTATUS[@]}")
+  set -e
+  _leave_box
+  rc="${pipe_status[0]}"
+  if (( rc == 0 )) && (( pipe_status[2] != 0 )); then
+    rc=74
+  fi
+  return "${rc}"
+}
+
+# After a failed boxed step: the box is gone with everything it showed, so the
+# end of its log goes on the terminal, with the path for the rest.
+_boxed_step_tail() {
+  local log="$1"
+  if [[ -s "${log}" ]]; then
+    echo "Last lines of ${log}:" >&2
+    tail -n 20 -- "${log}" | sed 's/^/  /' >&2
+  fi
+  echo "Log: ${log}" >&2
+}
+
+# Whether git could reach this URL over ssh. Listed by what cannot, so an
+# unknown transport counts as ssh and the sync stays where it can be answered.
+_url_may_use_ssh() {
+  case "$1" in
+    "" | http://* | https://* | git://* | file://* | /* | ./* | ../*) return 1 ;;
+  esac
+  return 0
+}
+
+# The ssh command git would run for this checkout.
+_sync_ssh_command() {
+  local command="${GIT_SSH_COMMAND:-}"
+  [[ -n "${command}" ]] || command="$(git -C "${NIKOS_HOME}" config core.sshCommand 2>/dev/null || true)"
+  printf '%s\n' "${command:-ssh}"
+}
+
+# Whether a boxed sync failed for lack of a prompt: only then does the plain view help.
+_sync_log_shows_auth_failure() {
+  grep -Eq 'terminal prompts disabled|could not read (Username|Password)|Host key verification failed|Permission denied \(publickey' -- "$1" 2>/dev/null
+}
+
+# Whether the sync could reach ssh, which prompts on /dev/tty (passphrase, host
+# key) whatever stdin and GIT_TERMINAL_PROMPT say. Such a sync runs plain, not
+# boxed: BatchMode would stop the prompt but also fail a passphrase key with no
+# agent, which could always update. Checks origin and every submodule URL, after
+# url.insteadOf. An unreadable origin, a GIT_SSH wrapper or an ssh command with a
+# `#` counts as yes: a comment there would swallow the BatchMode added after it.
+_sync_may_ask_over_ssh() {
+  local line url
+  local -a urls=()
+  [[ -z "${GIT_SSH:-}" ]] || return 0
+  [[ "$(_sync_ssh_command)" != *"#"* ]] || return 0
+  url="$(git -C "${NIKOS_HOME}" remote get-url origin 2>/dev/null)" || return 0
+  urls+=("${url}")
+  while IFS= read -r line; do
+    urls+=("${line#* }")
+  done < <(
+    git -C "${NIKOS_HOME}" config --file .gitmodules --get-regexp '^submodule\..*\.url$' 2>/dev/null || true
+    git -C "${NIKOS_HOME}" config --get-regexp '^submodule\..*\.url$' 2>/dev/null || true
+  )
+  while IFS= read -r line; do
+    urls+=("${line}")
+  done < <(git -C "${NIKOS_HOME}" submodule --quiet foreach --recursive 'git remote get-url origin' 2>/dev/null || true)
+  for url in "${urls[@]}"; do
+    url="$(git -C "${NIKOS_HOME}" ls-remote --get-url "${url}" 2>/dev/null || printf '%s' "${url}")"
+    if _url_may_use_ssh "${url}"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Points playbook-latest.log at a run's log. Called once the run has something to
+# record, so a Cancel or an early failure keeps the last real run's log. Creates
+# the file first: the link never dangles. A log that cannot be created changes
+# nothing.
+_publish_run_log() {
+  { : >>"$1"; } 2>/dev/null || return 0
+  ln -sf "$1" "${NIKOS_LOG_DIR}/playbook-latest.log"
+}
+
 # Prints the summary. With use_tui=true and a failed run, also shows it in a
 # dialog box on the terminal, so a TUI run ends on the failure, not a blank screen.
 _playbook_summary() {
@@ -733,11 +847,44 @@ _playbook() {
     print_error "Ansible collection requirements file not found at ${ANSIBLE_REQUIREMENTS}."
     exit 1
   fi
-  print_info "Installing required Ansible collections..."
+  # The run log is opened before the collections install: in the gauge view that
+  # step draws a box and its output goes here, ahead of the playbook's.
+  local run_log
+  run_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-playbook.log"
+  mkdir -p "${NIKOS_LOG_DIR}"
+  NIKOS_LAST_RUN_LOG=""
+
+  local -a collections_cmd=()
   if [[ -f "${NIKOS_HOME}/scripts/install-collections.sh" ]]; then
-    bash "${NIKOS_HOME}/scripts/install-collections.sh" "${ANSIBLE_REQUIREMENTS}"
+    collections_cmd=(bash "${NIKOS_HOME}/scripts/install-collections.sh" "${ANSIBLE_REQUIREMENTS}")
   else
-    ansible-galaxy collection install --no-cache -r "${ANSIBLE_REQUIREMENTS}"
+    collections_cmd=(ansible-galaxy collection install --no-cache -r "${ANSIBLE_REQUIREMENTS}")
+  fi
+  local collections_rc=0 collections_boxed=false
+  if _can_use_gauge; then
+    collections_boxed=true
+    _logfile "Installing required Ansible collections (log: ${run_log})"
+    _boxed_step "Installing required Ansible collections..." "${run_log}" "${collections_cmd[@]}" || collections_rc=$?
+  else
+    print_info "Installing required Ansible collections..."
+    "${collections_cmd[@]}" || collections_rc=$?
+  fi
+  # Checked, not left to set -e: a caller that runs `_playbook || rc=$?`
+  # suspends errexit, and the playbook would run without the collections.
+  if (( collections_rc != 0 )); then
+    if [[ "${collections_boxed}" == true ]] && (( collections_rc == 74 )); then
+      print_error "The Ansible collections installed, but the log ${run_log} could not be written; the playbook did not run. Check disk space and permissions, then rerun."
+    else
+      [[ "${collections_boxed}" != true ]] || _boxed_step_tail "${run_log}"
+      print_error "Failed to install required Ansible collections (exit ${collections_rc}); the playbook did not run."
+      { echo "[FAILED] ansible collections install (rc=${collections_rc})" >>"${run_log}"; } 2>/dev/null || true
+    fi
+    _logfile "[FAILED] ansible collections install (rc=${collections_rc})"
+    if [[ -e "${run_log}" ]]; then
+      _publish_run_log "${run_log}"
+      NIKOS_LAST_RUN_LOG="${run_log}"
+    fi
+    return "${collections_rc}"
   fi
   if [[ "${use_saved_skip_tags}" == "true" ]]; then
     skip_tags="$(_get_default_skip_tags)"
@@ -772,10 +919,6 @@ _playbook() {
     _plain_view_notice
   fi
 
-  local run_log
-  run_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-playbook.log"
-  mkdir -p "${NIKOS_LOG_DIR}"
-  ln -sf "${run_log}" "${NIKOS_LOG_DIR}/playbook-latest.log"
   _logfile "Playbook start: ansible-playbook ${playbook_args[*]}"
   _logfile "--- ansible-playbook output start ---"
 
@@ -794,6 +937,8 @@ _playbook() {
       _plain_view_notice
     fi
   fi
+
+  _publish_run_log "${run_log}"
 
   set +e
   if [[ "${use_gauge}" == "true" ]]; then
@@ -939,22 +1084,48 @@ cmd_update() {
       target_ref="$(_resolve_update_ref "${REPO_URL}" "${NIKOS_HOME}")"
     fi
 
+    local sync_text sync_log=""
     if [[ -n "${target_ref}" ]]; then
-      print_info "Updating NikOS repo and submodules to ${target_ref}..."
+      sync_text="Updating NikOS repo and submodules to ${target_ref}..."
     else
-      print_info "Already on the newest NikOS release; refreshing submodules..."
+      sync_text="Already on the newest NikOS release; refreshing submodules..."
     fi
 
-    if _sync_repo_to_ref "${target_ref}" "nikos-update-autostash"; then
-      :
+    # The same condition as the gauge: a run that draws it syncs behind a box,
+    # with the git output in its own log, unless ssh could prompt (see
+    # _sync_may_ask_over_ssh). GIT_TERMINAL_PROMPT=0 fails an HTTPS credential
+    # prompt instead of drawing it across the box. BatchMode covers an ssh
+    # submodule that only the target ref declares, which the check cannot see
+    # before the fetch; it is added to the user's own ssh command, not over it.
+    if _can_use_gauge && ! _sync_may_ask_over_ssh; then
+      local ssh_command
+      ssh_command="$(_sync_ssh_command)"
+      sync_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-sync.log"
+      _logfile "${sync_text} (log: ${sync_log})" 2>/dev/null || true
+      GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${ssh_command} -o BatchMode=yes" \
+        _boxed_step "${sync_text}" "${sync_log}" \
+        _sync_repo_to_ref "${target_ref}" "nikos-update-autostash" || update_rc=$?
     else
-      update_rc=$?
+      print_info "${sync_text}"
+      _sync_repo_to_ref "${target_ref}" "nikos-update-autostash" || update_rc=$?
+    fi
+    if [[ "${update_rc}" -ne 0 ]]; then
+      if [[ -n "${sync_log}" && "${update_rc}" -ne 74 ]]; then
+        _boxed_step_tail "${sync_log}"
+        if _sync_log_shows_auth_failure "${sync_log}"; then
+          print_info "NIKOS_USE_DIALOG=0 nikos update prints the steps and allows credential prompts."
+        fi
+      fi
+      _logfile "[FAILED] repo sync (rc=${update_rc})" 2>/dev/null || true
       case "${update_rc}" in
         1)
           print_error "Updates were applied, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun 'nikos update'."
           ;;
         2)
           print_error "Failed to update ${NIKOS_HOME}. Review the git output above, resolve the issue, then rerun 'nikos update'."
+          ;;
+        74)
+          print_error "The repository sync finished, but its log ${sync_log} could not be written. Check disk space and permissions, then rerun 'nikos update'."
           ;;
         3)
           print_error "Failed to update git submodules in ${NIKOS_HOME}. Review the git output above, resolve the issue, then rerun 'nikos update'."

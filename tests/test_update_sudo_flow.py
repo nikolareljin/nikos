@@ -3,7 +3,9 @@ from scripts/nikos twice, with its password helpers and its EXIT trap, against
 stub sudo, ansible-playbook and ansible-galaxy on PATH. Nothing real starts.
 
 The gauge is switched off (`_can_use_gauge` returns 1), so both runs take the
-plain view, which gets the password file as well.
+plain view, which gets the password file as well. With `box_answers` the gauge
+is on: the collection install then runs behind a progressbox, which the stub
+dialog answers with exit 0.
 """
 
 from __future__ import annotations
@@ -33,6 +35,10 @@ FUNCTIONS = (
     "_collect_become_password",
     "_ensure_become_password",
     "_offer_dialog_install",
+    "_leave_box",
+    "_boxed_step",
+    "_boxed_step_tail",
+    "_publish_run_log",
     "_playbook",
 )
 
@@ -110,7 +116,7 @@ def drive(
         '_get_default_skip_tags() { echo ""; }\n'
         '_get_saved_tools() { echo ""; }\n'
         "_playbook_summary() { :; }\n"
-        "_leave_tui() { :; }\n_leave_box() { :; }\n"
+        "_leave_tui() { :; }\nnikos_progress_strip_ansi() { cat; }\n"
         + (
             # The gauge can draw, so the password is asked in a box; planning
             # fails, so the run itself still takes the plain view.
