@@ -57,7 +57,7 @@ def test_dialog_off_prints_usage_on_a_terminal(tmp_path):
     assert not (tmp_path / "dialog.log").exists()
 
 
-def run_in_pty(tmp_path, extra_env, menu_script):
+def run_in_pty(tmp_path, extra_env, menu_script, input_script="exit 1", yesno_script="exit 1"):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     log = tmp_path / "dialog.log"
@@ -67,6 +67,8 @@ def run_in_pty(tmp_path, extra_env, menu_script):
         f'printf "%s\\n" "$*" >> "{log}"\n'
         'case " $* " in\n'
         f"  *' --menu '*) {menu_script} ;;\n"
+        f"  *' --inputbox '*) {input_script} ;;\n"
+        f"  *' --yesno '*) {yesno_script} ;;\n"
         "  *) exit 0 ;;\n"
         "esac\n",
         encoding="utf-8",
@@ -103,15 +105,49 @@ def run_in_pty(tmp_path, extra_env, menu_script):
 
 
 def test_bare_nikos_on_a_terminal_opens_the_menu_and_runs_status(tmp_path):
-    # First menu call picks the item labelled "status: ...", the second exits.
-    pick = (
-        f'if [[ -e "{tmp_path}/picked" ]]; then exit 1; fi; touch "{tmp_path}/picked"; '
-        'prev=""; for a in "$@"; do if [[ "$a" == status:* ]]; then echo "$prev"; exit 0; fi; prev="$a"; done; exit 1'
-    )
-    out, rc = run_in_pty(tmp_path, {}, menu_script=pick)
+    out, rc = run_in_pty(tmp_path, {}, pick_once(tmp_path, "status"))
     assert rc == 0, out
     calls = (tmp_path / "dialog.log").read_text().splitlines()
     assert sum(" --menu " in f" {c} " for c in calls) == 2
     assert not any("--yesno" in c for c in calls)  # status changes nothing
     assert "Ollama models:" in out
     assert "[nikos status finished, exit 0]" in out
+
+
+def pick_once(tmp_path, label):
+    """Menu stub: the first call picks the item whose text starts with label, the second exits."""
+    return (
+        f'if [[ -e "{tmp_path}/picked" ]]; then exit 1; fi; touch "{tmp_path}/picked"; '
+        f'prev=""; for a in "$@"; do if [[ "$a" == "{label}:"* ]]; then echo "$prev"; exit 0; fi; prev="$a"; done; exit 1'
+    )
+
+
+def test_a_command_with_an_argument_prompts_then_confirms_and_no_runs_nothing(tmp_path):
+    out, rc = run_in_pty(
+        tmp_path, {}, pick_once(tmp_path, "update --ref <r>"), input_script="echo some-tag", yesno_script="exit 1"
+    )
+    assert rc == 0, out
+    calls = (tmp_path / "dialog.log").read_text().splitlines()
+    assert any("--inputbox Branch or tag" in c for c in calls)
+    assert any("--yesno Run 'nikos update --ref some-tag'?" in c for c in calls)
+    assert "finished, exit" not in out  # answered No
+    assert sum(" --menu " in f" {c} " for c in calls) == 2  # back in the menu, then Exit
+
+
+def test_a_prompt_inside_a_word_is_filled_in_place(tmp_path):
+    out, rc = run_in_pty(tmp_path, {}, pick_once(tmp_path, "add ollama-<m>"), input_script="echo text")
+    assert rc == 0, out
+    calls = (tmp_path / "dialog.log").read_text().splitlines()
+    assert any("--inputbox Role: text, reasoning, coding, vision, embedding or models" in c for c in calls)
+    assert any("--yesno Run 'nikos add ollama-text'?" in c for c in calls)
+
+
+def test_a_cancelled_or_spaced_argument_returns_to_the_menu(tmp_path):
+    for n, script in enumerate(("exit 1", "echo 'two words'", "echo ''")):
+        case = tmp_path / str(n)
+        case.mkdir()
+        out, rc = run_in_pty(case, {}, pick_once(case, "add model <m>"), input_script=script)
+        assert rc == 0, out
+        calls = (case / "dialog.log").read_text().splitlines()
+        assert not any("--yesno" in c for c in calls), script
+        assert "finished, exit" not in out
