@@ -335,7 +335,7 @@ def test_global_refuses_a_relative_script_helpers_home(env):
     assert calls(env) == []
 
 
-@pytest.mark.parametrize("loaded", ["helpers.sh", "lib/logging.sh", "config/names.txt", "scripts/other.sh"])
+@pytest.mark.parametrize("loaded", ["helpers.sh", "lib/logging.sh", "config/names.txt", "scripts/other.sh", ".git/config"])
 def test_global_refuses_when_others_can_write_any_file_of_the_tree(env, loaded):
     target = env["tmp"] / "sh" / loaded
     target.parent.mkdir(exist_ok=True)
@@ -374,3 +374,33 @@ def test_a_directory_above_the_tree_may_be_open_to_others_only_with_the_sticky_b
     assert sticky.returncode == 0, sticky.stderr
     assert tree.returncode != 0 and "refusing" in tree.stderr
     assert calls(env) == ["setup-hooks --global"]
+
+
+def test_global_refuses_a_symlink_that_leaves_the_tree_and_takes_one_inside_it(env):
+    lib = env["tmp"] / "sh" / "lib"
+    lib.mkdir()
+    (lib / "real.sh").write_text("# in the tree\n")
+    (lib / "alias.sh").symlink_to(lib / "real.sh")
+    inside = run(env, "--global")
+    outside = env["tmp"] / "outside.sh"
+    outside.write_text("# owned by the user, mode 644, but not in the tree\n")
+    outside.chmod(0o644)
+    (lib / "out.sh").symlink_to(outside)
+    left = run(env, "--global")
+    assert inside.returncode == 0, inside.stderr
+    assert left.returncode != 0 and "refusing" in left.stderr
+    assert calls(env) == ["setup-hooks --global"]
+
+
+def test_global_refuses_a_file_a_shared_group_can_write(env):
+    shared = [g for g in os.getgroups() if g != os.getgid()]
+    if not shared:
+        pytest.skip("this user is in no group but its own")
+    script = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
+    script.chmod(0o664)
+    own = run(env, "--global")                # group write for the user's own group
+    os.chown(script, -1, shared[0])
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    # The user's own group is accepted only when nobody else is in it.
+    assert calls(env) == (["setup-hooks --global"] if own.returncode == 0 else [])

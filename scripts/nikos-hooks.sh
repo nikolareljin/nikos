@@ -53,27 +53,44 @@ run_lantern() { SCRIPT_HELPERS_HOME="$(helpers_home)" lantern "$@"; }
 # trusted_setup_script <path>: script-helpers.home comes from git config, so
 # setup-hooks.sh is run only when its whole tree can be trusted. Prints the
 # resolved path (symlinks followed), which is the one to run: what is checked
-# is what runs. The rule, for every file and directory of the tree (.git
-# aside) and for what a symlink in it points to: owned by this user or root,
-# and not writable by other users. Every directory above the tree: the same,
-# except that world-writable is accepted with the sticky bit (/tmp). A path
-# that is not absolute, or a tree find cannot read in full, fails.
-# Group-writable is the Ubuntu default under umask 002.
+# is what runs. The rule:
+#   - the path is absolute;
+#   - every file and directory of the tree, .git included, is owned by this
+#     user or root and is not writable by other users. Group write counts as
+#     other users unless the group is this user's private group (no other
+#     member, the Ubuntu default under umask 002);
+#   - a symlink in the tree points inside the tree;
+#   - every directory above the tree follows the same owner and write rule,
+#     except that the sticky bit (/tmp) allows shared write;
+#   - a tree find cannot read in full fails.
 trusted_setup_script() {
-  local real root dir uid bad
+  local real root dir uid gid link target bad
+  local -a writable
   [[ "$1" == /* ]] || return 1
   real="$(readlink -f -- "$1" 2>/dev/null)" || return 1
   [[ -f "${real}" ]] || return 1
   root="$(dirname -- "$(dirname -- "${real}")")"
   [[ "${root}" != "/" ]] || return 1
   uid="$(id -u)"
-  bad="$(find -L "${root}" -name .git -prune -o \
-    \( -perm -002 -o ! \( -user "${uid}" -o -user 0 \) \) -print -quit 2>/dev/null)" || return 1
+  gid="$(id -g)"
+  writable=(-perm -002 -o -perm -020)
+  if [[ -z "$(getent group "${gid}" | cut -d: -f4 | tr ',' '\n' | grep -v -x -F -- "$(id -un)")" &&
+    -z "$(getent passwd | awk -F: -v g="${gid}" -v u="${uid}" '$4 == g && $3 != u')" ]]; then
+    writable=(-perm -002 -o \( -perm -020 ! -gid "${gid}" \))
+  fi
+  # -L applies the test to what a symlink points to.
+  bad="$(find -L "${root}" \( \( "${writable[@]}" \) -o ! \( -user "${uid}" -o -user 0 \) \) \
+    -print -quit 2>/dev/null)" || return 1
   [[ -z "${bad}" ]] || return 1
+  while IFS= read -r link; do
+    target="$(readlink -f -- "${link}" 2>/dev/null)" || return 1
+    [[ "${target}" == "${root}/"* ]] || return 1
+  done < <(find "${root}" -type l 2>/dev/null)
   dir="$(dirname -- "${root}")"
   while :; do
     bad="$(find "${dir}" -maxdepth 0 \
-      \( \( -perm -002 ! -perm -1000 \) -o ! \( -user "${uid}" -o -user 0 \) \) -print 2>/dev/null)" || return 1
+      \( \( \( "${writable[@]}" \) ! -perm -1000 \) -o ! \( -user "${uid}" -o -user 0 \) \) \
+      -print 2>/dev/null)" || return 1
     [[ -z "${bad}" ]] || return 1
     [[ "${dir}" != "/" ]] || break
     dir="$(dirname -- "${dir}")"

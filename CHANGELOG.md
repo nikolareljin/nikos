@@ -32,8 +32,9 @@ All notable changes to NikOS are documented here.
   options before it. Its helper runs only `git` and `gh`.
 - `nikos hooks` runs `setup-hooks.sh` (for `status`, `apply`, `repair` and
   `--global`) only from an absolute path into a script-helpers tree it can
-  trust: every file and directory in it, and what a symlink in it points to,
-  is owned by the user or root and cannot be written by other users. The
+  trust: every file and directory in it is owned by the user or root and
+  cannot be written by other users (a group other than the user's private
+  group counts as other users), and a symlink in it points inside it. The
   directories above the tree follow the same rule (a sticky directory such as
   `/tmp` is accepted). The resolved file is the one that runs.
 - `scripts/bump-versions.py` fetches only `https` URLs and follows a redirect
