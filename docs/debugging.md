@@ -14,6 +14,7 @@ It checks:
 - Nordic GTK theme files
 - Papirus icon files
 - Git setup wizard completion flag
+- NTP time sync is on; a host with no time sync service (a container) gets a warning, not a failure
 
 Any `[!!]` items indicate missing or broken components. Run `nikos update` to attempt repair.
 

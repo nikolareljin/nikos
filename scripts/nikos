@@ -1607,6 +1607,15 @@ cmd_doctor() {
   fi
   check "SSH server installed" test -x /usr/sbin/sshd
   check "SSH accepting connections" ssh_listening
+  # The base role turns NTP on where systemd has a time sync service. A host
+  # with none (a container) answers CanNTP=no; that is a warning, since
+  # `nikos update` cannot change it.
+  ntp_property() { timedatectl show --property="$1" --value 2>/dev/null; }
+  if [[ "$(ntp_property CanNTP)" == "yes" ]]; then
+    check "NTP time sync enabled" test "$(ntp_property NTP)" = yes
+  else
+    print_warn "No time sync service on this host (NTP off)"
+  fi
   optional_check "Git setup done or skipped (nikos-git-setup)" test -f "${HOME}/.config/nikos/github-configured"
   check "NikOS repo present" test -d "${NIKOS_HOME}/.git"
   check "script-helpers present" test -f "${HELPERS}"
