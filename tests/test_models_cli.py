@@ -68,7 +68,10 @@ def home(tmp_path, ollama):
     state = tmp_path / "state"
     (state / "nikos").mkdir(parents=True)
     (state / "nikos/models-extra").write_text("Kept:1b\n")
-    return {**os.environ, "NIKOS_HOME": str(nikos), "XDG_STATE_HOME": str(state), "HOME": str(tmp_path), "NO_COLOR": "1"}
+    # NIKOS_USE_DIALOG=0: these tests answer the text questions. The checklist
+    # has its own tests, which take the setting out.
+    return {**os.environ, "NIKOS_HOME": str(nikos), "XDG_STATE_HOME": str(state), "HOME": str(tmp_path),
+            "NO_COLOR": "1", "NIKOS_USE_DIALOG": "0"}
 
 
 def nikos(env, *args):
@@ -310,3 +313,79 @@ def test_a_lower_tier_pick_is_kept_and_a_higher_one_is_not(home, ollama):
     outside = outside_the_set(home)
     assert "qwen2.5:7b" not in outside   # the small column
     assert "gpt-oss:20b" in outside      # only the large and xlarge columns
+
+
+def with_stub_dialog(home, tmp_path, checklist_script):
+    """The environment with dialog switched on and a stub dialog first on PATH."""
+    bindir = tmp_path / "dialogbin"
+    bindir.mkdir()
+    log = tmp_path / "dialog.log"
+    (bindir / "dialog").write_text(
+        "#!/bin/bash\n"
+        f'printf "%s\\n" "$*" >> "{log}"\n'
+        'case " $* " in\n'
+        f"  *' --checklist '*) {checklist_script} ;;\n"
+        "  *) exit 0 ;;\n"
+        "esac\n"
+    )
+    (bindir / "dialog").chmod(0o755)
+    env = {k: v for k, v in home.items() if k != "NIKOS_USE_DIALOG"}
+    env["PATH"] = f"{bindir}:{env['PATH']}"
+    env["TERM"] = "xterm"
+    return env, log
+
+
+def test_with_dialog_the_offer_is_one_checklist_and_checked_models_are_removed(home, tmp_path, ollama):
+    env, log = with_stub_dialog(home, tmp_path, 'printf "gpt-oss:20b\\n"; exit 0')
+    out = on_tty(env, [], "models", "prune")
+    calls = log.read_text().splitlines()
+    checklists = [c for c in calls if "--checklist" in c]
+    assert len(checklists) == 1, calls
+    assert "gpt-oss:20b  off" in checklists[0] and "qwen2.5:7b  off" in checklists[0]   # nothing checked
+    assert "qwen3.5:4b" not in checklists[0]                                           # a pick is not offered
+    assert "[y/N]" not in out
+    assert ollama[1] == ["gpt-oss:20b"]
+    assert "Removed 1 model(s)." in out
+
+
+@pytest.mark.parametrize("code", [1, 255])
+def test_cancel_or_esc_in_the_checklist_removes_nothing(home, tmp_path, ollama, code):
+    # Prints a name first, so a result read despite the exit code would remove it.
+    env, log = with_stub_dialog(home, tmp_path, f"echo gpt-oss:20b; exit {code}")
+    out = on_tty(env, [], "models", "prune")
+    assert any("--checklist" in c for c in log.read_text().splitlines())
+    assert ollama[1] == []
+    assert "Removed" not in out
+
+
+def test_the_checklist_does_not_erase_the_terminal(home, tmp_path, ollama):
+    env, _ = with_stub_dialog(home, tmp_path, "exit 1")
+    env["TERM"] = "xterm"
+    assert "\x1b[2J" not in on_tty(env, [], "models", "prune")
+
+
+def test_a_checklist_that_cannot_draw_falls_back_to_the_text_questions(home, tmp_path, ollama):
+    env, log = with_stub_dialog(home, tmp_path, 'exit "${DIALOG_ERROR:-255}"')
+    out = on_tty(env, ["y", "n"], "models", "prune")
+    assert any("--checklist" in c for c in log.read_text().splitlines())
+    assert "Remove gpt-oss:20b? [y/N]" in out
+    assert ollama[1] == ["gpt-oss:20b"]
+
+
+def test_the_question_boxes_keep_the_normal_screen():
+    # A stub dialog cannot show this: the real one draws over the normal screen
+    # without --keep-tite, and a clear after the box erases the sync output.
+    text = (Path(__file__).resolve().parent.parent / "scripts" / "nikos").read_text()
+    for call in ("--passwordbox", "--checklist"):
+        start = text.index(call)
+        line = text.rfind("dialog ", 0, start)
+        assert "--keep-tite" in text[line:start], call
+        after = text[start:]
+        assert after.index("_leave_box") < after.find("_leave_tui") or "_leave_tui" not in after
+
+
+def test_leaving_a_box_does_not_restore_the_screen_twice():
+    text = (Path(__file__).resolve().parent.parent / "scripts" / "nikos").read_text()
+    body = text[text.index("_leave_box() {"):]
+    body = body[: body.index("\n}\n")]
+    assert "rmcup" not in body and "clear" not in body

@@ -9,9 +9,19 @@ All notable changes to NikOS are documented here.
   `help` and `hooks export|import`). It asks for any argument, confirms
   commands that change the system, and returns after each one until Exit.
   Piped stdin, no terminal, no `dialog`, a `dialog` that cannot draw (a very
-  small terminal) or `NIKOS_USE_DIALOG=0` print usage and exit 0. `usage()` and the menu come from one command table in
-  `scripts/nikos`; `tests/test_command_menu.py` fails when the dispatch has a
-  command the table does not.
+  small terminal) or `NIKOS_USE_DIALOG=0` print usage and exit 0. `usage()`
+  and the menu come from one command table in `scripts/nikos`;
+  `tests/test_command_menu.py` fails when the dispatch has a command the table
+  does not.
+
+### Changed
+- When the progress gauge can draw (a terminal, `dialog` installed,
+  `NIKOS_USE_DIALOG` not `0`), `nikos setup`, `update` and `add` ask for the
+  sudo password in a `dialog` box, and `nikos update` and `nikos models prune`
+  offer unused models as one checklist with nothing checked. Cancel in the
+  password box ends the command with exit 130 and the playbook does not run; Cancel in the
+  checklist keeps every model. A `dialog` that cannot draw falls back to the
+  text questions.
 
 ### Fixed
 - Mousepad, Xfce Terminal, and VS Code now use the same Nord frost `#88C0D0`

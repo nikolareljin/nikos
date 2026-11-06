@@ -139,8 +139,10 @@ class and the model per role.
 
 `nikos update` pulls the default and the selected modules, so a machine moves to
 the current approved set. Before it pulls, it offers to remove installed models
-that are not approved for this machine, one question per model (`[y/N]`). Without
-a terminal it lists them and removes nothing; `nikos models prune` asks again.
+that are not approved for this machine: one `dialog` checklist with nothing
+checked, or one question per model (`[y/N]`) when `dialog` is missing or cannot
+draw, or with `NIKOS_USE_DIALOG=0`. Without a terminal it lists them and removes nothing;
+`nikos models prune` asks again.
 It never offers this machine's tier pick (or a lower tier's) for any type of
 work, or a model that a repository's `.env` names in a variable ending in
 `MODEL` or `_CHOICE`. Repositories are

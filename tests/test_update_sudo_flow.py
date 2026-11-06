@@ -29,6 +29,7 @@ FUNCTIONS = (
     "_stop_sudo_keepalive",
     "_cleanup_run",
     "_plain_view_notice",
+    "_become_password_box",
     "_collect_become_password",
     "_ensure_become_password",
     "_offer_dialog_install",
@@ -43,7 +44,16 @@ def extract(name: str) -> str:
     return match.group(0)
 
 
-def drive(tmp_path: Path, typed: bytes, *, dialog_missing: bool = False, nopass: bool = False) -> dict:
+def drive(
+    tmp_path: Path,
+    typed: bytes,
+    *,
+    dialog_missing: bool = False,
+    nopass: bool = False,
+    box_answers: list[str] | None = None,
+) -> dict:
+    """box_answers: the gauge is available, and a stub dialog answers each
+    password box in turn ("CANCEL" presses Cancel)."""
     work = tmp_path
     bindir = work / "bin"
     bindir.mkdir()
@@ -70,6 +80,18 @@ def drive(tmp_path: Path, typed: bytes, *, dialog_missing: bool = False, nopass:
         'echo "PLAY RECAP"\n'
     )
     (bindir / "ansible-galaxy").write_text("#!/bin/sh\nexit 0\n")
+    dialog_log = work / "dialog.log"
+    if box_answers is not None:
+        (work / "answers").write_text("".join(a + "\n" for a in box_answers))
+        (bindir / "dialog").write_text(
+            "#!/bin/bash\n"
+            f'printf "%s\\n" "$*" >> "{dialog_log}"\n'
+            'case " $* " in *" --passwordbox "*) ;; *) exit 0 ;; esac\n'
+            f'answer="$(sed -n 1p "{work}/answers")"; sed -i 1d "{work}/answers"\n'
+            '[ "$answer" = CANCEL ] && exit 1\n'
+            '[ "$answer" = CANNOT_DRAW ] && exit "${DIALOG_ERROR:-255}"\n'
+            'printf "%s" "$answer"\n'
+        )
     for p in bindir.iterdir():
         p.chmod(0o755)
 
@@ -88,8 +110,15 @@ def drive(tmp_path: Path, typed: bytes, *, dialog_missing: bool = False, nopass:
         '_get_default_skip_tags() { echo ""; }\n'
         '_get_saved_tools() { echo ""; }\n'
         "_playbook_summary() { :; }\n"
-        "_leave_tui() { :; }\n"
-        "_can_use_gauge() { return 1; }\n"
+        "_leave_tui() { :; }\n_leave_box() { :; }\n"
+        + (
+            # The gauge can draw, so the password is asked in a box; planning
+            # fails, so the run itself still takes the plain view.
+            "_can_use_gauge() { return 0; }\nnikos_progress_plan() { return 1; }\n"
+            if box_answers is not None
+            else "_can_use_gauge() { return 1; }\n"
+        )
+        +
         # The branch order of nikos_progress_why_not, without its dialog and tty checks.
         'nikos_progress_why_not() { [[ -z "${NIKOS_PROGRESS_SKIP_REASON:-}" ]] || echo "${NIKOS_PROGRESS_SKIP_REASON}"; }\n'
         + (
@@ -102,7 +131,8 @@ def drive(tmp_path: Path, typed: bytes, *, dialog_missing: bool = False, nopass:
         + "\n\n"
         + ("" if dialog_missing else "_offer_dialog_install() { :; }\n")
         + "trap '_cleanup_run' EXIT\n"
-        "_playbook -e nikos_update_mode=true\n"
+        # As cmd_update calls it: a failed playbook is reported by the caller.
+        '_playbook -e nikos_update_mode=true || { echo "PLAYBOOK_FAILED rc=$?"; exit 9; }\n'
         'echo "BETWEEN mode=${NIKOS_BECOME_MODE} keepalive=${SUDO_KEEPALIVE_PID} file=${BECOME_PASSWORD_FILE}"\n'
         f'echo "${{SUDO_KEEPALIVE_PID}}" > "{work}/keepalive.pid"\n'
         "_playbook --no-saved-skip-tags -e nikos_update_mode=true --tags opt\n"
@@ -116,7 +146,7 @@ def drive(tmp_path: Path, typed: bytes, *, dialog_missing: bool = False, nopass:
         'if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then echo KEEPALIVE=alive; else echo KEEPALIVE=gone; fi'
     )
     result = subprocess.run(
-        ["script", "-qec", f"PATH={bindir}:$PATH TMPDIR={work / 'tmp'} bash {program}; {after}", "/dev/null"],
+        ["script", "-qec", f"PATH={bindir}:$PATH TMPDIR={work / 'tmp'} bash {program}; echo PROBE_RC=$?; {after}", "/dev/null"],
         input=typed,
         capture_output=True,
         timeout=120,
@@ -124,6 +154,8 @@ def drive(tmp_path: Path, typed: bytes, *, dialog_missing: bool = False, nopass:
     out = result.stdout.decode(errors="replace").replace("\r", "")
     return {
         "out": out,
+        "rc": int(re.search(r"PROBE_RC=(\d+)", out).group(1)),
+        "dialog": dialog_log.read_text().splitlines() if dialog_log.exists() else [],
         "sudo": sudo_log.read_text().splitlines() if sudo_log.exists() else [],
         "ansible": ansible_log.read_text().splitlines() if ansible_log.exists() else [],
         "left": sorted(p.name for p in (work / "tmp").glob("nikos-become.*")),
@@ -178,3 +210,54 @@ def test_the_dialog_install_offer_runs_on_the_checked_password(tmp_path):
     install = r["sudo"].index("apt-get install -y dialog")
     assert r["sudo"][:install] == ["-k", "-n true", "-k", "-S -v"], r["sudo"]
     assert "-S -v" not in r["sudo"][install:], r["sudo"]
+
+
+def test_with_the_gauge_the_password_is_asked_once_in_a_dialog_box(tmp_path):
+    r = drive(tmp_path, b"", box_answers=["hunter2"])
+    assert "END" in r["out"], r["out"]
+    assert "Sudo password for" not in r["out"]          # the plain prompt did not run
+    boxes = [line for line in r["dialog"] if "--passwordbox" in line]
+    assert len(boxes) == 1, r["dialog"]
+    assert len(r["ansible"]) == 2 and all("content=[hunter2]" in line for line in r["ansible"]), r["ansible"]
+    assert r["left"] == []
+
+
+def test_a_wrong_answer_in_the_box_is_asked_again_and_says_so(tmp_path):
+    r = drive(tmp_path, b"", box_answers=["wrong", "hunter2"])
+    assert "END" in r["out"], r["out"]
+    boxes = [line for line in r["dialog"] if "--passwordbox" in line]
+    assert len(boxes) == 2, r["dialog"]
+    assert "Sorry, try again." not in boxes[0] and "Sorry, try again." in boxes[1]
+    assert all("content=[hunter2]" in line for line in r["ansible"]), r["ansible"]
+
+
+def test_cancel_in_the_box_runs_nothing_and_exits_130(tmp_path):
+    r = drive(tmp_path, b"", box_answers=["CANCEL"])
+    assert r["rc"] == 130, (r["rc"], r["out"])
+    assert "Cancelled at the sudo password" in r["out"]
+    assert "PLAYBOOK_FAILED" not in r["out"]      # a cancel is not reported as a failed playbook
+    assert r["ansible"] == [] and "END" not in r["out"]
+    assert r["left"] == []
+    assert "-S -v" not in r["sudo"]
+
+
+def test_a_box_that_cannot_draw_falls_back_to_the_plain_prompt(tmp_path):
+    r = drive(tmp_path, b"hunter2\n", box_answers=["CANNOT_DRAW"])
+    assert "END" in r["out"], r["out"]
+    assert r["out"].count("Sudo password for") == 1, r["out"]
+    assert len([line for line in r["dialog"] if "--passwordbox" in line]) == 1
+    assert all("content=[hunter2]" in line for line in r["ansible"]), r["ansible"]
+
+
+def test_three_wrong_answers_in_the_box_run_nothing(tmp_path):
+    r = drive(tmp_path, b"", box_answers=["a", "b", "c"])
+    assert len([line for line in r["dialog"] if "--passwordbox" in line]) == 3
+    assert "Sudo rejected the password three times" in r["out"]
+    assert "PLAYBOOK_FAILED rc=1" in r["out"] and r["ansible"] == []
+    assert r["left"] == []
+
+
+def test_an_empty_answer_in_the_box_leaves_the_prompt_to_ansible(tmp_path):
+    r = drive(tmp_path, b"", box_answers=[""])
+    assert "END" in r["out"], r["out"]
+    assert len(r["ansible"]) == 2 and all("--ask-become-pass" in line for line in r["ansible"]), r["ansible"]
