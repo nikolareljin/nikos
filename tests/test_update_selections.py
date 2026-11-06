@@ -354,6 +354,7 @@ def _run_cmd_update(tmp_path: Path, continuation: bool, optional_tags: str, play
         "print_info() { echo \"INFO:$*\"; }\n"
         "print_error() { echo \"ERROR:$*\" >&2; }\n"
         '_resolve_update_ref() { printf "0.6.5\\n"; }\n'
+        "_can_use_gauge() { return 1; }\n"
         '_sync_repo_to_ref() { echo "sync:$*" >> "${CALLS}"; }\n'
         '_playbook() { echo "playbook:$*" >> "${CALLS}"; NIKOS_LAST_RUN_LOG=/logs/run.log; '
         f'return {playbook_rc}; }}\n'

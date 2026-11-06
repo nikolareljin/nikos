@@ -131,6 +131,13 @@ nikos update --ref release/0.6.0  # a specific branch or tag
 updates submodules and re-runs the playbook. All roles are idempotent —
 already-installed components are skipped.
 
+On a terminal with `dialog` installed the whole update runs in `dialog` boxes:
+the repository sync, the model checklist, the collection install, the sudo
+password and the per-role gauge. The sync output goes to
+`~/.config/nikos/logs/nikos-<time>-sync.log` and the collection output to the
+playbook log (`nikos log` shows it); a failed step prints its error and the log
+path. `NIKOS_USE_DIALOG=0` prints every step as plain text instead.
+
 Everything NikOS downloads is pinned in `vars/versions.yml`: release files to
 a version and a sha256, registry packages to an exact version, git checkouts to
 a commit, vendor apt keys to a fingerprint. For an existing install the pin is a

@@ -22,8 +22,19 @@ All notable changes to NikOS are documented here.
   password box ends the command with exit 130 and the playbook does not run; Cancel in the
   checklist keeps every model. A `dialog` that cannot draw falls back to the
   text questions.
+- Under the same condition, `nikos update` runs the repository sync and the
+  Ansible collection install behind a `dialog` progressbox, so an interactive
+  update stays in one interface from the sync to the playbook gauge. The git
+  output goes to `~/.config/nikos/logs/nikos-<time>-sync.log`, the collection
+  output to the run's playbook log. A failed step prints its error, the last
+  lines of that log and the log path after the box. Exit codes are unchanged.
+  Without the gauge both steps print as before.
 
 ### Fixed
+- A failed Ansible collection install stops `nikos update` with the
+  installer's exit code and a message. It was printed and the playbook ran
+  anyway, because `cmd_update` suspends `set -e` around `_playbook`.
+  `nikos setup` and `nikos add` already stopped; they now say why.
 - Mousepad, Xfce Terminal, and VS Code now use the same Nord frost `#88C0D0`
   focused-tab accent and `#4C566A` unfocused-tab color. The dark Nordic editor
   surfaces remain unchanged.

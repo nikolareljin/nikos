@@ -84,6 +84,57 @@ _leave_box() {
   fi
 }
 
+# Runs one step of a command (the repository sync, the collection install)
+# behind a progressbox, with its output appended to a log, so a run that draws
+# the gauge prints nothing between its boxes. $1 is the box text, $2 the log,
+# the rest the command, which may be a function. --keep-tite for the same
+# reason as the question boxes; no rmcup after it (see _leave_box).
+#
+# The step runs in the foreground, so Ctrl-C reaches it as on the plain path.
+# A box that cannot draw does not stop the step: the `cat` after dialog keeps
+# draining the pipe, so neither tee nor the command gets SIGPIPE, and the step
+# finishes unseen instead of leaving the checkout half-switched. Stdin is
+# /dev/null: nobody can answer a prompt behind the box.
+#
+# Returns the command's exit status; EX_IOERR (74) when the command succeeded
+# but the log could not be written, as nikos_progress_run reports a lost log.
+_boxed_step() {
+  local text="$1" log="$2"
+  shift 2
+  local rc=0
+  local -a pipe_status=()
+  mkdir -p "$(dirname -- "${log}")"
+  set +e
+  "$@" </dev/null 2>&1 \
+    | nikos_progress_strip_ansi \
+    | tee -a "${log}" \
+    | {
+        dialog --keep-tite --title "NikOS ${NIKOS_VERSION}" \
+          --progressbox "${text}" "${DIALOG_HEIGHT:-20}" "${DIALOG_WIDTH:-72}" >/dev/tty 2>/dev/tty
+        cat >/dev/null
+      }
+  pipe_status=("${PIPESTATUS[@]}")
+  set -e
+  _leave_box
+  rc="${pipe_status[0]}"
+  if (( rc == 0 )) && (( pipe_status[2] != 0 )); then
+    print_error "Failed to write ${log}."
+    rc=74
+  fi
+  return "${rc}"
+}
+
+# After a failed boxed step: the box is gone with everything it showed, so the
+# end of its log goes on the terminal, with the path for the rest.
+_boxed_step_tail() {
+  local log="$1"
+  if [[ -s "${log}" ]]; then
+    echo "Last lines of ${log}:" >&2
+    tail -n 20 -- "${log}" | sed 's/^/  /' >&2
+  fi
+  echo "Log: ${log}" >&2
+}
+
 # Prints the summary. With use_tui=true and a failed run, also shows it in a
 # dialog box on the terminal, so a TUI run ends on the failure, not a blank screen.
 _playbook_summary() {
@@ -733,11 +784,36 @@ _playbook() {
     print_error "Ansible collection requirements file not found at ${ANSIBLE_REQUIREMENTS}."
     exit 1
   fi
-  print_info "Installing required Ansible collections..."
+  # The run log is opened before the collections install: in the gauge view that
+  # step draws a box and its output goes here, ahead of the playbook's.
+  local run_log
+  run_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-playbook.log"
+  mkdir -p "${NIKOS_LOG_DIR}"
+  ln -sf "${run_log}" "${NIKOS_LOG_DIR}/playbook-latest.log"
+
+  local -a collections_cmd=()
   if [[ -f "${NIKOS_HOME}/scripts/install-collections.sh" ]]; then
-    bash "${NIKOS_HOME}/scripts/install-collections.sh" "${ANSIBLE_REQUIREMENTS}"
+    collections_cmd=(bash "${NIKOS_HOME}/scripts/install-collections.sh" "${ANSIBLE_REQUIREMENTS}")
   else
-    ansible-galaxy collection install --no-cache -r "${ANSIBLE_REQUIREMENTS}"
+    collections_cmd=(ansible-galaxy collection install --no-cache -r "${ANSIBLE_REQUIREMENTS}")
+  fi
+  local collections_rc=0 collections_boxed=false
+  if _can_use_gauge; then
+    collections_boxed=true
+    _logfile "Installing required Ansible collections (log: ${run_log})"
+    _boxed_step "Installing required Ansible collections..." "${run_log}" "${collections_cmd[@]}" || collections_rc=$?
+  else
+    print_info "Installing required Ansible collections..."
+    "${collections_cmd[@]}" || collections_rc=$?
+  fi
+  # Checked, not left to set -e: a caller that runs `_playbook || rc=$?`
+  # suspends errexit, and the playbook would run without the collections.
+  if (( collections_rc != 0 )); then
+    [[ "${collections_boxed}" != true ]] || _boxed_step_tail "${run_log}"
+    print_error "Failed to install required Ansible collections (exit ${collections_rc}); the playbook did not run."
+    _logfile "[FAILED] ansible collections install (rc=${collections_rc})"
+    NIKOS_LAST_RUN_LOG="${run_log}"
+    return "${collections_rc}"
   fi
   if [[ "${use_saved_skip_tags}" == "true" ]]; then
     skip_tags="$(_get_default_skip_tags)"
@@ -772,10 +848,6 @@ _playbook() {
     _plain_view_notice
   fi
 
-  local run_log
-  run_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-playbook.log"
-  mkdir -p "${NIKOS_LOG_DIR}"
-  ln -sf "${run_log}" "${NIKOS_LOG_DIR}/playbook-latest.log"
   _logfile "Playbook start: ansible-playbook ${playbook_args[*]}"
   _logfile "--- ansible-playbook output start ---"
 
@@ -939,16 +1011,28 @@ cmd_update() {
       target_ref="$(_resolve_update_ref "${REPO_URL}" "${NIKOS_HOME}")"
     fi
 
+    local sync_text sync_log=""
     if [[ -n "${target_ref}" ]]; then
-      print_info "Updating NikOS repo and submodules to ${target_ref}..."
+      sync_text="Updating NikOS repo and submodules to ${target_ref}..."
     else
-      print_info "Already on the newest NikOS release; refreshing submodules..."
+      sync_text="Already on the newest NikOS release; refreshing submodules..."
     fi
 
-    if _sync_repo_to_ref "${target_ref}" "nikos-update-autostash"; then
-      :
+    # The same condition as the gauge: a run that draws it syncs behind a box,
+    # with the git output in its own log. GIT_TERMINAL_PROMPT=0: a credential
+    # prompt would wait behind the box with nobody able to answer it.
+    if _can_use_gauge; then
+      sync_log="${NIKOS_LOG_DIR}/nikos-$(date +%Y%m%d-%H%M%S)-sync.log"
+      _logfile "${sync_text} (log: ${sync_log})"
+      GIT_TERMINAL_PROMPT=0 _boxed_step "${sync_text}" "${sync_log}" \
+        _sync_repo_to_ref "${target_ref}" "nikos-update-autostash" || update_rc=$?
     else
-      update_rc=$?
+      print_info "${sync_text}"
+      _sync_repo_to_ref "${target_ref}" "nikos-update-autostash" || update_rc=$?
+    fi
+    if [[ "${update_rc}" -ne 0 ]]; then
+      [[ -z "${sync_log}" ]] || _boxed_step_tail "${sync_log}"
+      _logfile "[FAILED] repo sync (rc=${update_rc})"
       case "${update_rc}" in
         1)
           print_error "Updates were applied, but local changes did not reapply cleanly. Resolve the git conflicts in ${NIKOS_HOME}, then rerun 'nikos update'."
