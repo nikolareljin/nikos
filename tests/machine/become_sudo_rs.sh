@@ -58,8 +58,10 @@ cp -r "${root}" "${work}/nikos"
 printf '%s\n' "${password}" > "${work}/pw"
 printf 'not-the-password\n' > "${work}/wrong"
 chmod 600 "${work}/pw" "${work}/wrong"
-sudo -n chown -R "${user}:" "${work}"
+# mktemp -d gives 700; the test user must reach it. Before chown: after it the
+# caller no longer owns the directory.
 chmod 755 "${work}"
+sudo -n chown -R "${user}:" "${work}"
 
 # as_user <password file> [ansible-playbook args...]: the first play of site.yml,
 # which gathers facts under become, with no task selected.
