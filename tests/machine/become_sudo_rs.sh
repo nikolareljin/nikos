@@ -10,12 +10,16 @@
 # play as that user with --become-password-file, the way `nikos update` does.
 # It changes the machine (a package, a user), so it runs only with
 # NIKOS_MACHINE_SUDO_RS=1, which the ubuntu-26.04 CI leg sets. The caller's
-# sudo must not ask for a password.
+# sudo must not ask for a password. The CI leg uses the runner image's
+# ansible-core, not the 2.20.1 Ubuntu 26.04 ships.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 user="nikos-become-test"
 work=""
+alt_value=""
+alt_status=""
+switched=0
 
 skip() { echo "SKIP: $*" >&2; exit 3; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -28,13 +32,21 @@ sudo -n true >/dev/null 2>&1 || skip "sudo asks for a password here"
 cleanup() {
   sudo -n userdel -r "${user}" >/dev/null 2>&1 || true
   [[ -z "${work}" ]] || sudo -n rm -rf -- "${work}"
-  # Put the classic sudo back in front when it is installed, so later steps
-  # see the sudo they started with.
-  if [[ -x /usr/bin/sudo.ws ]]; then
-    sudo -n update-alternatives --set sudo /usr/bin/sudo.ws >/dev/null 2>&1 || true
+  # Undo only this script's own --set. A machine that was already on sudo-rs,
+  # or that moved to it when the package was installed, stays as it is.
+  if [[ "${switched}" == "1" ]]; then
+    if [[ "${alt_status}" == "auto" ]]; then
+      sudo -n update-alternatives --auto sudo >/dev/null 2>&1 || echo "WARN: could not restore the sudo alternative to auto" >&2
+    else
+      sudo -n update-alternatives --set sudo "${alt_value}" >/dev/null 2>&1 || echo "WARN: could not restore the sudo alternative to ${alt_value}" >&2
+    fi
   fi
 }
 trap cleanup EXIT
+
+alt_query="$(update-alternatives --query sudo 2>/dev/null || true)"
+alt_value="$(sed -n 's/^Value: //p' <<<"${alt_query}")"
+alt_status="$(sed -n 's/^Status: //p' <<<"${alt_query}")"
 
 if ! command -v sudo-rs >/dev/null 2>&1; then
   sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y sudo-rs >/dev/null || skip "sudo-rs could not be installed"
@@ -42,7 +54,9 @@ fi
 # The package registers itself as the sudo alternative at a higher priority
 # than classic sudo. If a machine has it installed but not selected, select it.
 if [[ "$(readlink -f "$(command -v sudo)")" != "$(readlink -f "$(command -v sudo-rs)")" ]]; then
-  sudo -n update-alternatives --set sudo "$(readlink -f "$(command -v sudo-rs)")" >/dev/null 2>&1 || true
+  if sudo -n update-alternatives --set sudo "$(readlink -f "$(command -v sudo-rs)")" >/dev/null 2>&1 && [[ -n "${alt_value}" ]]; then
+    switched=1
+  fi
 fi
 [[ "$(readlink -f "$(command -v sudo)")" == "$(readlink -f "$(command -v sudo-rs)")" ]] ||
   skip "sudo is not sudo-rs: $(readlink -f "$(command -v sudo)")"
@@ -75,7 +89,7 @@ as_user() {
 
 sudo -n -u "${user}" -H env -C "${work}/nikos" bash scripts/install-collections.sh requirements.yml >/dev/null
 
-echo "--- builtin sudo plugin (information only; passes from ansible-core 2.20.11)"
+echo "--- builtin sudo plugin (information only; passes on ansible-core 2.20.11 and 2.21.6)"
 out="$(as_user "${work}/pw" ANSIBLE_BECOME_METHOD=sudo 2>&1)" && echo "builtin: ok" || echo "builtin: $(grep -m1 -o 'Timed out waiting for become[^"]*' <<<"${out}" || echo "failed")"
 
 echo "--- nikos_sudo, right password"

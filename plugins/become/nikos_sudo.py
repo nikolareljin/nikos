@@ -10,8 +10,8 @@ DOCUMENTATION = """
           line that starts with it. sudo-rs, the default sudo on Ubuntu 26.04,
           prints '[sudo: <prompt>] Password:' instead, so the password is never
           sent and the task times out. This plugin accepts both forms.
-          ansible-core 2.20.11 and newer carry the same fix upstream; Ubuntu
-          26.04 ships 2.20.1."
+          ansible-core carries the same fix upstream in 2.20.11 and 2.21.6, not
+          in 2.21.5; Ubuntu 26.04 ships 2.20.1."
         - Same options as the builtin sudo plugin.
     author: NikOS
     options:
@@ -104,7 +104,19 @@ class BecomeModule(SudoBecomeModule):
             return True
         if not self.prompt:
             return False
+        sudo_rs = re.compile(self._sudo_rs_prompt() + rb'\s+\S')
+        return any(sudo_rs.match(line.strip()) for line in b_output.splitlines())
+
+    def strip_become_prompt(self, data: bytes) -> bytes:
+        # The builtin stops at the -p text, which leaves '] Password: ****' in
+        # the task's stderr, and the stars show the password's length.
+        if self.prompt and self.expect_prompt():
+            data, found = re.subn(rb'^.*?' + self._sudo_rs_prompt() + rb'[^\n]*\n?', b'', data, count=1, flags=re.DOTALL)
+            if found:
+                return data
+        return super().strip_become_prompt(data)
+
+    def _sudo_rs_prompt(self) -> bytes:
         # sudo-rs wraps the -p text and appends its own localized word:
         # '[sudo: [sudo via ansible, key=...] password:] Password:'
-        sudo_rs = re.compile(rb'\[sudo:\s+' + re.escape(self.prompt.encode()) + rb'\]\s+\S')
-        return any(sudo_rs.match(line.strip()) for line in b_output.splitlines())
+        return rb'\[sudo:\s+' + re.escape(self.prompt.encode()) + rb'\]'

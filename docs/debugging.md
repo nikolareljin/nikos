@@ -351,10 +351,13 @@ approximate.
 
 ## Ansible logs
 
-Run the playbook directly with verbose output:
+Run the playbook directly with verbose output, from the checkout so that its
+`ansible.cfg` applies. That file selects the roles path and the become plugin;
+from another directory the run fails or times out on sudo-rs. Set
+`ANSIBLE_CONFIG=~/.local/share/nikos/ansible.cfg` if you must run from elsewhere.
 
 ```bash
-ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local -v -e nikos_update_mode=false
+cd ~/.local/share/nikos && ansible-playbook site.yml -i inventory/local -v --ask-become-pass -e nikos_update_mode=false
 ```
 
 Use `-vvv` for full debug output including module arguments.
@@ -364,14 +367,14 @@ Use `-vvv` for full debug output including module arguments.
 Preview what would change without applying:
 
 ```bash
-ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --check -e nikos_update_mode=false
+cd ~/.local/share/nikos && ansible-playbook site.yml -i inventory/local --check --ask-become-pass -e nikos_update_mode=false
 ```
 
 ## Re-running a single role
 
 ```bash
-ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags theming -e nikos_update_mode=false
-ansible-playbook ~/nikos/site.yml -i ~/nikos/inventory/local --tags ai-stack -e nikos_update_mode=false
+cd ~/.local/share/nikos && ansible-playbook site.yml -i inventory/local --tags theming --ask-become-pass -e nikos_update_mode=false
+cd ~/.local/share/nikos && ansible-playbook site.yml -i inventory/local --tags ai-stack --ask-become-pass -e nikos_update_mode=false
 ```
 
 Note: role tags must be explicitly set in `site.yml`. The optional roles (`network`, `music`, `education`, `neovim`, `java`, `podman`) are tag-gated by default.
