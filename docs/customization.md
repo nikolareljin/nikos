@@ -398,8 +398,9 @@ Run `nikos update` to apply. The playbook sets the timezone and turns NTP on wit
 `timedatectl set-ntp true`. When systemd has no time sync service to drive, the
 playbook first installs the one the release ships: `systemd-timesyncd` on Ubuntu
 22.04 and 24.04, `chrony` on 26.04. It installs nothing next to another time daemon
-such as ntpsec. A host that cannot run one (a container running systemd) gets a note in the playbook
-output and NTP stays off; `nikos doctor` reports the same as a warning.
+such as ntpsec. A container running systemd cannot run one. With `CanNTP=no` it gets a note in the
+playbook output and NTP stays off. With `CanNTP=yes` (a daemon package is installed)
+`set-ntp` exits 0 and NTP stays off with no note. `nikos doctor` warns in both cases.
 
 ## Adding a new role
 

@@ -45,8 +45,10 @@ All notable changes to NikOS are documented here.
   `systemd-timedated` so it reads the new unit list (it reads
   `ntp-units.d` once, at start), and then turns NTP on. Nothing is installed
   next to another time daemon such as ntpsec, which every one of them
-  conflicts with. A container, where neither unit can run, gets no package
-  and one note in the output; any other `set-ntp` error still fails the run.
+  conflicts with. A container, where neither unit can run, gets no package;
+  with `CanNTP=no` it gets one note in the output, and with `CanNTP=yes` there
+  is no note and `nikos doctor` warns. Any other `set-ntp` error still fails
+  the run.
   An image build skips the step. `nikos doctor` checks that NTP is on and
   warns, without failing, in a container running systemd and on a host where
   systemd has no NTP unit to drive, naming any installed time-daemon package.

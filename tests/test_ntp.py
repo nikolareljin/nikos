@@ -164,7 +164,15 @@ def test_a_container_gets_no_package_and_one_note(tmp_path):
     assert "INSTALL=" not in out, out
     assert out.count("NTP stays off") == 1, out
     assert "NTP not supported" in out
+    assert "(a container)" in out, out
     assert "set-ntp true" in calls.read_text()
+
+
+def test_a_container_with_can_ntp_yes_gets_no_note(tmp_path):
+    """A daemon package gives CanNTP=yes, set-ntp exits 0, NTP stays no: `nikos doctor` warns."""
+    rc, out, _ = _run_role(tmp_path, can_ntp="yes", container=True)
+    assert rc == 0, out
+    assert "NTP stays off" not in out, out
 
 
 def test_ntp_not_supported_after_the_install_is_a_note_not_a_failure(tmp_path):
@@ -172,6 +180,19 @@ def test_ntp_not_supported_after_the_install_is_a_note_not_a_failure(tmp_path):
     assert rc == 0, out
     assert "INSTALL=systemd-timesyncd" in out
     assert out.count("NTP stays off") == 1, out
+    assert "systemd-timesyncd is installed, but systemd still loads no unit" in out, out
+    assert "(a container)" not in out, out
+
+
+def test_a_bare_host_with_no_install_does_not_claim_one(tmp_path):
+    """The CanNTP probe failed, so nothing was installed before set-ntp refused."""
+    rc, out, _ = _run_role(tmp_path, can_ntp="", can_ntp_rc=1, set_error="NTP not supported")
+    assert rc == 0, out
+    assert "INSTALL=" not in out, out
+    assert out.count("NTP stays off") == 1, out
+    assert "systemd loads no time sync unit" in out, out
+    assert "is installed" not in out, out
+    assert "(a container)" not in out, out
 
 
 def test_any_other_set_ntp_error_still_fails(tmp_path):
