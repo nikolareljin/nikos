@@ -1,5 +1,6 @@
 """Tests for nikos-github-wizard.py."""
 import importlib.util
+import secrets
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -104,7 +105,7 @@ def _tools_present(monkeypatch):
     monkeypatch.setattr(wizard, "have", lambda cmd: True)
 
 ROOT = Path(__file__).parent.parent
-TOKEN = "glpat-SECRET-TOKEN-123"
+TOKEN = "test-" + secrets.token_hex(8)
 
 
 @pytest.fixture
@@ -485,7 +486,7 @@ def test_dotfiles_shorthand_uses_provider_host(home, monkeypatch):
     monkeypatch.setattr(wizard.subprocess, "run", rec)
     feed(monkeypatch, ["nik/dots"])
     wizard.step_dotfiles("Custom Git server", "git.example.com", 2222, "gitea")
-    assert rec.calls[0][:3] == ["git", "clone", "ssh://gitea@git.example.com:2222/nik/dots.git"]
+    assert rec.calls[0][:4] == ["git", "clone", "--", "ssh://gitea@git.example.com:2222/nik/dots.git"]
 
 
 def test_flag_present_tells_user_how_to_rerun(home, monkeypatch, capsys):
@@ -595,3 +596,71 @@ def test_wizard_link_survives_check_mode():
     # target has not run; without force the link task fails on a fresh host.
     link = [t for t in _tasks() if t.get("ansible.builtin.file", {}).get("state") == "link"]
     assert link and all(t["ansible.builtin.file"].get("force") is True for t in link)
+
+
+import pytest
+
+
+@pytest.mark.parametrize(
+    "answer,cloned",
+    [
+        ("https://example.com/u/dotfiles.git", True),
+        ("HTTPS://example.com/u/dotfiles.git", True),
+        ("ssh://git@example.com:2222/u/dotfiles.git", True),
+        ("git@example.com:u/dotfiles.git", True),
+        ("git@git.example.org:~user/dotfiles", True),
+        ("git@example.com:user/dot+files.git", True),
+        ("git@[2001:db8::1]:user/repo.git", True),
+        ("ext::sh -c touch% /tmp/pwned@x", False),
+        ("file:///etc", False),
+        ("http://example.com/u/dotfiles.git", False),
+        ("git://example.com/u/dotfiles.git", False),
+        ("https://", False),
+        ("a@b", False),
+    ],
+)
+def test_dotfiles_clone_takes_only_https_ssh_and_scp_urls(tmp_path, monkeypatch, answer, cloned):
+    monkeypatch.setattr(wizard.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(wizard, "ask", lambda _msg: answer)
+    calls = []
+    monkeypatch.setattr(
+        wizard.subprocess, "run", lambda cmd, check=False: calls.append(cmd) or MagicMock(returncode=0)
+    )
+    wizard.step_dotfiles("GitLab", "example.com", 22, "git")
+    if cloned:
+        assert calls == [["git", "clone", "--", answer, str(tmp_path / "dotfiles")]]
+    else:
+        assert calls == []
+
+
+def test_run_refuses_a_program_outside_the_list():
+    with pytest.raises(ValueError):
+        wizard.run(["sh", "-c", "true"])
+
+
+def test_a_refused_url_scheme_is_named_and_shown_escaped(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(wizard.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(wizard, "ask", lambda _msg: "git://example.com/u/d.git")
+    wizard.step_dotfiles("GitLab", "example.com", 22, "git")
+    assert "Only https://, ssh:// and user@host:path URLs are cloned." in capsys.readouterr().out
+    # Anything else is echoed through repr(), which escapes control characters.
+    monkeypatch.setattr(wizard, "ask", lambda _msg: "nope\x1b[2J\r")
+    wizard.step_dotfiles("GitLab", "example.com", 22, "git")
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and "\r" not in out and "Not a repo" in out
+
+
+def test_a_short_name_on_another_host_is_cloned_after_the_option_end(tmp_path, monkeypatch):
+    monkeypatch.setattr(wizard.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(wizard, "ask", lambda _msg: "u/dotfiles")
+    calls = []
+    monkeypatch.setattr(
+        wizard.subprocess, "run", lambda cmd, check=False: calls.append(cmd) or MagicMock(returncode=0)
+    )
+    wizard.step_dotfiles("GitLab", "example.com", 22, "git")
+    wizard.step_dotfiles("GitLab", "example.com", 2222, "git")
+    dest = str(tmp_path / "dotfiles")
+    assert calls == [
+        ["git", "clone", "--", "git@example.com:u/dotfiles.git", dest],
+        ["git", "clone", "--", "ssh://git@example.com:2222/u/dotfiles.git", dest],
+    ]

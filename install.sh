@@ -458,10 +458,14 @@ _collect_checked_become_password() {
   local attempt
   _become_pass=""
   # -k ignores a cached timestamp, so this passes only for NOPASSWD sudo.
-  sudo -n -k true 2>/dev/null && return 0
+  # -k runs on its own, not combined with -n, for sudo-rs on Ubuntu 26.04
+  # (see _collect_become_password in scripts/nikos).
+  sudo -k </dev/null >/dev/null 2>&1 || true
+  sudo -n true </dev/null 2>/dev/null && return 0
   for attempt in 1 2 3; do
     _become_pass=$(_collect_become_password_dialog) || { _become_pass=""; return 130; }
-    if printf '%s\n' "${_become_pass}" | sudo -S -k -v -p '' >/dev/null 2>&1; then
+    sudo -k </dev/null >/dev/null 2>&1 || true
+    if printf '%s\n' "${_become_pass}" | sudo -S -v >/dev/null 2>&1; then
       return 0
     fi
     _become_pass=""
@@ -1046,8 +1050,12 @@ _pinned_distrodeck_version() {
 
 _distrodeck_for_catalog() {
   local ver="$1" dir
-  [[ -n "${ver}" ]] || return 1
-  dir="${XDG_CACHE_HOME:-${HOME}/.cache}/nikos/distrodeck-${ver}"
+  # The version names a cache directory that is removed with rm -rf below.
+  # A tag or branch name is accepted (release/1.2.0 too), with no ".." and no
+  # empty path part. "/" becomes "_" in the directory name, so the directory
+  # always sits directly under the nikos cache.
+  [[ "${ver}" =~ ^[A-Za-z0-9][A-Za-z0-9._+/-]*$ && "${ver}" != *..* && "${ver}" != *//* && "${ver}" != */ ]] || return 1
+  dir="${XDG_CACHE_HOME:-${HOME}/.cache}/nikos/distrodeck-${ver//\//_}"
   # install-tools sources scripts/script-helpers, a submodule: without it the
   # catalog request fails and the selection screen is skipped on every run.
   if [[ ! -x "${dir}/distrodeck" || ! -f "${dir}/scripts/script-helpers/helpers.sh" ]]; then

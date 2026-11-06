@@ -8,9 +8,12 @@ change the answer.
 
 import json
 import os
+import sys
 import pty
+import select
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -79,16 +82,34 @@ def on_tty(env, answers, *args):
     if pid == 0:
         os.execvpe("bash", ["bash", str(ROOT / "scripts/nikos"), *args], env)
     out = b""
+    deadline = time.time() + 60
+
+    def read_some():
+        """One chunk, or b"" at end of output. A question nobody answers must
+        fail the test, not hang it."""
+        while True:
+            if time.time() > deadline:
+                os.kill(pid, 9)
+                os.waitpid(pid, 0)
+                raise AssertionError("nikos is still waiting: " + out.decode(errors="replace")[-400:])
+            if select.select([fd], [], [], 1)[0]:
+                try:
+                    return os.read(fd, 4096)
+                except OSError:
+                    return b""
+
     for a in answers:
         while b"[y/N]" not in out.split(b"\n")[-1]:
-            out += os.read(fd, 4096)
-        os.write(fd, a.encode() + b"\n")
-        out += os.read(fd, 4096)
-    try:
-        while chunk := os.read(fd, 4096):
+            chunk = read_some()
+            if chunk == b"":
+                break
             out += chunk
-    except OSError:
-        pass
+        os.write(fd, a.encode() + b"\n")
+    while True:
+        chunk = read_some()
+        if chunk == b"":
+            break
+        out += chunk
     os.waitpid(pid, 0)
     return out.decode(errors="replace")
 
@@ -206,3 +227,86 @@ def test_every_module_names_roles_the_models_file_has(module):
     names = {line.split("=")[0] for line in (ROOT / "ai-models.env").read_text().splitlines()
              if line and not line.startswith("#")}
     assert set(VARS["ai_stack_model_modules"][module]) <= names
+
+
+def test_a_model_a_repository_remembers_is_not_offered(home, tmp_path, ollama):
+    """A repository's .env choice keeps its model off the removal offer."""
+    repo = tmp_path / "Projects" / "some-app"
+    repo.mkdir(parents=True)
+    (repo / ".env").write_text('OLLAMA_CODE_MODEL_CHOICE="qwen2.5:7b"\nOTHER=1\n')
+    out = on_tty(home, ["y"], "models", "prune")
+    assert "Remove gpt-oss:20b?" in out
+    assert "qwen2.5:7b" not in out.split("outside")[-1]
+    assert ollama[1] == ["gpt-oss:20b"]
+
+
+@pytest.mark.parametrize(
+    "env_text",
+    [
+        "AI_MODEL_CODE_CHOICE=qwen2.5:7b\n",            # what `select` stores with no NAME
+        "CODE_LLM_CHOICE=qwen2.5:7b\n",                 # `select` with a NAME of the repository's own
+        "ollama_model=qwen2.5:7b\n",
+        "\ufeffOLLAMA_MODEL=qwen2.5:7b\n",              # a byte order mark on the first line
+        "export OLLAMA_MODEL='qwen2.5:7b'  # note\r\n",
+    ],
+)
+def test_every_spelling_of_a_remembered_model_is_kept(home, tmp_path, env_text):
+    repo = tmp_path / "Projects" / "some-app"
+    repo.mkdir(parents=True)
+    (repo / ".env").write_text(env_text, encoding="utf-8", newline="")
+    r = nikos(home, "models")
+    assert r.returncode == 0, r.stderr
+    outside = r.stdout.split("outside the set")[1].split()
+    assert "gpt-oss:20b" in outside and "qwen2.5:7b" not in outside
+
+
+def test_a_remembered_model_with_an_underscore_in_its_tag_is_kept(home, tmp_path, monkeypatch):
+    monkeypatch.setattr(sys.modules[__name__], "INSTALLED", [*INSTALLED, "llama3.1:8b-instruct-q4_K_M"])
+    r = nikos(home, "models")
+    assert "llama3.1:8b-instruct-q4_K_M" in r.stdout.split("outside the set")[1].split()
+    repo = tmp_path / "Projects" / "some-app"
+    repo.mkdir(parents=True)
+    (repo / ".env").write_text("OLLAMA_MODEL=llama3.1:8b-instruct-q4_K_M\n")
+    r = nikos(home, "models")
+    assert r.returncode == 0, r.stderr
+    assert "llama3.1:8b-instruct-q4_K_M" not in r.stdout.split("outside the set")[1].split()
+
+
+def with_tiers_line(home, line):
+    """A copy of the script-helpers tree whose tiers file has one more line."""
+    nikos_home = Path(home["NIKOS_HOME"])
+    (nikos_home / "scripts").unlink()
+    (nikos_home / "scripts").mkdir()
+    for child in (ROOT / "scripts").iterdir():
+        if child.name != "script-helpers":
+            (nikos_home / "scripts" / child.name).symlink_to(child)
+    helpers = nikos_home / "scripts" / "script-helpers"
+    helpers.mkdir()
+    for child in (ROOT / "scripts/script-helpers").iterdir():
+        if child.name != "config":
+            (helpers / child.name).symlink_to(child)
+    (helpers / "config").mkdir()
+    tiers = (ROOT / "scripts/script-helpers/config/ollama_model_tiers.txt").read_text()
+    (helpers / "config/ollama_model_tiers.txt").write_text(tiers + line + "\n")
+
+
+def outside_the_set(home):
+    r = nikos(home, "models")
+    assert r.returncode == 0, r.stderr
+    return r.stdout.split("outside the set")[1].split()
+
+
+def test_a_tier_pick_for_any_type_is_not_offered(home, ollama):
+    """qwen2.5:7b stays installed when it is a tier pick, not only a role pick."""
+    with_tiers_line(home, "type extra-test qwen2.5:7b qwen2.5:7b qwen2.5:7b qwen2.5:7b")
+    outside = outside_the_set(home)
+    assert "gpt-oss:20b" in outside and "qwen2.5:7b" not in outside
+
+
+def test_a_lower_tier_pick_is_kept_and_a_higher_one_is_not(home, ollama):
+    """`select` falls back to a lower tier's model under a size floor, so the
+    lower columns are kept. This machine is `standard` (the second column)."""
+    with_tiers_line(home, "type extra-test qwen2.5:7b other:1b gpt-oss:20b gpt-oss:20b")
+    outside = outside_the_set(home)
+    assert "qwen2.5:7b" not in outside   # the small column
+    assert "gpt-oss:20b" in outside      # only the large and xlarge columns

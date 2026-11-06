@@ -22,6 +22,9 @@ PROGRESS_LIB="${NIKOS_HOME}/scripts/nikos-progress.sh"
 # Same switch install.sh honours, so one setting covers both.
 USE_DIALOG="${NIKOS_USE_DIALOG:-1}"
 BECOME_PASSWORD_FILE=""
+NIKOS_BECOME_MODE=""
+NIKOS_BECOME_ASK_REASON=""
+SUDO_KEEPALIVE_PID=""
 # Used by sourced repo sync helpers.
 # shellcheck disable=SC2034
 MAIN_VARS_REL="vars/main.yml"
@@ -226,11 +229,43 @@ _cleanup_become_password_file() {
   fi
   BECOME_PASSWORD_FILE=""
 }
+# Refreshes the sudo timestamp the password check just created, so a direct
+# sudo call later in the same command (dialog install, a helper) does not ask
+# again. Ansible itself reads the password file. Ends on its own when this
+# process is gone or sudo stops accepting -n; _cleanup_run stops it on every
+# exit path.
+_start_sudo_keepalive() {
+  local parent=$$
+  [[ -z "${SUDO_KEEPALIVE_PID}" ]] || return 0
+  (
+    trap - EXIT INT TERM
+    while sleep 60; do
+      kill -0 "${parent}" 2>/dev/null || exit 0
+      sudo -n -v </dev/null >/dev/null 2>&1 || exit 0
+    done
+  ) </dev/null >/dev/null 2>&1 &
+  SUDO_KEEPALIVE_PID=$!
+}
+
+_stop_sudo_keepalive() {
+  if [[ -n "${SUDO_KEEPALIVE_PID}" ]]; then
+    kill "${SUDO_KEEPALIVE_PID}" 2>/dev/null || true
+    wait "${SUDO_KEEPALIVE_PID}" 2>/dev/null || true
+  fi
+  SUDO_KEEPALIVE_PID=""
+}
+
 # One cleanup for both things an interrupted run leaves behind: the password
 # file, and the cursor, which dialog hides while the gauge is drawing. Without
 # the second, Ctrl-C during `nikos update` returns an invisible prompt.
 # install.sh's _cleanup_install pairs them for the same reason.
 _cleanup_run() {
+  _stop_sudo_keepalive
+  # The password check left a sudo timestamp on this terminal and the
+  # keepalive kept it fresh. Drop it, so sudo asks again after this command.
+  if [[ "${NIKOS_BECOME_MODE}" == "file" ]]; then
+    sudo -k </dev/null >/dev/null 2>&1 || true
+  fi
   _cleanup_become_password_file
   _restore_terminal_cursor
 }
@@ -277,7 +312,7 @@ _offer_dialog_install() {
 # be collected, which drops the run back to --ask-become-pass; the reason is left
 # in NIKOS_PROGRESS_SKIP_REASON for the plain-view notice.
 #
-# Each answer is checked with `sudo -S -k -v`, fed on stdin (never argv), so a
+# Each answer is checked with `sudo -S -v`, fed on stdin (never argv), so a
 # typo is caught here with three tries instead of failing the playbook later.
 _collect_become_password() {
   local pw="" attempt
@@ -296,7 +331,11 @@ _collect_become_password() {
       NIKOS_PROGRESS_SKIP_REASON="empty sudo password"
       return 1
     fi
-    if printf '%s\n' "${pw}" | sudo -S -k -v -p '' >/dev/null 2>&1; then
+    # `sudo -k` runs on its own, then plain `-S -v`, with no -p: one flag per
+    # call keeps the check off option combinations where sudo 1.9 and sudo-rs
+    # (the default sudo on Ubuntu 26.04) may differ. Output is discarded anyway.
+    sudo -k </dev/null >/dev/null 2>&1 || true
+    if printf '%s\n' "${pw}" | sudo -S -v >/dev/null 2>&1; then
       break
     fi
     pw=""
@@ -344,6 +383,44 @@ _collect_become_password() {
     return 1
   fi
   unset pw
+}
+
+# Decides once per process how ansible gets the sudo password. Sets
+# NIKOS_BECOME_MODE to nopass, file (BECOME_PASSWORD_FILE holds a checked
+# password, so `nikos update` asks once although it runs the playbook twice)
+# or ask (no terminal, or an empty answer: ansible prompts itself on each
+# run). Returns 1 only when sudo rejected the password three times.
+_ensure_become_password() {
+  if [[ "${NIKOS_BECOME_MODE}" == "ask" ]]; then
+    NIKOS_PROGRESS_SKIP_REASON="${NIKOS_BECOME_ASK_REASON}"
+    return 0
+  fi
+  if [[ "${NIKOS_BECOME_MODE}" == "file" && -s "${BECOME_PASSWORD_FILE:-}" ]] ||
+    [[ "${NIKOS_BECOME_MODE}" == "nopass" ]]; then
+    return 0
+  fi
+  # Cached credentials are dropped first: the cache is per terminal, so the
+  # sudo ansible runs would not see it and the play would fail midway. -k runs
+  # on its own, not combined with -n, for sudo-rs (see _collect_become_password).
+  sudo -k </dev/null >/dev/null 2>&1 || true
+  if sudo -n true </dev/null >/dev/null 2>&1; then
+    NIKOS_BECOME_MODE="nopass"
+    return 0
+  fi
+  local pw_rc=0
+  _collect_become_password || pw_rc=$?
+  if (( pw_rc == 0 )); then
+    NIKOS_BECOME_MODE="file"
+    _start_sudo_keepalive
+  elif (( pw_rc == 2 )); then
+    print_error "Sudo rejected the password three times; the playbook did not run."
+    _logfile "[FAILED] sudo password rejected 3 times"
+    return 1
+  else
+    NIKOS_PROGRESS_SKIP_REASON="${NIKOS_PROGRESS_SKIP_REASON:-could not store the sudo password}"
+    NIKOS_BECOME_ASK_REASON="${NIKOS_PROGRESS_SKIP_REASON}"
+    NIKOS_BECOME_MODE="ask"
+  fi
 }
 
 usage() {
@@ -533,31 +610,19 @@ _playbook() {
   # on a non-blocking stdin, which dialog can leave behind.
   local ask_pass=false
   NIKOS_PROGRESS_SKIP_REASON=""
+  # Before the dialog offer: its `sudo apt-get install` then runs on the
+  # checked password instead of asking for it a second time.
+  _ensure_become_password || return 1
   _offer_dialog_install
-  if _can_use_gauge; then
-    # -k ignores a cached sudo timestamp: that cache is per terminal, so the
-    # sudo ansible runs would not see it and the play would fail midway.
-    if sudo -n -k true 2>/dev/null; then
-      # Passwordless sudo: nothing to collect, and no prompt to fall back on.
-      use_gauge=true
-    else
-      local pw_rc=0
-      _collect_become_password || pw_rc=$?
-      if (( pw_rc == 0 )); then
-        use_gauge=true
-        playbook_args+=(--become-password-file "${BECOME_PASSWORD_FILE}")
-      elif (( pw_rc == 2 )); then
-        print_error "Sudo rejected the password three times; the playbook did not run."
-        _logfile "[FAILED] sudo password rejected 3 times"
-        return 1
-      else
-        NIKOS_PROGRESS_SKIP_REASON="${NIKOS_PROGRESS_SKIP_REASON:-could not store the sudo password}"
-      fi
-    fi
+  case "${NIKOS_BECOME_MODE}" in
+    file) playbook_args+=(--become-password-file "${BECOME_PASSWORD_FILE}") ;;
+    ask) playbook_args+=(--ask-become-pass) ;;
+  esac
+  if [[ "${NIKOS_BECOME_MODE}" != "ask" ]] && _can_use_gauge; then
+    use_gauge=true
   fi
   if [[ "${use_gauge}" != "true" ]]; then
-    ask_pass=true
-    playbook_args+=(--ask-become-pass)
+    [[ "${NIKOS_BECOME_MODE}" == "ask" ]] && ask_pass=true
     _plain_view_notice
   fi
 
@@ -617,7 +682,8 @@ _playbook() {
     tee_rc=${pipe_status[1]}
   fi
   set -e
-  _cleanup_become_password_file
+  # The password file stays for the next _playbook call of this command
+  # (`nikos update` runs the playbook twice); the EXIT trap removes it.
 
   if [[ "${ansible_rc}" -ne 0 ]]; then
     _rc="${ansible_rc}"
@@ -882,9 +948,52 @@ _model_norm() {
   printf '%s\n' "${m}"
 }
 
-# Models to keep: this machine's pick for every role, and the explicit extras.
+# This machine's tier pick for every type of work in the tiers file, and the
+# picks of every lower tier: ollama_models.sh select falls back to a lower
+# tier's model when the host is under a model's size floor. An unknown tier
+# keeps every column: keeping too much is safe, removing a pick is not.
+_models_tier_picks() {
+  local tiers="${OLLAMA_MODEL_TIERS_FILE:-${NIKOS_HOME}/scripts/script-helpers/config/ollama_model_tiers.txt}"
+  local tier col=0
+  [[ -r "${tiers}" ]] || return 0
+  tier="$(_models_tool class 2>/dev/null | sed -n 's/^tier=//p' | head -n 1)"
+  case "${tier}" in
+    small) col=3 ;;
+    standard | medium) col=4 ;;
+    large) col=5 ;;
+    xlarge) col=6 ;;
+  esac
+  awk -v c="${col}" '$1 == "type" {
+    last = (c > 0 && c < NF) ? c : NF
+    for (i = 3; i <= last; i++) print $i
+  }' "${tiers}"
+}
+
+# Models a local repository remembers in its .env: every variable whose name
+# ends in MODEL (OLLAMA_MODEL, EMBED_MODEL) or in _CHOICE, the answer
+# ollama_models.sh select stores (AI_MODEL_CODE_CHOICE by default), in either
+# case. Searched one level under each directory in NIKOS_PROJECTS_DIRS
+# (colon-separated, default ~/Projects).
+_models_repo_choices() {
+  local dir env_file
+  local IFS=:
+  for dir in ${NIKOS_PROJECTS_DIRS:-${HOME}/Projects}; do
+    [[ -d "${dir}" ]] || continue
+    for env_file in "${dir}"/.env "${dir}"/*/.env; do
+      [[ -f "${env_file}" && -r "${env_file}" ]] || continue
+      LC_ALL=C sed -n -E -e '1s/^\xEF\xBB\xBF//' \
+        -e 's/^[[:space:]]*(export[[:space:]]+)?[A-Za-z0-9_]*([Mm][Oo][Dd][Ee][Ll]|_[Cc][Hh][Oo][Ii][Cc][Ee])[[:space:]]*=[[:space:]]*["'"'"']?([A-Za-z0-9._:/-]+)["'"'"']?[[:space:]]*(#.*)?$/\3/p' \
+        -- "${env_file}"
+    done
+  done
+}
+
+# Models to keep: this machine's pick for every role, its tier pick for every
+# type, every model a local repository's .env remembers, and the explicit extras.
 _models_keep() {
   _models_tool pick "${NIKOS_HOME}/ai-models.env" || return 1
+  _models_tier_picks
+  _models_repo_choices
   [[ -r "${NIKOS_MODELS_EXTRA_FILE}" ]] && grep -v '^[[:space:]]*$' "${NIKOS_MODELS_EXTRA_FILE}"
   return 0
 }

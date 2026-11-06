@@ -73,8 +73,8 @@ def repo(env, name, *, date=OLD, package_json=True, node_modules=True, track_nm=
     if node_modules:
         (path / "node_modules" / "left-pad").mkdir(parents=True)
         (path / "node_modules" / "left-pad" / "index.js").write_text("x\n")
-    subprocess.run(["git", "-C", str(path), "add", "-f", "README", ".gitignore"] + (["package.json"] if package_json else [])
-                   + (["node_modules"] if track_nm else []), check=True, env=e)
+    tracked = ["README", ".gitignore"] + (["package.json"] if package_json else []) + (["node_modules"] if track_nm else [])
+    subprocess.run(["git", "-C", str(path), "add", "-f", *tracked], check=True, env=e)
     subprocess.run(["git", "-C", str(path), "commit", "-q", "-m", "init"], check=True, env=e)
     if dirty:
         (path / "README").write_text("changed\n")
@@ -219,7 +219,7 @@ def test_npm_and_pnpm_wait_for_a_running_install(env, tmp_path):
     fake.parent.mkdir()
     fake.write_text("#!/bin/sh\nsleep 30\n")
     fake.chmod(0o755)
-    proc = subprocess.Popen([str(fake)])
+    proc = subprocess.Popen(["/bin/sh", "-c", 'exec "$0"', str(fake)])
     try:
         r, calls = run(env, "--apply", "--yes", "--only", "packages")
     finally:
