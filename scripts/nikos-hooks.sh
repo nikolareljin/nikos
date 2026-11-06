@@ -51,28 +51,36 @@ helpers_home() {
 run_lantern() { SCRIPT_HELPERS_HOME="$(helpers_home)" lantern "$@"; }
 
 # trusted_setup_script <path>: script-helpers.home comes from git config, so
-# setup-hooks.sh is run only when it can be trusted. Prints the resolved path
-# (symlinks followed), which is the one to run: what is checked is what runs.
-# Fails unless the path is absolute, this user owns the file, other users can
-# write neither it nor the helpers.sh and lib/ it sources, and no directory
-# above it is world-writable without the sticky bit (/tmp has it).
+# setup-hooks.sh is run only when its whole tree can be trusted. Prints the
+# resolved path (symlinks followed), which is the one to run: what is checked
+# is what runs. The rule, for every file and directory of the tree (.git
+# aside) and for what a symlink in it points to: owned by this user or root,
+# and not writable by other users. Every directory above the tree: the same,
+# except that world-writable is accepted with the sticky bit (/tmp). A path
+# that is not absolute, or a tree find cannot read in full, fails.
 # Group-writable is the Ubuntu default under umask 002.
 trusted_setup_script() {
-  local real root dir
+  local real root dir uid bad
   [[ "$1" == /* ]] || return 1
   real="$(readlink -f -- "$1" 2>/dev/null)" || return 1
-  [[ -f "${real}" && -O "${real}" ]] || return 1
+  [[ -f "${real}" ]] || return 1
   root="$(dirname -- "$(dirname -- "${real}")")"
-  [[ -z "$(find "${real}" "${root}/helpers.sh" "${root}/lib" ! -type l -perm -002 2>/dev/null)" ]] || return 1
-  dir="$(dirname -- "${real}")"
+  [[ "${root}" != "/" ]] || return 1
+  uid="$(id -u)"
+  bad="$(find -L "${root}" -name .git -prune -o \
+    \( -perm -002 -o ! \( -user "${uid}" -o -user 0 \) \) -print -quit 2>/dev/null)" || return 1
+  [[ -z "${bad}" ]] || return 1
+  dir="$(dirname -- "${root}")"
   while :; do
-    [[ -z "$(find "${dir}" -maxdepth 0 -perm -002 ! -perm -1000 2>/dev/null)" ]] || return 1
+    bad="$(find "${dir}" -maxdepth 0 \
+      \( \( -perm -002 ! -perm -1000 \) -o ! \( -user "${uid}" -o -user 0 \) \) -print 2>/dev/null)" || return 1
+    [[ -z "${bad}" ]] || return 1
     [[ "${dir}" != "/" ]] || break
     dir="$(dirname -- "${dir}")"
   done
   printf '%s\n' "${real}"
 }
-UNTRUSTED_REASON="not an absolute path to a file you own, or other users can write it, the files it loads or a directory above it"
+UNTRUSTED_REASON="not an absolute path into a script-helpers tree that only you or root own and other users cannot write"
 
 # claude_state: the user's Claude Code hook as script-helpers sees it: ok,
 # absent, broken (the file it runs is missing), stale (it runs a file outside

@@ -315,12 +315,12 @@ def test_global_refuses_a_setup_script_in_a_directory_others_can_write(env):
     assert calls(env) == []
 
 
-def test_global_follows_a_symlink_to_a_setup_script_the_user_owns(env):
-    script = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
-    real = env["tmp"] / "real-setup-hooks.sh"
-    script.rename(real)
-    script.symlink_to(real)
+def test_global_follows_a_symlinked_home_and_runs_the_resolved_script(env):
+    real = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
     real.write_text(f'echo "ran $0 $*" >> "{env["log"]}"\n')
+    link = env["tmp"] / "sh-link"
+    link.symlink_to(env["tmp"] / "sh")
+    subprocess.run(["git", "config", "--global", "script-helpers.home", str(link)], env=env["env"], check=True)
     r = run(env, "--global")
     assert r.returncode == 0, r.stderr
     # The resolved file is the one that runs: what was checked is what ran.
@@ -335,24 +335,42 @@ def test_global_refuses_a_relative_script_helpers_home(env):
     assert calls(env) == []
 
 
-@pytest.mark.parametrize("loaded", ["helpers.sh", "lib/logging.sh"])
-def test_global_refuses_when_others_can_write_a_file_the_setup_script_loads(env, loaded):
+@pytest.mark.parametrize("loaded", ["helpers.sh", "lib/logging.sh", "config/names.txt", "scripts/other.sh"])
+def test_global_refuses_when_others_can_write_any_file_of_the_tree(env, loaded):
     target = env["tmp"] / "sh" / loaded
     target.parent.mkdir(exist_ok=True)
-    target.write_text("# sourced by setup-hooks.sh\n")
+    target.write_text("# part of the tree setup-hooks.sh runs from\n")
     target.chmod(0o666)
     r = run(env, "--global")
     assert r.returncode != 0 and "refusing" in r.stderr
     assert calls(env) == []
 
 
-def test_global_refuses_when_a_directory_above_the_setup_script_is_open_to_others(env):
-    home = env["tmp"] / "sh"
-    home.chmod(0o777)
+def test_global_refuses_a_symlink_in_the_tree_to_a_file_others_can_write(env):
+    outside = env["tmp"] / "outside.sh"
+    outside.write_text("# reached through a symlink\n")
+    outside.chmod(0o666)
+    (env["tmp"] / "sh" / "lib").mkdir()
+    (env["tmp"] / "sh" / "lib" / "logging.sh").symlink_to(outside)
     r = run(env, "--global")
-    home.chmod(0o1777)                      # world-writable with the sticky bit, as /tmp
-    sticky = run(env, "--global")
-    home.chmod(0o755)
     assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
+
+
+def test_a_directory_above_the_tree_may_be_open_to_others_only_with_the_sticky_bit(env):
+    above = env["tmp"] / "above"
+    above.mkdir()
+    (env["tmp"] / "sh").rename(above / "sh")
+    subprocess.run(["git", "config", "--global", "script-helpers.home", str(above / "sh")], env=env["env"], check=True)
+    above.chmod(0o777)
+    plain = run(env, "--global")
+    above.chmod(0o1777)                     # as /tmp
+    sticky = run(env, "--global")
+    (above / "sh").chmod(0o1777)            # the tree itself gets no such exemption
+    tree = run(env, "--global")
+    (above / "sh").chmod(0o755)
+    above.chmod(0o755)
+    assert plain.returncode != 0 and "refusing" in plain.stderr
     assert sticky.returncode == 0, sticky.stderr
+    assert tree.returncode != 0 and "refusing" in tree.stderr
     assert calls(env) == ["setup-hooks --global"]
