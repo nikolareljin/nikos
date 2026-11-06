@@ -17,6 +17,38 @@ All notable changes to NikOS are documented here.
 - Mousepad, Xfce Terminal, and VS Code now use the same Nord frost `#88C0D0`
   focused-tab accent and `#4C566A` unfocused-tab color. The dark Nordic editor
   surfaces remain unchanged.
+- `nikos update` asks for the sudo password once and both playbook runs (the
+  second refreshes optional bundles) use it, in the gauge and in the plain
+  view. With no terminal, or an empty answer, ansible prompts on each run as
+  before. The password is asked before the `dialog` install offer, so that
+  offer no longer leads to a second prompt.
+- The password check and the passwordless probe in `nikos` and `install.sh`
+  run `sudo -k` as its own call and no longer pass `-p`, so they avoid flag
+  combinations where sudo-rs, the default sudo on Ubuntu 26.04, may differ
+  from sudo 1.9. A keepalive refreshes the sudo timestamp during the run. On
+  every exit it is stopped, the password file is removed and the timestamp is
+  dropped (`sudo -k`).
+- The removal offer in `nikos update` and `nikos models prune` no longer offers
+  a model that is this machine's tier pick, or a lower tier's pick, for any
+  type, or that a repository's `.env` names in a variable ending in `MODEL` or
+  `_CHOICE` (either case), one level under `NIKOS_PROJECTS_DIRS` (default
+  `~/Projects`).
+- The installer accepts only a tag or branch name (letters, digits and
+  `. _ + - /`, no `..`) for the distrodeck catalog clone, whose cache directory
+  it removes and re-creates.
+- The GitHub wizard clones a dotfiles repository only from an `https://`,
+  `ssh://` or `user@host:path` URL, says so for any other URL, and ends git's
+  options before it. Its helper runs only `git` and `gh`.
+- `nikos hooks` runs `setup-hooks.sh` (for `status`, `apply`, `repair` and
+  `--global`) only from an absolute path into a script-helpers tree it can
+  trust: every file and directory in it is owned by the user or root and
+  cannot be written by other users (group write counts as other users unless
+  it is the user's private group and the file has no ACL), and a symlink in
+  it points inside it. The
+  directories above the tree follow the same rule (a sticky directory such as
+  `/tmp` is accepted). The resolved file is the one that runs.
+- `scripts/bump-versions.py` fetches only `https` URLs and follows a redirect
+  only to `https`.
 
 ## [1.5.3] - 2026-10-29
 

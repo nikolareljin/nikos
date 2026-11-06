@@ -134,7 +134,7 @@ def test_gate_passes_with_piped_stdin_and_a_real_terminal(tmp_path):
     program = write_program(tmp_path, GATE_HELPERS, GATE_BODY)
     bindir = stub_dialog(tmp_path)
     out = run(
-        ["script", "-qec", f"cat {program} | bash", "/dev/null"],
+        [SCRIPT, "-qec", f"cat {program} | bash", "/dev/null"],
         path=with_stub(bindir),
         home=tmp_path,
     )
@@ -220,7 +220,7 @@ def test_plain_selection_round_trips_the_answers(tmp_path):
     bindir = stub_dialog(tmp_path)
     answers = "\n".join(BUNDLE_ANSWERS + AI_ANSWERS) + "\n"
     out = run(
-        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        [SCRIPT, "-qec", f"bash {program} < /dev/null", "/dev/null"],
         path=with_stub(bindir),
         stdin=answers.encode(),
         home=tmp_path,
@@ -276,7 +276,7 @@ def test_plain_timezone_returns_only_the_timezone(tmp_path, answer, expected):
     program = write_program(tmp_path, TIMEZONE_HELPERS, TIMEZONE_BODY)
     bindir = stub_dialog(tmp_path)
     out = run(
-        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        [SCRIPT, "-qec", f"bash {program} < /dev/null", "/dev/null"],
         path=with_stub(bindir),
         stdin=(answer + "\n").encode(),
         home=tmp_path,
@@ -325,7 +325,7 @@ def test_a_cancelled_dialog_is_not_reported_as_success(tmp_path, helper, call):
 """,
     )
     out = run(
-        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        [SCRIPT, "-qec", f"bash {program} < /dev/null", "/dev/null"],
         path=f"{bindir}:/usr/bin:/bin",
         home=tmp_path,
     )
@@ -354,7 +354,7 @@ def test_input_ending_mid_prompt_is_not_treated_as_an_answer(tmp_path):
     bindir = stub_dialog(tmp_path)
     # No answers at all: the read hits EOF immediately.
     out = run(
-        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        [SCRIPT, "-qec", f"bash {program} < /dev/null", "/dev/null"],
         path=with_stub(bindir),
         stdin=b"",
         home=tmp_path,
@@ -415,7 +415,7 @@ def test_why_not_names_the_reason(tmp_path, env, setup, expected):
     program = progress_program(tmp_path, WHY_BODY.format(setup=setup))
     bindir = stub_dialog(tmp_path)
     out = run(
-        ["script", "-qec", f"{env}bash {program} < /dev/null", "/dev/null"],
+        [SCRIPT, "-qec", f"{env}bash {program} < /dev/null", "/dev/null"],
         path=with_stub(bindir),
         home=tmp_path,
     )
@@ -462,7 +462,7 @@ def test_planner_keeps_the_ansible_error(tmp_path):
     )
     program = progress_program(tmp_path, PLAN_BODY)
     out = run(
-        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        [SCRIPT, "-qec", f"bash {program} < /dev/null", "/dev/null"],
         path=with_stub(bindir),
         home=tmp_path,
     )
@@ -483,7 +483,7 @@ def test_planner_does_not_hand_ansible_the_terminal(tmp_path):
     )
     program = progress_program(tmp_path, PLAN_BODY)
     out = run(
-        ["script", "-qec", f"bash {program}", "/dev/null"],
+        [SCRIPT, "-qec", f"bash {program}", "/dev/null"],
         path=with_stub(bindir),
         home=tmp_path,
     )
@@ -508,6 +508,7 @@ GAUGE_CHOICE_BODY = """
     USE_DIALOG=1
     _PROGRESS_LIB_LOADED=true
     BECOME_PASSWORD_FILE=""
+    NIKOS_BECOME_MODE=""
     use_gauge=false
     playbook_args=(-i inv site.yml)
     _can_use_gauge() {{ return 0; }}
@@ -531,7 +532,8 @@ def test_update_gauge_choice(tmp_path, sudo_rc):
     )
     program = tmp_path / "choice.sh"
     program.write_text(
-        extract_cli_helper("_plain_view_notice") + "\n" + textwrap.dedent(body)
+        extract_cli_helper("_plain_view_notice") + "\n"
+        + extract_cli_helper("_ensure_become_password") + "\n" + textwrap.dedent(body)
         .replace("local ask_pass", "ask_pass"),
         encoding="utf-8",
     )
@@ -543,9 +545,10 @@ def test_update_gauge_choice(tmp_path, sudo_rc):
         assert "--ask-become-pass" not in field(out, "ARGS"), out
         assert "--become-password-file" not in field(out, "ARGS"), out
         assert "COLLECTED" not in out, out
-        # Without -k a cached timestamp from an earlier sudo passes the probe
-        # for a user who does need a password.
-        assert (tmp_path / "sudo.log").read_text().split("\n")[0] == "SUDO -n -k true"
+        # -k first, on its own: without it a cached timestamp passes the probe
+        # for a user who does need a password, and sudo-rs is not given -k
+        # combined with -n.
+        assert (tmp_path / "sudo.log").read_text().split("\n")[:2] == ["SUDO -k", "SUDO -n true"]
     else:
         assert field(out, "GAUGE") == "false", out
         assert "--ask-become-pass" in field(out, "ARGS"), out
@@ -589,7 +592,7 @@ def test_sudo_password_is_validated_on_stdin(tmp_path, answers, expected):
         encoding="utf-8",
     )
     out = run(
-        ["script", "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        [SCRIPT, "-qec", f"bash {program} < /dev/null", "/dev/null"],
         path=with_stub(bindir),
         stdin=answers.encode(),
         home=tmp_path,
@@ -632,7 +635,7 @@ def _checked_pw(tmp_path, answers, nopasswd="0"):
     stub(bindir, "sudo", SUDO_STUB)
     program = write_program(tmp_path, ("_collect_checked_become_password",), CHECKED_PW_BODY)
     result = subprocess.run(
-        [BASH, str(program)], capture_output=True, timeout=60,
+        ["bash", str(program)], capture_output=True, timeout=60,
         env={"PATH": with_stub(bindir), "HOME": str(tmp_path), "PW_ANSWERS": answers,
              "NOPASSWD": nopasswd},
     )
@@ -644,7 +647,7 @@ def _checked_pw(tmp_path, answers, nopasswd="0"):
 def test_install_skips_the_prompt_for_passwordless_sudo(tmp_path):
     out, args = _checked_pw(tmp_path, "unused,", nopasswd="1")
     assert "RC=0 PW=" in out and "ASKED=0" in out, out
-    assert "-n -k true" in args
+    assert "-n true" in args and "-n -k" not in args
 
 
 def test_install_retries_a_rejected_password(tmp_path):
@@ -673,6 +676,7 @@ def test_update_stops_after_three_rejected_passwords(tmp_path):
     program = tmp_path / "choice.sh"
     program.write_text(
         extract_cli_helper("_plain_view_notice") + "\n"
+        + extract_cli_helper("_ensure_become_password") + "\n"
         + textwrap.dedent(body).replace(
             "print_info() {", "print_error() { echo \"ERR $*\"; }\nprint_info() {", 1),
         encoding="utf-8",

@@ -273,3 +273,164 @@ def test_a_failed_hook_install_warns_and_does_not_stop_the_play():
     block = text.split("- name: Install the Claude Code hook for this user", 1)[1].split("\n- name:", 1)[0]
     assert "failed_when: false" in block
     assert "- name: Warn that the Claude Code hook was not installed" in text
+
+
+def test_global_refuses_a_setup_script_others_can_write(env):
+    script = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
+    script.chmod(0o666)
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
+
+
+def test_status_never_runs_a_setup_script_others_can_write(env):
+    fake_claude(env, "ok")
+    script = Path(git_get(env, "script-helpers.home")) / "scripts" / "setup-hooks.sh"
+    script.chmod(0o666)
+    r = run(env)
+    assert r.returncode == 0
+    assert f"claude hook:    not checked: {script} is not an absolute path" in r.stdout
+    assert not [c for c in calls(env) if c.startswith("setup-hooks")]
+
+
+def test_repair_never_runs_a_setup_script_others_can_write(env):
+    fake_claude(env, "absent")
+    subprocess.run(["git", "config", "--global", "script-helpers.owners", "me"], env=env["env"], check=True)
+    script = Path(git_get(env, "script-helpers.home")) / "scripts" / "setup-hooks.sh"
+    script.chmod(0o666)
+    r = run(env, "repair")
+    assert r.returncode == 1 and "refusing" in r.stderr
+    assert not [c for c in calls(env) if c.startswith("setup-hooks")]
+    dry = run(env, "apply", "--dry-run")
+    assert "would not install it" in dry.stdout
+    assert not [c for c in calls(env) if c.startswith("setup-hooks")]
+
+
+def test_global_refuses_a_setup_script_in_a_directory_others_can_write(env):
+    scripts = env["tmp"] / "sh" / "scripts"
+    scripts.chmod(0o777)
+    r = run(env, "--global")
+    scripts.chmod(0o755)
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
+
+
+def test_global_follows_a_symlinked_home_and_runs_the_resolved_script(env):
+    real = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
+    real.write_text(f'echo "ran $0 $*" >> "{env["log"]}"\n')
+    link = env["tmp"] / "sh-link"
+    link.symlink_to(env["tmp"] / "sh")
+    subprocess.run(["git", "config", "--global", "script-helpers.home", str(link)], env=env["env"], check=True)
+    r = run(env, "--global")
+    assert r.returncode == 0, r.stderr
+    # The resolved file is the one that runs: what was checked is what ran.
+    assert calls(env) == [f"ran {real} --global"]
+
+
+def test_global_refuses_a_relative_script_helpers_home(env):
+    subprocess.run(["git", "config", "--global", "script-helpers.home", "sh"], env=env["env"], check=True)
+    r = subprocess.run(["bash", str(SCRIPT), "--global"], env=env["env"], cwd=env["tmp"],
+                       capture_output=True, text=True)
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
+
+
+@pytest.mark.parametrize("loaded", ["helpers.sh", "lib/logging.sh", "config/names.txt", "scripts/other.sh", ".git/config"])
+def test_global_refuses_when_others_can_write_any_file_of_the_tree(env, loaded):
+    target = env["tmp"] / "sh" / loaded
+    target.parent.mkdir(exist_ok=True)
+    target.write_text("# part of the tree setup-hooks.sh runs from\n")
+    target.chmod(0o666)
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
+
+
+def test_global_refuses_a_symlink_in_the_tree_to_a_file_others_can_write(env):
+    outside = env["tmp"] / "outside.sh"
+    outside.write_text("# reached through a symlink\n")
+    outside.chmod(0o666)
+    (env["tmp"] / "sh" / "lib").mkdir()
+    (env["tmp"] / "sh" / "lib" / "logging.sh").symlink_to(outside)
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
+
+
+def test_a_directory_above_the_tree_may_be_open_to_others_only_with_the_sticky_bit(env):
+    above = env["tmp"] / "above"
+    above.mkdir()
+    (env["tmp"] / "sh").rename(above / "sh")
+    subprocess.run(["git", "config", "--global", "script-helpers.home", str(above / "sh")], env=env["env"], check=True)
+    above.chmod(0o777)
+    plain = run(env, "--global")
+    above.chmod(0o1777)                     # as /tmp
+    sticky = run(env, "--global")
+    (above / "sh").chmod(0o1777)            # the tree itself gets no such exemption
+    tree = run(env, "--global")
+    (above / "sh").chmod(0o755)
+    above.chmod(0o755)
+    assert plain.returncode != 0 and "refusing" in plain.stderr
+    assert sticky.returncode == 0, sticky.stderr
+    assert tree.returncode != 0 and "refusing" in tree.stderr
+    assert calls(env) == ["setup-hooks --global"]
+
+
+def test_global_refuses_a_symlink_that_leaves_the_tree_and_takes_one_inside_it(env):
+    lib = env["tmp"] / "sh" / "lib"
+    lib.mkdir()
+    (lib / "real.sh").write_text("# in the tree\n")
+    (lib / "alias.sh").symlink_to(lib / "real.sh")
+    inside = run(env, "--global")
+    outside = env["tmp"] / "outside.sh"
+    outside.write_text("# owned by the user, mode 644, but not in the tree\n")
+    outside.chmod(0o644)
+    (lib / "out.sh").symlink_to(outside)
+    left = run(env, "--global")
+    assert inside.returncode == 0, inside.stderr
+    assert left.returncode != 0 and "refusing" in left.stderr
+    assert calls(env) == ["setup-hooks --global"]
+
+
+def test_global_refuses_a_file_a_shared_group_can_write(env):
+    shared = [g for g in os.getgroups() if g != os.getgid()]
+    if not shared:
+        pytest.skip("this user is in no group but its own")
+    script = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
+    script.chmod(0o664)
+    own = run(env, "--global")                # group write for the user's own group
+    os.chown(script, -1, shared[0])
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    # The user's own group is accepted only when nobody else is in it.
+    assert calls(env) == (["setup-hooks --global"] if own.returncode == 0 else [])
+
+
+def test_group_write_is_not_accepted_when_the_group_cannot_be_looked_up(env):
+    script = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
+    script.chmod(0o664)
+    getent = env["tmp"] / "bin" / "getent"
+    getent.write_text("#!/bin/sh\nexit 2\n")
+    getent.chmod(0o755)
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    getent.write_text("#!/bin/sh\nexit 0\n")   # answers, with nothing
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
+
+
+def test_global_refuses_a_group_writable_file_with_an_acl(env):
+    import shutil
+    if not shutil.which("setfacl"):
+        pytest.skip("setfacl is not installed")
+    script = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
+    script.chmod(0o664)
+    if run(env, "--global").returncode != 0:
+        pytest.skip("this user's group is not a private group, so group write is refused anyway")
+    env["log"].write_text("")
+    if subprocess.run(["setfacl", "-m", "u:nobody:rw", str(script)], capture_output=True).returncode != 0:
+        pytest.skip("this file system has no ACL support")
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []

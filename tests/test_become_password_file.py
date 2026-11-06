@@ -74,7 +74,7 @@ def write_program(tmp_path: Path) -> Path:
 def run(program: Path, tmp_path: Path, *, prefix: str = "", tmpdir: str = "") -> str:
     """Run the probe under a pty, so its /dev/tty read has somewhere to read from.
 
-    The password is checked with `sudo -S -k -v`; a stub that accepts hunter2
+    The password is checked with `sudo -S -v`; a stub that accepts hunter2
     on stdin keeps the test off the real sudo.
     """
     sudobin = tmp_path / "sudobin"
@@ -84,7 +84,7 @@ def run(program: Path, tmp_path: Path, *, prefix: str = "", tmpdir: str = "") ->
     command = f"{prefix} PATH={sudobin}:$PATH TMPDIR={tmpdir or tmp_path} bash {program}"
     command = command.strip()
     result = subprocess.run(
-        [SCRIPT, "-qec", command, "/dev/null"],
+        ["script", "-qec", command, "/dev/null"],
         input=b"hunter2\n",
         capture_output=True,
         timeout=60,
@@ -225,7 +225,7 @@ def test_an_interrupt_restores_the_cursor(tmp_path):
         encoding="utf-8",
     )
     result = subprocess.run(
-        [SCRIPT, "-qec", f"bash {program}", "/dev/null"],
+        ["script", "-qec", f"bash {program}", "/dev/null"],
         capture_output=True,
         timeout=60,
     )
@@ -235,3 +235,69 @@ def test_an_interrupt_restores_the_cursor(tmp_path):
     assert out.rindex("\x1b[?25h") > out.rindex("\x1b[?25l"), (
         "the interrupt left the cursor hidden"
     )
+
+
+def write_update_program(tmp_path: Path, calls: int = 2) -> Path:
+    """`nikos update` runs the playbook twice; both runs go through this."""
+    program = tmp_path / "update_probe.sh"
+    body = "\n".join(
+        f'_ensure_become_password && echo "CALL{i}=${{NIKOS_BECOME_MODE}}"'
+        for i in range(1, calls + 1)
+    )
+    program.write_text(
+        "set -euo pipefail\n"
+        + "\n\n".join(
+            extract_helper(n)
+            for n in (
+                *HELPERS,
+                "_ensure_become_password",
+                "_start_sudo_keepalive",
+                "_stop_sudo_keepalive",
+            )
+        )
+        + '\n\nBECOME_PASSWORD_FILE=""\nNIKOS_BECOME_MODE=""\nSUDO_KEEPALIVE_PID=""\n'
+        + 'print_error() { echo "[error] $*" >&2; }\n'
+        + '_logfile() { :; }\n'
+        + body
+        + '\necho "FILE=$(cat "${BECOME_PASSWORD_FILE}")"\n'
+        + 'echo "KEEPALIVE=${SUDO_KEEPALIVE_PID}"\n'
+        + "_stop_sudo_keepalive\n",
+        encoding="utf-8",
+    )
+    return program
+
+
+def strict_sudo_stub(tmp_path: Path) -> Path:
+    """A strict sudo: logs each call, refuses -k mixed with other flags and -n."""
+    sudobin = tmp_path / "sudobin"
+    sudobin.mkdir(exist_ok=True)
+    log = tmp_path / "sudo.log"
+    (sudobin / "sudo").write_text(
+        "#!/bin/sh\n"
+        f'echo "$*" >> {log}\n'
+        'if [ "$1" = -k ] && [ $# -eq 1 ]; then exit 0; fi\n'
+        'for a in "$@"; do case "$a" in -k) exit 1;; esac; done\n'
+        'case " $* " in *" -n "*) exit 1;; esac\n'
+        'read pw; [ "$pw" = hunter2 ]\n',
+        encoding="utf-8",
+    )
+    (sudobin / "sudo").chmod(0o755)
+    return log
+
+
+def test_update_asks_once_and_works_with_strict_sudo(tmp_path):
+    """Two playbook runs, one prompt; no -k combined with another flag."""
+    log = strict_sudo_stub(tmp_path)
+    program = write_update_program(tmp_path)
+    result = subprocess.run(
+        ["script", "-qec", f"PATH={tmp_path / 'sudobin'}:$PATH TMPDIR={tmp_path} bash {program}", "/dev/null"],
+        input=b"hunter2\n",
+        capture_output=True,
+        timeout=60,
+    )
+    out = result.stdout.decode(errors="replace").replace("\r", "")
+    assert "CALL1=file" in out and "CALL2=file" in out, out
+    assert "FILE=hunter2" in out, out
+    assert out.count("Sudo password for") == 1, out
+    validations = [l for l in log.read_text().splitlines() if "-v" in l.split()]
+    assert validations == ["-S -v"], validations

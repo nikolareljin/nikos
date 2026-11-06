@@ -50,20 +50,100 @@ helpers_home() {
 # would look for its own vendored copy, which an installed lantern lacks.
 run_lantern() { SCRIPT_HELPERS_HOME="$(helpers_home)" lantern "$@"; }
 
+# trusted_setup_script <path>: script-helpers.home comes from git config, so
+# setup-hooks.sh is run only when its whole tree can be trusted. Prints the
+# resolved path (symlinks followed), which is the one to run: what is checked
+# is what runs. The rule:
+#   - the path is absolute;
+#   - every file and directory of the tree, .git included, is owned by this
+#     user or root and is not writable by other users. Group write counts as
+#     other users unless the group is this user's private group (see
+#     private_group; the Ubuntu default under umask 002) and the file has no
+#     ACL, whose mask shows as the group bits;
+#   - a symlink in the tree points inside the tree;
+#   - every directory above the tree follows the same owner and write rule,
+#     except that the sticky bit (/tmp) allows shared write;
+#   - a tree find cannot read in full fails.
+# private_group <uid> <gid>: true only on positive evidence that gid is this
+# user's private group: named after the user, no other member, and no other
+# account with it as primary group. A getent that fails or answers nothing is
+# "not private".
+private_group() {
+  local name record members accounts
+  name="$(id -un 2>/dev/null)" || return 1
+  record="$(getent group "$2" 2>/dev/null)" || return 1
+  [[ -n "${name}" && "${record%%:*}" == "${name}" ]] || return 1
+  members="$(printf '%s\n' "${record}" | cut -d: -f4)"
+  [[ -z "${members}" || "${members}" == "${name}" ]] || return 1
+  accounts="$(getent passwd 2>/dev/null)" || return 1
+  [[ -n "${accounts}" ]] || return 1
+  [[ -z "$(printf '%s\n' "${accounts}" | awk -F: -v g="$2" -v u="$1" '$4 == g && $3 != u')" ]]
+}
+
+# has_group_write_acl: reads `ls -ld` lines; true when one is group-writable
+# and carries an ACL ("+" after the mode).
+has_group_write_acl() {
+  awk 'substr($1, 6, 1) == "w" && substr($1, 11, 1) == "+" { found = 1 } END { exit !found }'
+}
+
+trusted_setup_script() {
+  local real root dir uid gid link target bad listing private=false
+  local -a writable
+  [[ "$1" == /* ]] || return 1
+  real="$(readlink -f -- "$1" 2>/dev/null)" || return 1
+  [[ -f "${real}" ]] || return 1
+  root="$(dirname -- "$(dirname -- "${real}")")"
+  [[ "${root}" != "/" ]] || return 1
+  uid="$(id -u)"
+  gid="$(id -g)"
+  writable=(-perm -002 -o -perm -020)
+  if private_group "${uid}" "${gid}"; then
+    private=true
+    writable=(-perm -002 -o \( -perm -020 ! -gid "${gid}" \))
+  fi
+  # -L applies the test to what a symlink points to.
+  bad="$(find -L "${root}" \( \( "${writable[@]}" \) -o ! \( -user "${uid}" -o -user 0 \) \) \
+    -print -quit 2>/dev/null)" || return 1
+  [[ -z "${bad}" ]] || return 1
+  if [[ "${private}" == true ]]; then
+    listing="$(find -L "${root}" -perm -020 -exec ls -ldL -- {} + 2>/dev/null)" || return 1
+    if has_group_write_acl <<<"${listing}"; then return 1; fi
+  fi
+  while IFS= read -r link; do
+    target="$(readlink -f -- "${link}" 2>/dev/null)" || return 1
+    [[ "${target}" == "${root}/"* ]] || return 1
+  done < <(find "${root}" -type l 2>/dev/null)
+  dir="$(dirname -- "${root}")"
+  while :; do
+    bad="$(find "${dir}" -maxdepth 0 \
+      \( \( \( "${writable[@]}" \) ! -perm -1000 \) -o ! \( -user "${uid}" -o -user 0 \) \) \
+      -print 2>/dev/null)" || return 1
+    [[ -z "${bad}" ]] || return 1
+    listing="$(ls -ldL -- "${dir}" 2>/dev/null)" || return 1
+    if has_group_write_acl <<<"${listing}"; then return 1; fi
+    [[ "${dir}" != "/" ]] || break
+    dir="$(dirname -- "${dir}")"
+  done
+  printf '%s\n' "${real}"
+}
+UNTRUSTED_REASON="not an absolute path into a script-helpers tree that only you or root own and other users cannot write"
+
 # claude_state: the user's Claude Code hook as script-helpers sees it: ok,
 # absent, broken (the file it runs is missing), stale (it runs a file outside
 # the installed copy, such as a checkout a branch switch removes), unknown (no
 # Python to read the settings), missing (no setup-hooks.sh in script-helpers.home),
+# untrusted (setup-hooks.sh fails trusted_setup_script, so it is not run),
 # old (a copy without --claude porcelain cannot tell), or failed (the check did not run). Second field: the file.
 claude_state() {
-  local script out state
+  local script real out state
   script="$(helpers_home)/scripts/setup-hooks.sh"
   # Older copies read --status --porcelain --claude as an install: never run it there.
   [[ -f "${script}" ]] || { printf 'missing\t\n'; return 0; }
-  if ! grep -q 'claude_user=' "${script}"; then
+  real="$(trusted_setup_script "${script}")" || { printf 'untrusted\t%s\n' "${script}"; return 0; }
+  if ! grep -q 'claude_user=' "${real}"; then
     printf 'old\t\n'; return 0
   fi
-  out="$(bash "${script}" --status --porcelain --claude 2>/dev/null | tail -n 1)" || true
+  out="$(bash "${real}" --status --porcelain --claude 2>/dev/null | tail -n 1)" || true
   state="$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^claude_user=//p')"
   printf '%s\t%s\n' "${state:-failed}" "$(printf '%s' "${out}" | tr '\t' '\n' | sed -n 's/^hook=//p')"
 }
@@ -72,10 +152,14 @@ claude_state() {
 # is ok. The hook is copied out of that tree, so a branch switch there never
 # removes it. Needs owners; says so when they are unset.
 fix_claude() {
-  local state
+  local state real
   state="$(claude_state | cut -f1)"
   # old, unknown or failed: install anyway; --claude is idempotent.
   [[ "${state}" == ok ]] && return 0
+  if [[ "${state}" == untrusted ]]; then
+    echo "nikos hooks: refusing $(helpers_home)/scripts/setup-hooks.sh: ${UNTRUSTED_REASON}" >&2
+    return 1
+  fi
   if [[ -z "$(git config --global --get script-helpers.owners 2>/dev/null || true)" ]]; then
     # lantern refuses without owners too, and says so; one failure, not two.
     echo "nikos hooks: Claude hook ${state}; set owners first: git config --global script-helpers.owners <user-or-org>" >&2
@@ -83,7 +167,12 @@ fix_claude() {
   fi
   info "claude hook ${state}: installing it from $(helpers_home)"
   [[ -f "$(helpers_home)/scripts/setup-hooks.sh" ]] || { echo "nikos hooks: no setup-hooks.sh in $(helpers_home)" >&2; return 1; }
-  bash "$(helpers_home)/scripts/setup-hooks.sh" --claude
+  # Resolved again here: this is the path that runs.
+  real="$(trusted_setup_script "$(helpers_home)/scripts/setup-hooks.sh")" || {
+    echo "nikos hooks: refusing $(helpers_home)/scripts/setup-hooks.sh: ${UNTRUSTED_REASON}" >&2
+    return 1
+  }
+  bash "${real}" --claude
 }
 
 need_lantern() {
@@ -112,6 +201,7 @@ cmd_status() {
     stale)   info "claude hook:    STALE: runs ${hook}, not the installed copy (nikos hooks repair)" ;;
     failed)  info "claude hook:    could not be checked: $(helpers_home)/scripts/setup-hooks.sh --status --porcelain --claude failed" ;;
     missing) info "claude hook:    not checked: no ${home}/scripts/setup-hooks.sh (check git config --global script-helpers.home)" ;;
+    untrusted) info "claude hook:    not checked: ${hook} is ${UNTRUSTED_REASON}" ;;
     old)     info "claude hook:    not checked: script-helpers $(cat "${home}/VERSION" 2>/dev/null || echo '?') cannot (nikos update)" ;;
     *)       info "claude hook:    unknown: no Python to read the settings" ;;
   esac
@@ -151,8 +241,12 @@ cmd_lantern() {
     if [[ " $* " == *" --only"* ]]; then
       :
     elif [[ " $* " == *" --dry-run "* ]]; then
-      if [[ "$(claude_state | cut -f1)" == ok ]]; then
+      local dry_state
+      dry_state="$(claude_state | cut -f1)"
+      if [[ "${dry_state}" == ok ]]; then
         :
+      elif [[ "${dry_state}" == untrusted ]]; then
+        info "claude hook: would not install it: $(helpers_home)/scripts/setup-hooks.sh is ${UNTRUSTED_REASON}"
       elif [[ -z "$(git config --global --get script-helpers.owners 2>/dev/null || true)" ]]; then
         info "claude hook: would not install it: no owners set"
       else
@@ -169,12 +263,13 @@ cmd_lantern() {
 }
 
 cmd_global() {
-  local home script
+  local home script real
   [[ $# -eq 0 || ( $# -eq 1 && "$1" == "--uninstall" ) ]] || die "--global takes only --uninstall"
   home="$(helpers_home)"
   script="${home}/scripts/setup-hooks.sh"
   [[ -f "${script}" ]] || die "no setup-hooks.sh in ${home}"
-  bash "${script}" --global "$@"
+  real="$(trusted_setup_script "${script}")" || die "refusing ${script}: ${UNTRUSTED_REASON}"
+  bash "${real}" --global "$@"
 }
 
 cmd_export() {
