@@ -404,3 +404,33 @@ def test_global_refuses_a_file_a_shared_group_can_write(env):
     assert r.returncode != 0 and "refusing" in r.stderr
     # The user's own group is accepted only when nobody else is in it.
     assert calls(env) == (["setup-hooks --global"] if own.returncode == 0 else [])
+
+
+def test_group_write_is_not_accepted_when_the_group_cannot_be_looked_up(env):
+    script = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
+    script.chmod(0o664)
+    getent = env["tmp"] / "bin" / "getent"
+    getent.write_text("#!/bin/sh\nexit 2\n")
+    getent.chmod(0o755)
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    getent.write_text("#!/bin/sh\nexit 0\n")   # answers, with nothing
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
+
+
+def test_global_refuses_a_group_writable_file_with_an_acl(env):
+    import shutil
+    if not shutil.which("setfacl"):
+        pytest.skip("setfacl is not installed")
+    script = env["tmp"] / "sh" / "scripts" / "setup-hooks.sh"
+    script.chmod(0o664)
+    if run(env, "--global").returncode != 0:
+        pytest.skip("this user's group is not a private group, so group write is refused anyway")
+    env["log"].write_text("")
+    if subprocess.run(["setfacl", "-m", "u:nobody:rw", str(script)], capture_output=True).returncode != 0:
+        pytest.skip("this file system has no ACL support")
+    r = run(env, "--global")
+    assert r.returncode != 0 and "refusing" in r.stderr
+    assert calls(env) == []
