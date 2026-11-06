@@ -739,7 +739,12 @@ _playbook() {
   NIKOS_PROGRESS_SKIP_REASON=""
   # Before the dialog offer: its `sudo apt-get install` then runs on the
   # checked password instead of asking for it a second time.
-  _ensure_become_password || return $?
+  local become_rc=0
+  _ensure_become_password || become_rc=$?
+  # 130: cancelled at the password box, and said so there. The command ends
+  # here: nothing has run, and a caller must not report a failed playbook.
+  (( become_rc != 130 )) || exit 130
+  (( become_rc == 0 )) || return "${become_rc}"
   _offer_dialog_install
   case "${NIKOS_BECOME_MODE}" in
     file) playbook_args+=(--become-password-file "${BECOME_PASSWORD_FILE}") ;;
@@ -960,8 +965,6 @@ cmd_update() {
   # and exit code, and the optional replay is not run on top of a failure.
   local rc=0
   _playbook -e nikos_update_mode=true || rc=$?
-  # Cancelled at the password box: said there, and nothing ran.
-  [[ "${rc}" -ne 130 ]] || exit 130
   if [[ "${rc}" -ne 0 ]]; then
     print_error "nikos update failed (exit ${rc}); optional bundles were not refreshed. Log: ${NIKOS_LAST_RUN_LOG:-${NIKOS_LOG_DIR:-~/.config/nikos/logs}}"
     exit "${rc}"

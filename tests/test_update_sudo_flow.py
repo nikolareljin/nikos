@@ -131,7 +131,8 @@ def drive(
         + "\n\n"
         + ("" if dialog_missing else "_offer_dialog_install() { :; }\n")
         + "trap '_cleanup_run' EXIT\n"
-        "_playbook -e nikos_update_mode=true\n"
+        # As cmd_update calls it: a failed playbook is reported by the caller.
+        '_playbook -e nikos_update_mode=true || { echo "PLAYBOOK_FAILED rc=$?"; exit 9; }\n'
         'echo "BETWEEN mode=${NIKOS_BECOME_MODE} keepalive=${SUDO_KEEPALIVE_PID} file=${BECOME_PASSWORD_FILE}"\n'
         f'echo "${{SUDO_KEEPALIVE_PID}}" > "{work}/keepalive.pid"\n'
         "_playbook --no-saved-skip-tags -e nikos_update_mode=true --tags opt\n"
@@ -234,6 +235,7 @@ def test_cancel_in_the_box_runs_nothing_and_exits_130(tmp_path):
     r = drive(tmp_path, b"", box_answers=["CANCEL"])
     assert r["rc"] == 130, (r["rc"], r["out"])
     assert "Cancelled at the sudo password" in r["out"]
+    assert "PLAYBOOK_FAILED" not in r["out"]      # a cancel is not reported as a failed playbook
     assert r["ansible"] == [] and "END" not in r["out"]
     assert r["left"] == []
     assert "-S -v" not in r["sudo"]
@@ -245,3 +247,17 @@ def test_a_box_that_cannot_draw_falls_back_to_the_plain_prompt(tmp_path):
     assert r["out"].count("Sudo password for") == 1, r["out"]
     assert len([line for line in r["dialog"] if "--passwordbox" in line]) == 1
     assert all("content=[hunter2]" in line for line in r["ansible"]), r["ansible"]
+
+
+def test_three_wrong_answers_in_the_box_run_nothing(tmp_path):
+    r = drive(tmp_path, b"", box_answers=["a", "b", "c"])
+    assert len([line for line in r["dialog"] if "--passwordbox" in line]) == 3
+    assert "Sudo rejected the password three times" in r["out"]
+    assert "PLAYBOOK_FAILED rc=1" in r["out"] and r["ansible"] == []
+    assert r["left"] == []
+
+
+def test_an_empty_answer_in_the_box_leaves_the_prompt_to_ansible(tmp_path):
+    r = drive(tmp_path, b"", box_answers=[""])
+    assert "END" in r["out"], r["out"]
+    assert len(r["ansible"]) == 2 and all("--ask-become-pass" in line for line in r["ansible"]), r["ansible"]
