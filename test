@@ -544,8 +544,8 @@ done
 hr
 log "Results: ${pass} passed, ${fail} failed"
 if [[ $fail -eq 0 ]]; then
-  log "All checks passed — NikOS is good."
+  log "All checks passed: NikOS is good."
 else
-  log "Some checks failed — review output above."
+  log "Some checks failed: review output above."
   exit 1
 fi
