@@ -24,6 +24,8 @@
 #   NIKOS_TEST_ISO          path of the ISO for the chosen profile; without
 #                           NIKOS_TEST_ISO_URL it must exist and is used as is
 #   NIKOS_TEST_ISO_URL      where to download it from when it is missing
+#                           Setting either of these two without -b is refused:
+#                           only -b installs from an ISO.
 #
 # -b pauses once after OS install so you can type the VM password
 # into ssh-copy-id (sets up key-based auth for all subsequent steps).
@@ -115,6 +117,10 @@ if [[ "${BUILD}" != "true" && -n "${NIKOS_TEST_VM_RAM:-}${NIKOS_TEST_VM_CPUS:-}$
   printf '[test] ERROR: NIKOS_TEST_VM_RAM, NIKOS_TEST_VM_CPUS and NIKOS_TEST_VM_DISK apply only with -b\n' >&2
   exit 1
 fi
+if [[ "${BUILD}" != "true" && -n "${NIKOS_TEST_ISO:-}${NIKOS_TEST_ISO_URL:-}" ]]; then
+  printf '[test] ERROR: NIKOS_TEST_ISO and NIKOS_TEST_ISO_URL apply only with -b\n' >&2
+  exit 1
+fi
 
 case "${PROFILE}" in
   desktop)
@@ -135,6 +141,8 @@ OS_ISO_URL="${NIKOS_TEST_ISO_URL:-${OS_ISO_URL}}"
 # A given ISO with no URL has no download source: the default image must never
 # be written over it.
 [[ -z "${NIKOS_TEST_ISO:-}" || -n "${NIKOS_TEST_ISO_URL:-}" ]] || OS_ISO_URL=""
+# The floors describe the default images. A given ISO only has to be non-empty.
+[[ -z "${NIKOS_TEST_ISO:-}" ]] || OS_ISO_MIN_BYTES=1
 
 if [[ "${SHOW_CONFIG}" == "true" ]]; then
   printf '%s=%s\n' \
@@ -312,6 +320,23 @@ run_installer() {
   vm_ssh_tty "chmod +x '${INSTALL_SH_REMOTE}' && NIKOS_HOME='${SOURCE_DIR_REMOTE}' NIKOS_SKIP_REPO_SYNC=1 bash '${INSTALL_SH_REMOTE}'"
 }
 
+# Everything before the move can fail without touching the ISO or the VM: -b
+# wipes the VM next, so an error page saved as the ISO would cost the old guest.
+ISO_PARTIAL="${OS_ISO}.part.$$"
+remove_iso_partial() { rm -f -- "${ISO_PARTIAL}"; }
+
+download_iso() {
+  local size
+  trap remove_iso_partial EXIT
+  curl -fL "${OS_ISO_URL}" -o "${ISO_PARTIAL}" --progress-bar \
+    || die "Download failed: ${OS_ISO_URL}"
+  size="$(stat -c%s "${ISO_PARTIAL}")"
+  [[ "${size}" -ge "${OS_ISO_MIN_BYTES}" ]] \
+    || die "Download from ${OS_ISO_URL} is ${size} bytes, expected at least ${OS_ISO_MIN_BYTES}"
+  mv -f -- "${ISO_PARTIAL}" "${OS_ISO}"
+  trap - EXIT
+}
+
 # ── Preflight ─────────────────────────────────────────────────────────────────
 command -v VBoxManage  &>/dev/null || die "VirtualBox not found"
 command -v curl        &>/dev/null || die "curl not found"
@@ -335,7 +360,7 @@ if $BUILD; then
     [[ -f "${OS_ISO}" ]] || die "NIKOS_TEST_ISO not found: ${OS_ISO} (set NIKOS_TEST_ISO_URL to download it)"
   elif [[ ! -f "${OS_ISO}" ]] || [[ $(stat -c%s "${OS_ISO}") -lt ${OS_ISO_MIN_BYTES} ]]; then
     log "Downloading ${OS_LABEL} ISO..."
-    curl -L "${OS_ISO_URL}" -o "${OS_ISO}" --progress-bar
+    download_iso
   fi
   log "ISO ready: ${OS_ISO}"
 

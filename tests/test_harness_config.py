@@ -98,7 +98,7 @@ def test_the_resource_variables_override_the_release_defaults(tmp_path):
 
 
 def test_an_explicit_iso_and_url_replace_the_defaults(tmp_path):
-    cfg = _config(tmp_path, NIKOS_TEST_ISO="/isos/custom.iso",
+    cfg = _config(tmp_path, "-b", NIKOS_TEST_ISO="/isos/custom.iso",
                   NIKOS_TEST_ISO_URL="https://mirror.example/custom.iso")
     assert cfg["OS_ISO"] == "/isos/custom.iso"
     assert cfg["OS_ISO_URL"] == "https://mirror.example/custom.iso"

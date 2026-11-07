@@ -81,11 +81,21 @@ release and the guest's resources come from the environment:
 | `NIKOS_TEST_VM_CPUS` | 2 | guest CPUs |
 | `NIKOS_TEST_VM_DISK` | 40960 | guest disk in MB |
 | `NIKOS_TEST_ISO` | `~/Downloads/<release ISO>` | ISO for the chosen profile |
-| `NIKOS_TEST_ISO_URL` | the Ubuntu mirror for that ISO | downloaded to the ISO path when the file is missing or below the size floor set per release and profile in `test`; with `NIKOS_TEST_ISO` and no URL the file must exist and is used as is |
+| `NIKOS_TEST_ISO_URL` | the Ubuntu mirror for that ISO | downloaded to the ISO path when the file is missing, or below the size floor set per release and profile in `test`; with `NIKOS_TEST_ISO` and no URL the file must exist and is used as is |
 
 The RAM, CPU and disk variables apply only with `-b`, and setting one without it
 is refused: an existing guest keeps its resources. `--show-config` prints what
-`-b` would use. Each of the three must be a positive whole number. A run stops
+`-b` would use. Each of the three must be a positive whole number.
+`NIKOS_TEST_ISO` and `NIKOS_TEST_ISO_URL` are also refused without `-b`, because
+only `-b` installs from an ISO.
+
+A download goes to a temporary name next to the ISO and moves into place only
+after curl succeeds and the size passes, all before `-b` removes the old VM. A
+failure exits 1 and leaves both the VM and any existing ISO alone. The size floors
+apply to the default ISO path; with `NIKOS_TEST_ISO` the file only has to be
+non-empty, and an existing one is not fetched again.
+
+A run stops
 before the installer if the guest's `VERSION_ID` differs from
 `NIKOS_TEST_RELEASE`, and exits 1 if a checklist item fails.
 
