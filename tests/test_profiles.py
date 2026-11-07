@@ -261,11 +261,13 @@ def _ci_check_runs() -> list[str]:
             for value in node:
                 walk(value)
         elif isinstance(node, str):
-            lines.extend(
-                line.strip()
-                for line in node.splitlines()
-                if "ansible-playbook site.yml" in line and "--check" in line
-            )
+            for line in node.splitlines():
+                line = line.strip()
+                # A commented-out run is not a run.
+                if line.startswith("#"):
+                    continue
+                if "ansible-playbook site.yml" in line and "--check" in line:
+                    lines.append(line)
 
     walk(workflow)
     return lines
