@@ -659,6 +659,8 @@ if _can_use_dialog; then
   dialog --title "NikOS ${NIKOS_VERSION} — System Check" \
     --infobox "Checking system requirements..." 5 52 || true
 fi
+# Logged before the check, so a refused release is in the log too.
+_logfile "OS: ID=$(_os_release_value ID || echo '?') VERSION_ID=$(_os_release_value VERSION_ID || echo '?') VERSION_CODENAME=$(_os_release_value VERSION_CODENAME || _os_release_value UBUNTU_CODENAME || echo '?') PRETTY_NAME=$(_os_release_value PRETTY_NAME || echo '?')"
 if ! _is_supported_ubuntu_system || ! command -v apt-get &>/dev/null; then
   _found_os="ID=$(_os_release_value ID || echo '?') VERSION_ID=$(_os_release_value VERSION_ID || echo '?')"
   command -v apt-get &>/dev/null || _found_os="${_found_os}, no apt-get"

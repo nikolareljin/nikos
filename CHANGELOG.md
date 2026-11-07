@@ -4,6 +4,45 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+### Added
+- `nikos doctor` starts with the release: the `PRETTY_NAME`, `ID`,
+  `VERSION_ID` and codename from `/etc/os-release`, then a pass for Ubuntu
+  22.04, 24.04 or 26.04 and a warning, not a failure, for any other release
+  (`nikos update` cannot change it). `NIKOS_OS_RELEASE_FILE` points both
+  `nikos doctor` and `install.sh` at another file, for tests.
+  `tests/test_ubuntu_releases.py` fails when the lists in `scripts/nikos`,
+  `install.sh`, `test` and `nikos_ubuntu_releases` in `vars/main.yml` drift.
+- `install.sh` writes `OS: ID=... VERSION_ID=... VERSION_CODENAME=...
+  PRETTY_NAME=...` to the install log at the system check, before the
+  verdict, so a refused release is in the log too.
+- `./test` takes the release from `NIKOS_TEST_RELEASE` (`24.04`, the default,
+  or `26.04`; anything else is refused) and the guest's resources from
+  `NIKOS_TEST_VM_RAM`, `NIKOS_TEST_VM_CPUS` and `NIKOS_TEST_VM_DISK`;
+  `NIKOS_TEST_ISO` and `NIKOS_TEST_ISO_URL` replace the ISO. 26.04 uses
+  `xubuntu-26.04.1-desktop-amd64.iso` and
+  `ubuntu-26.04.1-live-server-amd64.iso`, 6144 MB RAM and its own VMs
+  (`NikOS-test-26.04`, `NikOS-test-server-26.04`). The 24.04 run is
+  unchanged. `--show-config` prints the resolved settings and exits before
+  anything is checked or started; an unknown argument is refused instead of
+  ignored. `test` is now in the shellcheck list in CI.
+- `./test` stops before the installer when the guest's `VERSION_ID` differs
+  from `NIKOS_TEST_RELEASE`, and exits 1 when a checklist item fails. It refuses
+  a non-numeric RAM, CPU or disk value before touching the VM, and refuses those
+  settings without `-b`, as it does `NIKOS_TEST_ISO` and `NIKOS_TEST_ISO_URL`.
+  `NIKOS_TEST_ISO` without a URL must exist, be non-empty and is never
+  overwritten. An ISO path that is not a regular file and a VM name that is
+  empty, `.`, `..` or contains `/` are refused. A failed
+  or undersized ISO download exits 1 before the VM is removed and leaves any
+  existing ISO in place. A missing ISO directory (`~/Downloads` by default)
+  is created before the download. The missing-VM hint prints the full command, with release,
+  profile and VM name. The ISO size floors are set per release.
+
+### Changed
+- `docs/install.md`, `docs/development.md`, `docs/profiles.md` and
+  `docs/debugging.md` describe the 26.04 run of `./test`, the RAM each
+  release needs, sudo-rs and chrony on 26.04, and that the bundles not named
+  in the per-release table are not yet run on 26.04.
+
 ## [1.6.0] - 2026-11-06
 
 ### Added

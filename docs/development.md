@@ -58,7 +58,7 @@ nikos/
 ```bash
 # Lint
 ansible-lint site.yml
-shellcheck install.sh scripts/nikos
+shellcheck install.sh scripts/nikos test
 
 # Unit tests
 python3 -m pytest tests/ -v
@@ -66,6 +66,56 @@ python3 -m pytest tests/ -v
 # Dry-run (needs ansible installed)
 ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education -e nikos_update_mode=false
 ```
+
+## Validating in a VM
+
+`./test` installs NikOS in a VirtualBox guest and runs `nikos doctor` plus a
+checklist there (`-b` creates the guest and installs the OS first). The
+release and the guest's resources come from the environment:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `NIKOS_TEST_RELEASE` | `24.04` | `24.04` or `26.04`; anything else is refused |
+| `NIKOS_TEST_VM` | `NikOS-test`, `NikOS-test-server`; on 26.04 with `-26.04` appended | VM name (`--vm-name=` does the same); refused if empty, `.`, `..` or containing `/` |
+| `NIKOS_TEST_VM_RAM` | 4096 on 24.04, 6144 on 26.04 | guest RAM in MB |
+| `NIKOS_TEST_VM_CPUS` | 2 | guest CPUs |
+| `NIKOS_TEST_VM_DISK` | 40960 | guest disk in MB |
+| `NIKOS_TEST_ISO` | `~/Downloads/<release ISO>` | ISO for the chosen profile |
+| `NIKOS_TEST_ISO_URL` | the Ubuntu mirror for that ISO | downloaded to the ISO path when the file is missing, or below the size floor set per release and profile in `test`; with `NIKOS_TEST_ISO` and no URL the file must exist, be non-empty and is used as is; a path that exists and is not a regular file is refused |
+
+The RAM, CPU and disk variables apply only with `-b`, and setting one without it
+is refused: an existing guest keeps its resources. `--show-config` prints what
+`-b` would use. Each of the three must be a positive whole number.
+`NIKOS_TEST_ISO` and `NIKOS_TEST_ISO_URL` are also refused without `-b`, because
+only `-b` installs from an ISO.
+
+A download goes to a temporary name next to the ISO and moves into place only
+after curl succeeds and the size passes, all before `-b` removes the old VM. A
+failure exits 1 and leaves both the VM and any existing ISO alone. The size floors
+apply to the default ISO path; with `NIKOS_TEST_ISO` the file only has to be
+non-empty, and an existing one is not fetched again.
+
+A run stops
+before the installer if the guest's `VERSION_ID` differs from
+`NIKOS_TEST_RELEASE`, and exits 1 if a checklist item fails.
+
+The ISOs are point releases, named in `test`: `xubuntu-24.04.4-desktop-amd64.iso`
+and `ubuntu-24.04.5-live-server-amd64.iso` for 24.04,
+`xubuntu-26.04.1-desktop-amd64.iso` and `ubuntu-26.04.1-live-server-amd64.iso`
+for 26.04.
+
+```bash
+./test --show-config                            # what a run would use; nothing starts
+NIKOS_TEST_RELEASE=26.04 ./test --show-config
+./test -b                                       # Xubuntu 24.04, desktop profile
+NIKOS_TEST_RELEASE=26.04 ./test -b              # Xubuntu 26.04, desktop profile
+NIKOS_TEST_RELEASE=26.04 NIKOS_TEST_VM_RAM=8192 ./test -b --profile=server
+```
+
+`tests/test_harness_config.py` checks the resolved settings through
+`--show-config`, and `tests/test_harness_run.py` drives the harness against stub
+`VBoxManage` and `ssh` commands. What the guest does after that (the unattended install, the
+desktop, the checklist) is only known from a real run.
 
 ## Pinned versions
 

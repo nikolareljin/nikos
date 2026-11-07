@@ -10,7 +10,8 @@
 - **Internet:** required during install (packages, theme files, models)
 - **Disk:** ~20 GB free (Ollama model + conda env + VS Code + tools); add
   12 to 57 GB more for every Ollama module, by class of machine (28 GB on a standard one)
-- **RAM:** 4 GB minimum; 8 GB recommended for running `qwen3.5:4b`
+- **RAM:** 4 GB minimum on 22.04 and 24.04, 6 GB on 26.04 (what Ubuntu
+  Desktop 26.04 asks for); 8 GB recommended for running `qwen3.5:4b`
 
 ## Quick install
 
@@ -233,7 +234,9 @@ What differs per release (`nikos_ubuntu_releases` in `vars/main.yml`):
 | `monitoring` bundle | yes | yes | Netdata from Netdata's own apt repository (signing key fingerprint-checked), bound to 127.0.0.1 |
 | `education` bundle | yes | yes | Anki from the official ankitects/anki release tarball (sha256-checked) |
 
-A skipped bundle prints why and the rest of the install carries on.
+A skipped bundle prints why and the rest of the install carries on. The
+bundles the table does not name are not yet run on 26.04; the table records
+what is known to differ, not what has been exercised there.
 
 ### Ubuntu to Xubuntu migration
 
@@ -275,9 +278,16 @@ through VirtualBox guest control before retrying the SSH checks. During `./test 
 the unattended Xubuntu desktop boot now also forces the ISO straight into the installer
 instead of stopping at the live session.
 
-`--profile=server` runs the same flow against Ubuntu Server 24.04 in its own VM,
+`--profile=server` runs the same flow against Ubuntu Server in its own VM,
 with the server profile and a checklist that asserts no desktop artefact is
 present (`./test -b --profile=server`). See [profiles.md](profiles.md).
+
+`NIKOS_TEST_RELEASE` picks the release: `24.04` (the default, Xubuntu
+24.04.4 and Ubuntu Server 24.04.5) or `26.04` (Xubuntu 26.04.1 and Ubuntu
+Server 26.04.1, in their own VMs `NikOS-test-26.04` and
+`NikOS-test-server-26.04`, with 6144 MB RAM). Any other value is refused.
+`./test --show-config` prints what a run would use without starting it; the
+variables are listed in [development.md](development.md#validating-in-a-vm).
 
 To rebuild the VM from scratch and re-run the full OS + NikOS install flow:
 
@@ -287,4 +297,5 @@ To rebuild the VM from scratch and re-run the full OS + NikOS install flow:
 ./test --build
 ```
 
-**Requirements:** VirtualBox, `curl`, `sshpass`, OpenSSH client tools (`ssh`, `scp`, `ssh-copy-id`), ~4 GB RAM free.
+**Requirements:** VirtualBox, `curl`, `sshpass`, OpenSSH client tools (`ssh`, `scp`, `ssh-copy-id`),
+RAM free for the guest: ~4 GB for a 24.04 run, ~6 GB for a 26.04 one.
