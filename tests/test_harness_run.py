@@ -30,6 +30,7 @@ esac
     # Like the real curl: a 404 exits 22 under -f, and without -f the error page
     # lands in the output file with exit 0. STUB_CURL_RC is a transfer cut short.
     "curl": LOG + """
+if [ -n "${STUB_CURL_MKDIR:-}" ]; then mkdir -p "${STUB_CURL_MKDIR}"; fi
 if [ -n "${STUB_CURL_404:-}" ]; then
   case "$1" in -*f*) exit 22 ;; esac
   echo "<html>404</html>" > "$4"
@@ -255,6 +256,75 @@ def test_the_missing_vm_hint_names_the_release_profile_and_vm(run):
                STUB_VM_EXISTS="0")
     assert r.returncode == 1
     assert "NIKOS_TEST_RELEASE=26.04 ./test -b --profile=server --vm-name=my\\ vm" in r.stderr
+
+
+@pytest.mark.parametrize("args,env", [
+    (("--vm-name=",), {}),
+    (("--vm-name=.",), {}),
+    (("--vm-name=..",), {}),
+    (("--vm-name=a/b",), {}),
+    (("--vm-name=../keep",), {}),
+    ((), {"NIKOS_TEST_VM": ""}),
+    ((), {"NIKOS_TEST_VM": "."}),
+    ((), {"NIKOS_TEST_VM": ".."}),
+    ((), {"NIKOS_TEST_VM": "../keep"}),
+    (("--profile=server",), {"NIKOS_TEST_VM": ""}),
+])
+@pytest.mark.parametrize("mode", [("-b",), ("-b", "--show-config"), ()])
+def test_a_vm_name_that_is_not_one_path_component_is_refused(run, tmp_path, mode, args, env):
+    # HOME is the fixture's scratch directory, so a missed refusal cannot reach a real VM.
+    disk = run.home / "VirtualBox VMs" / "other" / "other.vdi"
+    disk.parent.mkdir(parents=True)
+    disk.touch()
+    keep = run.home / "VirtualBox VMs" / "a" / "b" / "b.vdi"
+    keep.parent.mkdir(parents=True)
+    keep.touch()
+    iso = tmp_path / "custom.iso"
+    iso.write_text("my image")
+    build_env = {"NIKOS_TEST_ISO": str(iso), **BUILD_ENV} if mode and "--show-config" not in mode else {}
+    r, log = run(*mode, *args, **env, **build_env)
+    assert r.returncode == 1
+    assert "VM name must not be empty" in r.stderr
+    assert log == ""
+    assert disk.exists() and keep.exists()
+
+
+def test_a_good_flag_overrides_a_bad_vm_name_from_the_environment(run):
+    r, _ = run("--show-config", "--vm-name=mine", NIKOS_TEST_VM="../keep")
+    assert r.returncode == 0, r.stderr
+    assert "VM_NAME=mine\n" in r.stdout
+
+
+def test_an_empty_given_iso_with_no_url_stops_before_the_wipe(run, tmp_path):
+    iso = tmp_path / "empty.iso"
+    iso.touch()
+    r, log = run("-b", NIKOS_TEST_ISO=str(iso), **BUILD_ENV)
+    assert r.returncode == 1
+    assert "not found or empty" in r.stderr
+    assert not _downloaded(log)
+    assert "unregistervm" not in log
+
+
+@pytest.mark.parametrize("url", [{}, {"NIKOS_TEST_ISO_URL": "https://mirror.example/c.iso"}])
+def test_an_iso_path_that_is_not_a_file_stops_before_the_download_and_the_wipe(run, tmp_path, url):
+    iso = tmp_path / "isodir"
+    iso.mkdir()
+    r, log = run("-b", NIKOS_TEST_ISO=str(iso), **url, **BUILD_ENV)
+    assert r.returncode == 1
+    assert "not a regular file" in r.stderr
+    assert list(iso.iterdir()) == []
+    assert not _downloaded(log)
+    assert "unregistervm" not in log
+
+
+def test_a_directory_appearing_at_the_iso_path_during_the_download_keeps_the_vm(run, tmp_path):
+    iso = tmp_path / "custom.iso"
+    r, log = run("-b", NIKOS_TEST_ISO=str(iso), NIKOS_TEST_ISO_URL="https://mirror.example/c.iso",
+                 STUB_CURL_MKDIR=str(iso), **BUILD_ENV)
+    assert r.returncode == 1
+    assert list(iso.iterdir()) == []
+    assert [p.name for p in tmp_path.glob("custom.iso.part*")] == []
+    assert "unregistervm" not in log
 
 
 def test_a_failed_checklist_item_exits_1(run):

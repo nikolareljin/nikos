@@ -76,12 +76,12 @@ release and the guest's resources come from the environment:
 | Variable | Default | Meaning |
 |---|---|---|
 | `NIKOS_TEST_RELEASE` | `24.04` | `24.04` or `26.04`; anything else is refused |
-| `NIKOS_TEST_VM` | `NikOS-test`, `NikOS-test-server`; on 26.04 with `-26.04` appended | VM name (`--vm-name=` does the same) |
+| `NIKOS_TEST_VM` | `NikOS-test`, `NikOS-test-server`; on 26.04 with `-26.04` appended | VM name (`--vm-name=` does the same); refused if empty, `.`, `..` or containing `/` |
 | `NIKOS_TEST_VM_RAM` | 4096 on 24.04, 6144 on 26.04 | guest RAM in MB |
 | `NIKOS_TEST_VM_CPUS` | 2 | guest CPUs |
 | `NIKOS_TEST_VM_DISK` | 40960 | guest disk in MB |
 | `NIKOS_TEST_ISO` | `~/Downloads/<release ISO>` | ISO for the chosen profile |
-| `NIKOS_TEST_ISO_URL` | the Ubuntu mirror for that ISO | downloaded to the ISO path when the file is missing, or below the size floor set per release and profile in `test`; with `NIKOS_TEST_ISO` and no URL the file must exist and is used as is |
+| `NIKOS_TEST_ISO_URL` | the Ubuntu mirror for that ISO | downloaded to the ISO path when the file is missing, or below the size floor set per release and profile in `test`; with `NIKOS_TEST_ISO` and no URL the file must exist, be non-empty and is used as is; a path that exists and is not a regular file is refused |
 
 The RAM, CPU and disk variables apply only with `-b`, and setting one without it
 is refused: an existing guest keeps its resources. `--show-config` prints what

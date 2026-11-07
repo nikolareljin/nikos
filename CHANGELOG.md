@@ -29,7 +29,9 @@ All notable changes to NikOS are documented here.
   from `NIKOS_TEST_RELEASE`, and exits 1 when a checklist item fails. It refuses
   a non-numeric RAM, CPU or disk value before touching the VM, and refuses those
   settings without `-b`, as it does `NIKOS_TEST_ISO` and `NIKOS_TEST_ISO_URL`.
-  `NIKOS_TEST_ISO` without a URL must exist and is never overwritten. A failed
+  `NIKOS_TEST_ISO` without a URL must exist, be non-empty and is never
+  overwritten. An ISO path that is not a regular file and a VM name that is
+  empty, `.`, `..` or contains `/` are refused. A failed
   or undersized ISO download exits 1 before the VM is removed and leaves any
   existing ISO in place. The missing-VM hint prints the full command, with release,
   profile and VM name. The ISO size floors are set per release.

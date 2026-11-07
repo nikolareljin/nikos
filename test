@@ -15,14 +15,16 @@
 #   NIKOS_TEST_RELEASE      24.04 (default) or 26.04. Selects the ISOs, the
 #                           default RAM and, on 26.04, the default VM name
 #                           (NikOS-test-26.04, NikOS-test-server-26.04)
-#   NIKOS_TEST_VM           VM name (overrides the default for either release)
+#   NIKOS_TEST_VM           VM name (overrides the default for either release);
+#                           refused if empty, ".", ".." or containing "/"
 #   NIKOS_TEST_VM_RAM       MB; default 4096 on 24.04, 6144 on 26.04
 #   NIKOS_TEST_VM_CPUS      default 2
 #   NIKOS_TEST_VM_DISK      MB; default 40960
 #                           Setting any of these three without -b is refused:
 #                           an existing guest keeps the resources it has.
 #   NIKOS_TEST_ISO          path of the ISO for the chosen profile; without
-#                           NIKOS_TEST_ISO_URL it must exist and is used as is
+#                           NIKOS_TEST_ISO_URL it must exist, be non-empty and
+#                           is used as is
 #   NIKOS_TEST_ISO_URL      where to download it from when it is missing
 #                           Setting either of these two without -b is refused:
 #                           only -b installs from an ISO.
@@ -87,7 +89,8 @@ SERVER_ISO_URL="https://releases.ubuntu.com/${NIKOS_TEST_RELEASE}/${SERVER_ISO_N
 # A 26.04 run gets its own VM by default, so it never reuses a 24.04 guest.
 VM_NAME_DEFAULT="NikOS-test"
 [[ "${NIKOS_TEST_RELEASE}" == "24.04" ]] || VM_NAME_DEFAULT="NikOS-test-${NIKOS_TEST_RELEASE}"
-VM_NAME="${NIKOS_TEST_VM:-${VM_NAME_DEFAULT}}"
+# An empty NIKOS_TEST_VM stays empty, so the name check below refuses it.
+VM_NAME="${NIKOS_TEST_VM-${VM_NAME_DEFAULT}}"
 
 SSH_KEY="${HOME}/.ssh/nikos_test_vm"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -131,9 +134,16 @@ case "${PROFILE}" in
     OS_ISO="${SERVER_ISO}"; OS_ISO_URL="${SERVER_ISO_URL}"; OS_LABEL="Ubuntu Server ${NIKOS_TEST_RELEASE}"
     OS_ISO_MIN_BYTES="${SERVER_ISO_MIN_BYTES}"
     # A separate VM by default, so a server run never reuses a desktop guest.
-    [[ "${VM_NAME_SET}" == "true" || -n "${NIKOS_TEST_VM:-}" ]] || VM_NAME="${VM_NAME_DEFAULT/NikOS-test/NikOS-test-server}"
+    [[ "${VM_NAME_SET}" == "true" || -n "${NIKOS_TEST_VM+set}" ]] || VM_NAME="${VM_NAME_DEFAULT/NikOS-test/NikOS-test-server}"
     ;;
   *) printf '[test] ERROR: --profile must be desktop or server, got: %s\n' "${PROFILE}" >&2; exit 1 ;;
+esac
+# -b runs rm -rf on "~/VirtualBox VMs/<name>": an empty name would remove every VM.
+case "${VM_NAME}" in
+  ""|.|..|*/*)
+    printf '[test] ERROR: VM name must not be empty, ".", ".." or contain "/", got: "%s"\n' "${VM_NAME}" >&2
+    exit 1
+    ;;
 esac
 # An explicit ISO wins over the release's default, for the chosen profile.
 OS_ISO="${NIKOS_TEST_ISO:-${OS_ISO}}"
@@ -333,7 +343,7 @@ download_iso() {
   size="$(stat -c%s "${ISO_PARTIAL}")"
   [[ "${size}" -ge "${OS_ISO_MIN_BYTES}" ]] \
     || die "Download from ${OS_ISO_URL} is ${size} bytes, expected at least ${OS_ISO_MIN_BYTES}"
-  mv -f -- "${ISO_PARTIAL}" "${OS_ISO}"
+  mv -fT -- "${ISO_PARTIAL}" "${OS_ISO}"
   trap - EXIT
 }
 
@@ -356,8 +366,9 @@ fi
 if $BUILD; then
 
   # ISO
+  [[ ! -e "${OS_ISO}" || -f "${OS_ISO}" ]] || die "ISO path exists and is not a regular file: ${OS_ISO}"
   if [[ -z "${OS_ISO_URL}" ]]; then
-    [[ -f "${OS_ISO}" ]] || die "NIKOS_TEST_ISO not found: ${OS_ISO} (set NIKOS_TEST_ISO_URL to download it)"
+    [[ -s "${OS_ISO}" ]] || die "NIKOS_TEST_ISO not found or empty: ${OS_ISO} (set NIKOS_TEST_ISO_URL to download it)"
   elif [[ ! -f "${OS_ISO}" ]] || [[ $(stat -c%s "${OS_ISO}") -lt ${OS_ISO_MIN_BYTES} ]]; then
     log "Downloading ${OS_LABEL} ISO..."
     download_iso
