@@ -148,6 +148,8 @@ proves nothing: with `FreeBind=yes` it is listed before the address exists.
 ```bash
 ./test -b                     # Xubuntu 24.04, desktop profile
 ./test -b --profile=server    # Ubuntu Server 24.04, server profile
+NIKOS_TEST_RELEASE=26.04 ./test -b                     # Xubuntu 26.04
+NIKOS_TEST_RELEASE=26.04 ./test -b --profile=server    # Ubuntu Server 26.04
 ```
 
 The server run uses its own VM (`NikOS-test-server`) and checklist, which

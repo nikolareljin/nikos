@@ -6,8 +6,21 @@
 #   ./test -b               # rebuild: recreate VM + reinstall OS + run NikOS
 #   ./test --build          # same as -b
 #   ./test --vm-name=myvm   # override VM name
-#   ./test --profile=server # Ubuntu Server 24.04 + the server profile and its
+#   ./test --profile=server # Ubuntu Server + the server profile and its
 #                           # checklist (default VM name NikOS-test-server)
+#   ./test --show-config    # print the resolved release, VM and ISO settings
+#                           # and exit; nothing is checked or started
+#
+# Environment:
+#   NIKOS_TEST_RELEASE      24.04 (default) or 26.04. Selects the ISOs, the
+#                           default RAM and, on 26.04, the default VM name
+#                           (NikOS-test-26.04, NikOS-test-server-26.04)
+#   NIKOS_TEST_VM           VM name (overrides the default for either release)
+#   NIKOS_TEST_VM_RAM       MB; default 4096 on 24.04, 6144 on 26.04
+#   NIKOS_TEST_VM_CPUS      default 2
+#   NIKOS_TEST_VM_DISK      MB; default 40960
+#   NIKOS_TEST_ISO          path of the ISO for the chosen profile
+#   NIKOS_TEST_ISO_URL      where to download it from when it is missing
 #
 # -b pauses once after OS install so you can type the VM password
 # into ssh-copy-id (sets up key-based auth for all subsequent steps).
@@ -17,19 +30,44 @@
 set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
-VM_NAME="${NIKOS_TEST_VM:-NikOS-test}"
-VM_RAM=4096
-VM_CPUS=2
-VM_DISK=40960        # MB
+NIKOS_TEST_RELEASE="${NIKOS_TEST_RELEASE:-24.04}"
+# Keep in step with the releases install.sh accepts. The ISO names are point
+# releases, so they change on purpose, by hand, when a new one is published.
+case "${NIKOS_TEST_RELEASE}" in
+  24.04)
+    DEFAULT_VM_RAM=4096
+    XUBUNTU_ISO_NAME="xubuntu-24.04.4-desktop-amd64.iso"
+    SERVER_ISO_NAME="ubuntu-24.04.5-live-server-amd64.iso"
+    ;;
+  26.04)
+    # Ubuntu Desktop 26.04 asks for 6 GB.
+    DEFAULT_VM_RAM=6144
+    XUBUNTU_ISO_NAME="xubuntu-26.04.1-desktop-amd64.iso"
+    SERVER_ISO_NAME="ubuntu-26.04.1-live-server-amd64.iso"
+    ;;
+  *)
+    printf '[test] ERROR: NIKOS_TEST_RELEASE must be 24.04 or 26.04, got: %s\n' "${NIKOS_TEST_RELEASE}" >&2
+    exit 1
+    ;;
+esac
+
+VM_RAM="${NIKOS_TEST_VM_RAM:-${DEFAULT_VM_RAM}}"
+VM_CPUS="${NIKOS_TEST_VM_CPUS:-2}"
+VM_DISK="${NIKOS_TEST_VM_DISK:-40960}"        # MB
 VM_SSH_PORT=2222
 VM_USER="nikos"
 VM_PASS="nikos"
 VM_HOST="nikos-test-vm.local"
 
-XUBUNTU_ISO="${HOME}/Downloads/xubuntu-24.04.4-desktop-amd64.iso"
-XUBUNTU_ISO_URL="https://cdimage.ubuntu.com/xubuntu/releases/24.04/release/xubuntu-24.04.4-desktop-amd64.iso"
-SERVER_ISO="${HOME}/Downloads/ubuntu-24.04.5-live-server-amd64.iso"
-SERVER_ISO_URL="https://releases.ubuntu.com/24.04/ubuntu-24.04.5-live-server-amd64.iso"
+XUBUNTU_ISO="${HOME}/Downloads/${XUBUNTU_ISO_NAME}"
+XUBUNTU_ISO_URL="https://cdimage.ubuntu.com/xubuntu/releases/${NIKOS_TEST_RELEASE}/release/${XUBUNTU_ISO_NAME}"
+SERVER_ISO="${HOME}/Downloads/${SERVER_ISO_NAME}"
+SERVER_ISO_URL="https://releases.ubuntu.com/${NIKOS_TEST_RELEASE}/${SERVER_ISO_NAME}"
+
+# A 26.04 run gets its own VM by default, so it never reuses a 24.04 guest.
+VM_NAME_DEFAULT="NikOS-test"
+[[ "${NIKOS_TEST_RELEASE}" == "24.04" ]] || VM_NAME_DEFAULT="NikOS-test-${NIKOS_TEST_RELEASE}"
+VM_NAME="${NIKOS_TEST_VM:-${VM_NAME_DEFAULT}}"
 
 SSH_KEY="${HOME}/.ssh/nikos_test_vm"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,28 +80,48 @@ SOURCE_DIR_REMOTE="/home/${VM_USER}/.local/share/nikos"
 BUILD=false
 PROFILE="desktop"
 VM_NAME_SET=false
+SHOW_CONFIG=false
 
 for arg in "$@"; do
   case "$arg" in
-    -b|--build)   BUILD=true ;;
-    --vm-name=*)  VM_NAME="${arg#--vm-name=}"; VM_NAME_SET=true ;;
-    --profile=*)  PROFILE="${arg#--profile=}" ;;
+    -b|--build)     BUILD=true ;;
+    --vm-name=*)    VM_NAME="${arg#--vm-name=}"; VM_NAME_SET=true ;;
+    --profile=*)    PROFILE="${arg#--profile=}" ;;
+    --show-config)  SHOW_CONFIG=true ;;
+    *) printf '[test] ERROR: unknown argument: %s\n' "${arg}" >&2; exit 1 ;;
   esac
 done
 
 case "${PROFILE}" in
   desktop)
-    OS_ISO="${XUBUNTU_ISO}"; OS_ISO_URL="${XUBUNTU_ISO_URL}"; OS_LABEL="Xubuntu 24.04"
+    OS_ISO="${XUBUNTU_ISO}"; OS_ISO_URL="${XUBUNTU_ISO_URL}"; OS_LABEL="Xubuntu ${NIKOS_TEST_RELEASE}"
     OS_ISO_MIN_BYTES=1000000000
     ;;
   server)
-    OS_ISO="${SERVER_ISO}"; OS_ISO_URL="${SERVER_ISO_URL}"; OS_LABEL="Ubuntu Server 24.04"
+    OS_ISO="${SERVER_ISO}"; OS_ISO_URL="${SERVER_ISO_URL}"; OS_LABEL="Ubuntu Server ${NIKOS_TEST_RELEASE}"
     OS_ISO_MIN_BYTES=500000000
     # A separate VM by default, so a server run never reuses a desktop guest.
-    [[ "${VM_NAME_SET}" == "true" || -n "${NIKOS_TEST_VM:-}" ]] || VM_NAME="NikOS-test-server"
+    [[ "${VM_NAME_SET}" == "true" || -n "${NIKOS_TEST_VM:-}" ]] || VM_NAME="${VM_NAME_DEFAULT/NikOS-test/NikOS-test-server}"
     ;;
   *) printf '[test] ERROR: --profile must be desktop or server, got: %s\n' "${PROFILE}" >&2; exit 1 ;;
 esac
+# An explicit ISO wins over the release's default, for the chosen profile.
+OS_ISO="${NIKOS_TEST_ISO:-${OS_ISO}}"
+OS_ISO_URL="${NIKOS_TEST_ISO_URL:-${OS_ISO_URL}}"
+
+if [[ "${SHOW_CONFIG}" == "true" ]]; then
+  printf '%s=%s\n' \
+    RELEASE "${NIKOS_TEST_RELEASE}" \
+    PROFILE "${PROFILE}" \
+    VM_NAME "${VM_NAME}" \
+    VM_RAM "${VM_RAM}" \
+    VM_CPUS "${VM_CPUS}" \
+    VM_DISK "${VM_DISK}" \
+    OS_LABEL "${OS_LABEL}" \
+    OS_ISO "${OS_ISO}" \
+    OS_ISO_URL "${OS_ISO_URL}"
+  exit 0
+fi
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 log() { printf '\n[test] %s\n' "$*"; }
@@ -411,5 +469,8 @@ done
 
 hr
 log "Results: ${pass} passed, ${fail} failed"
-[[ $fail -eq 0 ]] && log "All checks passed — NikOS is good." \
-                  || log "Some checks failed — review output above."
+if [[ $fail -eq 0 ]]; then
+  log "All checks passed — NikOS is good."
+else
+  log "Some checks failed — review output above."
+fi

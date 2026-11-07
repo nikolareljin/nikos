@@ -1224,6 +1224,35 @@ _nikos_var() {
   printf '%s\n' "${default}"
 }
 
+# _os_release_value <KEY>
+#
+# One value from /etc/os-release (NIKOS_OS_RELEASE_FILE overrides the path,
+# as in install.sh). Quotes, CR and surrounding spaces are stripped; a last
+# line without a newline still counts. Returns 1 when the key is absent.
+_os_release_value() {
+  local key="$1" file="${NIKOS_OS_RELEASE_FILE:-/etc/os-release}"
+  local line name value
+
+  [[ -r "${file}" ]] || return 1
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    [[ "${line}" == *=* ]] || continue
+    name="${line%%=*}"
+    name="${name//[[:space:]]/}"
+    [[ "${name}" == "${key}" ]] || continue
+    value="${line#*=}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    if [[ "${value}" == \"*\" || "${value}" == \'*\' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+    printf '%s\n' "${value}"
+    return 0
+  done < "${file}"
+
+  return 1
+}
+
 # The URL clients should use for Ollama on this machine.
 _ollama_endpoint() {
   if [[ "$(_nikos_var nikos_ollama_mode local)" == "remote" ]]; then
@@ -1579,9 +1608,37 @@ cmd_doctor() {
       print_warn "No Ollama forwarder on the Docker bridge: containers cannot reach the local Ollama. Run: nikos update"
     fi
   }
+  # The release, before anything else: every later line is read against it.
+  # Outside the supported list the result is a warning, not a failure: doctor
+  # reports what is there, and `nikos update` cannot change the release.
+  _doctor_os() {
+    local os_id version_id pretty codename
+    os_id="$(_os_release_value ID || true)"
+    version_id="$(_os_release_value VERSION_ID || true)"
+    pretty="$(_os_release_value PRETTY_NAME || true)"
+    codename="$(_os_release_value VERSION_CODENAME || _os_release_value UBUNTU_CODENAME || true)"
+    if [[ -z "${os_id}" && -z "${version_id}" ]]; then
+      print_warn "OS: ${NIKOS_OS_RELEASE_FILE:-/etc/os-release} is unreadable or names no ID and VERSION_ID; the release could not be checked"
+      return 0
+    fi
+    print_info "OS: ${pretty:-${os_id} ${version_id}} (ID=${os_id:-?} VERSION_ID=${version_id:-?} codename=${codename:-?})"
+    # Keep in step with install.sh and nikos_ubuntu_releases in vars/main.yml.
+    local supported=no
+    if [[ "${os_id}" == "ubuntu" ]]; then
+      case "${version_id}" in
+        22.04|24.04|26.04) supported=yes ;;
+      esac
+    fi
+    if [[ "${supported}" == "yes" ]]; then
+      print_success "Ubuntu ${version_id} is a supported release"
+    else
+      print_warn "${os_id:-?} ${version_id:-?} is not a supported release (Ubuntu or Xubuntu 22.04, 24.04 or 26.04 LTS); the checks below may not apply"
+    fi
+  }
   local profile
   profile="$(_nikos_var nikos_profile desktop)"
   print_info "NikOS Doctor — checking system health (profile: ${profile})..."
+  _doctor_os
   check "ansible installed" command -v ansible-playbook
   check "dialog installed" command -v dialog
   check "gh CLI installed" command -v gh

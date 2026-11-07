@@ -14,11 +14,29 @@ RELEASES = MAIN["nikos_ubuntu_releases"]
 CODENAMES = {"22.04": "jammy", "24.04": "noble", "26.04": "resolute"}
 
 
-def test_installer_accepts_exactly_the_releases_the_vars_describe():
-    text = (REPO / "install.sh").read_text(encoding="utf-8")
+def _release_case(script: str) -> list[str]:
+    """The `case "${version_id}" in 22.04|24.04|26.04)` list a script accepts."""
+    text = (REPO / script).read_text(encoding="utf-8")
     m = re.search(r'case "\$\{version_id\}" in\n\s*([0-9.|]+)\)', text)
-    assert m, "release case statement not found in install.sh"
-    assert sorted(m.group(1).split("|")) == sorted(RELEASES)
+    assert m, f"release case statement not found in {script}"
+    return sorted(m.group(1).split("|"))
+
+
+def test_installer_accepts_exactly_the_releases_the_vars_describe():
+    assert _release_case("install.sh") == sorted(RELEASES)
+
+
+def test_doctor_names_exactly_the_releases_the_installer_accepts():
+    assert _release_case("scripts/nikos") == _release_case("install.sh") == sorted(RELEASES)
+
+
+def test_the_harness_runs_only_releases_the_installer_accepts():
+    text = (REPO / "test").read_text(encoding="utf-8")
+    m = re.search(r'case "\$\{NIKOS_TEST_RELEASE\}" in\n(.*?)\nesac', text, re.S)
+    assert m, "release case statement not found in test"
+    harness = sorted(re.findall(r"^\s*([0-9]+\.[0-9]+)\)", m.group(1), re.M))
+    assert harness == ["24.04", "26.04"]
+    assert set(harness) <= set(RELEASES)
 
 
 def test_every_release_names_every_package_key():
