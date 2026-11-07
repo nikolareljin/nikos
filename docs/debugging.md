@@ -9,6 +9,9 @@ nikos doctor
 ```
 
 It checks:
+- the release from `/etc/os-release` (`ID`, `VERSION_ID`, `PRETTY_NAME`, the
+  codename). Ubuntu 22.04, 24.04 and 26.04 pass; anything else is a warning,
+  not a failure
 - ansible, dialog, gh, tmux, Ollama, VS Code, distrodeck, conda, Claude Code, Gemini CLI
 - llama.cpp, shell-gpt, glances, and mkcert when present
 - Nordic GTK theme files
@@ -306,6 +309,33 @@ checkout onto a branch by hand:
 ```bash
 git -C ~/.local/share/nikos switch --track origin/main
 ```
+
+### Ubuntu 26.04: sudo-rs and chrony
+
+26.04 ships sudo-rs as `sudo`. It prints the password prompt as
+`[sudo: <prompt>] Password:`, which the builtin Ansible sudo plugin does not
+recognise on the ansible-core 26.04 ships (2.20.1), so a task waits for the
+prompt until it times out: `Timed out waiting for become success or become
+password prompt` (exit 4). `ansible.cfg` selects
+`plugins/become/nikos_sudo.py`, which accepts both prompt forms. The file
+applies only when `ansible-playbook` runs from the checkout; from another
+directory set `ANSIBLE_CONFIG=~/.local/share/nikos/ansible.cfg`. To confirm
+the plugin is in use:
+
+```bash
+cd ~/.local/share/nikos && ansible-config dump --only-changed | grep -i become
+```
+
+A new 26.04 install ships `chrony` instead of `systemd-timesyncd`. The `base`
+role turns NTP on through `timedatectl`, which needs a time daemon systemd
+can drive. `timedatectl show --property=CanNTP` answering `no` means none is
+installed (a minimal install, `--no-install-recommends`, or `apt remove
+chrony`). The role installs `chrony` on 26.04 when it finds none, and `nikos
+doctor` warns until one is there; `nikos update` or `sudo apt install chrony`
+puts it back.
+
+`nikos doctor` prints the release on its first lines (`OS:` and the
+supported-release line), so a report from a 26.04 machine says so.
 
 ### Checking which version is installed
 
