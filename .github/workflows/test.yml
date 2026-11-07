@@ -32,6 +32,10 @@ jobs:
         ansible-playbook --version
         bash scripts/install-collections.sh requirements.yml
         ANSIBLE_FORCE_COLOR=1 ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education
+        # Same check as a server: the core roles run with nikos_profile=server
+        # and the desktop roles are skipped by site.yml, not by a tag
+        # (https://github.com/nikolareljin/nikos/issues/67).
+        ANSIBLE_FORCE_COLOR=1 ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education -e nikos_profile=server
         # Become with a password through real sudo-rs, the default sudo on a
         # 26.04 desktop (https://github.com/nikolareljin/nikos/issues/35).
         if [ "${{ matrix.runner }}" = "ubuntu-26.04" ]; then

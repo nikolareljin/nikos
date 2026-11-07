@@ -36,6 +36,12 @@ All notable changes to NikOS are documented here.
   existing ISO in place. A missing ISO directory (`~/Downloads` by default)
   is created before the download. The missing-VM hint prints the full command, with release,
   profile and VM name. The ISO size floors are set per release.
+- CI check-runs `site.yml` a second time on every release with
+  `-e nikos_profile=server`, so the core roles are exercised under the server
+  profile and the desktop roles are shown to be skipped by `site.yml`
+  (https://github.com/nikolareljin/nikos/issues/67). Before, only the desktop
+  profile was checked. `tests/test_profiles.py` fails when either run is
+  missing from `.github/workflows/test.yml`.
 
 ### Changed
 - `docs/install.md`, `docs/development.md`, `docs/profiles.md` and

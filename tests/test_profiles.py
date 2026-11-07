@@ -244,3 +244,41 @@ def test_nikos_add_refuses_a_desktop_bundle_on_a_server(tmp_path: Path, bundle: 
     assert result.returncode == 1, out
     assert "desktop bundle" in out and "vars/local.yml" in out, out
     assert "Installing optional bundle" not in out, out
+
+
+def _ci_check_runs() -> list[str]:
+    """Every `ansible-playbook site.yml ... --check` line in the CI workflow."""
+    workflow = yaml.safe_load(
+        (REPO / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+    )
+    lines: list[str] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+        elif isinstance(node, str):
+            for line in node.splitlines():
+                line = line.strip()
+                # A commented-out run is not a run.
+                if line.startswith("#"):
+                    continue
+                if "ansible-playbook site.yml" in line and "--check" in line:
+                    lines.append(line)
+
+    walk(workflow)
+    return lines
+
+
+def test_ci_check_runs_the_playbook_as_a_desktop_and_as_a_server() -> None:
+    """Without the server run the core roles are never checked under that profile."""
+    runs = _ci_check_runs()
+    server = [r for r in runs if "nikos_profile=server" in r]
+    desktop = [r for r in runs if "nikos_profile=" not in r]
+    assert len(server) == 1, runs
+    assert len(desktop) == 1, runs
+    skip = re.compile(r"--skip-tags\s+(\S+)")
+    assert skip.search(server[0]).group(1) == skip.search(desktop[0]).group(1), runs
