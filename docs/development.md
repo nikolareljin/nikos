@@ -6,6 +6,8 @@
 nikos/
 ├── install.sh                      # bootstrap: installs Ansible, clones repo, runs ansible-playbook
 ├── site.yml                        # top-level playbook — ordered roles
+├── ansible.cfg                     # roles path, become method; applies when run from the repo root
+├── plugins/become/nikos_sudo.py    # builtin sudo become plugin plus the sudo-rs password prompt
 ├── vars/main.yml                   # tracked defaults
 ├── vars/versions.yml               # every pinned external version, sha256, commit, key fingerprint
 ├── vars/local.yml                  # untracked local overrides (optional)

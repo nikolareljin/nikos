@@ -32,6 +32,11 @@ jobs:
         ansible-playbook --version
         bash scripts/install-collections.sh requirements.yml
         ANSIBLE_FORCE_COLOR=1 ansible-playbook site.yml -i inventory/local --check --skip-tags network,music,education
+        # Become with a password through real sudo-rs, the default sudo on a
+        # 26.04 desktop (https://github.com/nikolareljin/nikos/issues/35).
+        if [ "${{ matrix.runner }}" = "ubuntu-26.04" ]; then
+          NIKOS_MACHINE_SUDO_RS=1 bash tests/machine/become_sudo_rs.sh
+        fi
 
   # The ruleset on main requires a check named "check-playbook / ci". The matrix
   # legs report as "check-playbook (ubuntu-24.04) / ci", so nothing ever reported
