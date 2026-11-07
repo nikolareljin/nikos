@@ -35,6 +35,23 @@ All notable changes to NikOS are documented here.
   prompt, and an authentication failure says so.
 
 ### Fixed
+- The `base` role no longer stops the playbook with `Failed to set ntp: NTP
+  not supported`. That line means systemd has no time sync unit to drive:
+  Ubuntu 22.04 and 24.04 get `systemd-timesyncd` only as a Recommends of
+  systemd, and 25.10 and later ship `chrony` instead, so a minimal install or
+  an `apt remove chrony` leaves none. The role now asks `timedatectl` for
+  `CanNTP` first, installs the daemon the release ships when the answer is no
+  (`systemd-timesyncd` before 25.10, `chrony` from 25.10), stops
+  `systemd-timedated` so it reads the new unit list (it reads
+  `ntp-units.d` once, at start), and then turns NTP on. Nothing is installed
+  next to another time daemon such as ntpsec, which every one of them
+  conflicts with. A container, where neither unit can run, gets no package;
+  with `CanNTP=no` it gets one note in the output, and with `CanNTP=yes` there
+  is no note and `nikos doctor` warns. Any other `set-ntp` error still fails
+  the run.
+  An image build skips the step. `nikos doctor` checks that NTP is on and
+  warns, without failing, in a container running systemd and on a host where
+  systemd has no NTP unit to drive, naming any installed time-daemon package.
 - `nikos setup`, `update`, `add` and `install.sh` failed at Gathering Facts on
   Ubuntu 26.04 with "Timed out waiting for become success or become password
   prompt" (exit 4). sudo-rs, the default sudo there, prints the password

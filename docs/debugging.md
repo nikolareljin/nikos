@@ -14,6 +14,7 @@ It checks:
 - Nordic GTK theme files
 - Papirus icon files
 - Git setup wizard completion flag
+- NTP time sync is on. These get a warning, not a failure: NTP off in a container running systemd, and a host where systemd has no NTP unit to drive (the warning names any installed time-daemon package)
 
 Any `[!!]` items indicate missing or broken components. Run `nikos update` to attempt repair.
 

@@ -115,9 +115,100 @@
     name: "{{ nikos_timezone }}"
     hwclock: UTC
 
+# `timedatectl set-ntp true` answers "NTP not supported" when no unit listed
+# under /usr/lib/systemd/ntp-units.d is loaded; its CanNTP property is that
+# same test. Ubuntu 22.04 and 24.04 get systemd-timesyncd only as a Recommends
+# of systemd, and 25.10 and later ship chrony instead, so a minimal install, a
+# `--no-install-recommends` one, or one where `apt remove chrony` ran has no
+# time daemon at all. Install the one this release ships, then enable NTP.
+# On 24.04 ntpsec and openntpd keep the clock without an ntp-units.d entry
+# (26.04's ntpsec ships one), and every time daemon conflicts with the others,
+# so nothing is installed next to one.
+# A container cannot run either unit (ConditionVirtualization=!container), so
+# it gets no package. With CanNTP=no it gets a note instead of a failed
+# playbook. With CanNTP=yes (a daemon package already there) set-ntp exits 0,
+# NTP stays no, there is no note, and `nikos doctor` warns.
 - name: Enable NTP time synchronization
-  ansible.builtin.command: timedatectl set-ntp true
-  changed_when: false
+  when: not (nikos_image_build | default(false) | bool)
+  vars:
+    base_time_daemon: >-
+      {{ 'chrony' if ansible_facts.distribution_version is version('25.10', '>=')
+         else 'systemd-timesyncd' }}
+    base_in_container: >-
+      {{ 'container' in (ansible_facts.virtualization_tech_guest | default([])) }}
+  block:
+    - name: Ask systemd whether a time sync service is available
+      ansible.builtin.command: timedatectl show --property=CanNTP --value
+      register: base_can_ntp
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: List the installed packages that provide a time daemon
+      ansible.builtin.shell: >-
+        set -o pipefail;
+        dpkg-query -W -f='${Package} ${Status}\t${Provides}\n'
+        | awk -F'\t' '$1 ~ / installed$/ && $2 ~ /(^|[ ,])time-daemon($|[ ,(])/ { sub(/ .*/, "", $1); print $1 }'
+      args:
+        executable: /bin/bash
+      register: base_time_daemons
+      changed_when: false
+      check_mode: false
+
+    - name: Install the time sync service this Ubuntu release ships
+      ansible.builtin.apt:
+        name: "{{ base_time_daemon }}"
+        state: present
+      register: base_time_daemon_install
+      when:
+        - base_can_ntp.rc == 0
+        - (base_can_ntp.stdout | trim) != 'yes'
+        - base_time_daemons.stdout_lines | length == 0
+        - not (base_in_container | bool)
+
+    # systemd-timedated reads ntp-units.d once, when it starts, and the
+    # timezone task above started it. Stopped here, it comes back on the next
+    # timedatectl call (D-Bus activation) with the new unit in its list. Not a
+    # handler: it has to run before the set-ntp call below, not at play end.
+    - name: Stop timedated so it picks up the new time sync unit
+      ansible.builtin.systemd:
+        name: systemd-timedated.service
+        state: stopped
+      when: base_time_daemon_install is not skipped
+
+    - name: Turn NTP on
+      ansible.builtin.command: timedatectl set-ntp true
+      register: base_set_ntp
+      changed_when: false
+      failed_when:
+        - base_set_ntp.rc != 0
+        - "'NTP not supported' not in (base_set_ntp.stderr | default(''))"
+
+    - name: Report that timedatectl cannot turn NTP on
+      ansible.builtin.debug:
+        msg: "{{ base_ntp_off_note }}"
+      vars:
+        base_ntp_daemon_note: >-
+          {{ base_time_daemons.stdout_lines | join(', ') }} is installed; systemd
+          loads no unit for it (masked, or no /usr/lib/systemd/ntp-units.d entry).
+        base_ntp_container_note: >-
+          No time sync service can run on this host (a container). On a machine
+          that can run one, `apt install {{ base_time_daemon }}` and
+          `timedatectl set-ntp true` turn it on.
+        base_ntp_installed_note: >-
+          {{ base_time_daemon }} is installed, but systemd still loads no unit
+          for it (masked, or no /usr/lib/systemd/ntp-units.d entry).
+        base_ntp_not_installed_note: >-
+          systemd loads no time sync unit on this host. `apt install
+          {{ base_time_daemon }}` and `timedatectl set-ntp true` turn it on.
+        base_ntp_off_note: >-
+          timedatectl cannot turn NTP on here ({{ base_set_ntp.stderr | trim }}),
+          so NTP stays off.
+          {{ base_ntp_daemon_note if base_time_daemons.stdout_lines | length > 0
+             else base_ntp_container_note if base_in_container | bool
+             else base_ntp_installed_note if base_time_daemon_install is not skipped
+             else base_ntp_not_installed_note }}
+      when: (base_set_ntp.rc | default(0)) != 0
 
 - name: Set locale
   community.general.locale_gen:
