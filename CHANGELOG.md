@@ -33,7 +33,8 @@ All notable changes to NikOS are documented here.
   overwritten. An ISO path that is not a regular file and a VM name that is
   empty, `.`, `..` or contains `/` are refused. A failed
   or undersized ISO download exits 1 before the VM is removed and leaves any
-  existing ISO in place. The missing-VM hint prints the full command, with release,
+  existing ISO in place. A missing ISO directory (`~/Downloads` by default)
+  is created before the download. The missing-VM hint prints the full command, with release,
   profile and VM name. The ISO size floors are set per release.
 
 ### Changed

@@ -337,6 +337,8 @@ remove_iso_partial() { rm -f -- "${ISO_PARTIAL}"; }
 
 download_iso() {
   local size
+  mkdir -p -- "$(dirname -- "${OS_ISO}")" \
+    || die "Cannot create ISO directory: $(dirname -- "${OS_ISO}")"
   trap remove_iso_partial EXIT
   curl -fL "${OS_ISO_URL}" -o "${ISO_PARTIAL}" --progress-bar \
     || die "Download failed: ${OS_ISO_URL}"

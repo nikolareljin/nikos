@@ -227,6 +227,24 @@ def test_a_good_download_replaces_the_short_iso_before_the_wipe(run):
     assert [p.name for p in run.home.glob("Downloads/*.part*")] == []
 
 
+def test_a_missing_downloads_directory_is_created_for_the_download(run):
+    shutil.rmtree(run.home / "Downloads")
+    r, log = run("-b", STUB_CURL_BYTES="1000000000", **BUILD_ENV)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _default_iso(run).stat().st_size == 1000000000
+
+
+def test_an_iso_directory_that_cannot_be_created_stops_before_the_wipe(run, tmp_path):
+    (tmp_path / "blocker").write_text("a file, not a directory")
+    iso = tmp_path / "blocker" / "sub" / "custom.iso"
+    r, log = run("-b", NIKOS_TEST_ISO=str(iso), NIKOS_TEST_ISO_URL="https://mirror.example/c.iso",
+                 **BUILD_ENV)
+    assert r.returncode == 1
+    assert "Cannot create ISO directory" in r.stderr
+    assert not _downloaded(log)
+    assert "unregistervm" not in log
+
+
 @pytest.mark.parametrize("variable", ["NIKOS_TEST_ISO", "NIKOS_TEST_ISO_URL"])
 @pytest.mark.parametrize("args", [(), ("--show-config",)])
 def test_an_iso_setting_without_build_is_refused(run, variable, args):
