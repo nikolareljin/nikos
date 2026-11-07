@@ -4,6 +4,8 @@ All notable changes to NikOS are documented here.
 
 ## Unreleased
 
+## [1.6.0] - 2026-11-06
+
 ### Added
 - Bare `nikos` on a terminal opens a `dialog` menu of the commands (all but
   `help` and `hooks export|import`). It asks for any argument, confirms
@@ -33,6 +35,11 @@ All notable changes to NikOS are documented here.
   can be answered, and when the ssh command contains a `#`. A boxed sync that
   needs credentials fails instead of prompting; `NIKOS_USE_DIALOG=0` allows the
   prompt, and an authentication failure says so.
+- script-helpers submodule 0.60.0 -> 0.61.2. The hooks that `nikos hooks`
+  installs get the fixed `refresh_private_names.sh` (it no longer runs the
+  owner list as a command, and an owner that is not a GitHub login is
+  refused) and a `check_private_names.sh` that still checks an allowed word
+  when it appears as a repository reference.
 
 ### Fixed
 - The `base` role no longer stops the playbook with `Failed to set ntp: NTP
