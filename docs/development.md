@@ -81,7 +81,13 @@ release and the guest's resources come from the environment:
 | `NIKOS_TEST_VM_CPUS` | 2 | guest CPUs |
 | `NIKOS_TEST_VM_DISK` | 40960 | guest disk in MB |
 | `NIKOS_TEST_ISO` | `~/Downloads/<release ISO>` | ISO for the chosen profile |
-| `NIKOS_TEST_ISO_URL` | the Ubuntu mirror for that ISO | downloaded to `NIKOS_TEST_ISO` when it is missing or truncated |
+| `NIKOS_TEST_ISO_URL` | the Ubuntu mirror for that ISO | downloaded to the ISO path when the file is missing or below the size floor set per release and profile in `test`; with `NIKOS_TEST_ISO` and no URL the file must exist and is used as is |
+
+The RAM, CPU and disk variables apply only with `-b`, and setting one without it
+is refused: an existing guest keeps its resources. `--show-config` prints what
+`-b` would use. Each of the three must be a positive whole number. A run stops
+before the installer if the guest's `VERSION_ID` differs from
+`NIKOS_TEST_RELEASE`, and exits 1 if a checklist item fails.
 
 The ISOs are point releases, named in `test`: `xubuntu-24.04.4-desktop-amd64.iso`
 and `ubuntu-24.04.5-live-server-amd64.iso` for 24.04,
@@ -97,7 +103,8 @@ NIKOS_TEST_RELEASE=26.04 NIKOS_TEST_VM_RAM=8192 ./test -b --profile=server
 ```
 
 `tests/test_harness_config.py` checks the resolved settings through
-`--show-config`. What the guest does after that (the unattended install, the
+`--show-config`, and `tests/test_harness_run.py` drives the harness against stub
+`VBoxManage` and `ssh` commands. What the guest does after that (the unattended install, the
 desktop, the checklist) is only known from a real run.
 
 ## Pinned versions

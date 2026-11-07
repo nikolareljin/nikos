@@ -19,7 +19,10 @@
 #   NIKOS_TEST_VM_RAM       MB; default 4096 on 24.04, 6144 on 26.04
 #   NIKOS_TEST_VM_CPUS      default 2
 #   NIKOS_TEST_VM_DISK      MB; default 40960
-#   NIKOS_TEST_ISO          path of the ISO for the chosen profile
+#                           Setting any of these three without -b is refused:
+#                           an existing guest keeps the resources it has.
+#   NIKOS_TEST_ISO          path of the ISO for the chosen profile; without
+#                           NIKOS_TEST_ISO_URL it must exist and is used as is
 #   NIKOS_TEST_ISO_URL      where to download it from when it is missing
 #
 # -b pauses once after OS install so you can type the VM password
@@ -36,12 +39,16 @@ NIKOS_TEST_RELEASE="${NIKOS_TEST_RELEASE:-24.04}"
 case "${NIKOS_TEST_RELEASE}" in
   24.04)
     DEFAULT_VM_RAM=4096
+    DESKTOP_ISO_MIN_BYTES=1000000000
+    SERVER_ISO_MIN_BYTES=500000000
     XUBUNTU_ISO_NAME="xubuntu-24.04.4-desktop-amd64.iso"
     SERVER_ISO_NAME="ubuntu-24.04.5-live-server-amd64.iso"
     ;;
   26.04)
     # Ubuntu Desktop 26.04 asks for 6 GB.
     DEFAULT_VM_RAM=6144
+    DESKTOP_ISO_MIN_BYTES=5000000000
+    SERVER_ISO_MIN_BYTES=2800000000
     XUBUNTU_ISO_NAME="xubuntu-26.04.1-desktop-amd64.iso"
     SERVER_ISO_NAME="ubuntu-26.04.1-live-server-amd64.iso"
     ;;
@@ -54,6 +61,17 @@ esac
 VM_RAM="${NIKOS_TEST_VM_RAM:-${DEFAULT_VM_RAM}}"
 VM_CPUS="${NIKOS_TEST_VM_CPUS:-2}"
 VM_DISK="${NIKOS_TEST_VM_DISK:-40960}"        # MB
+
+# Refused here because -b removes the old VM before VBoxManage sees these values.
+require_positive_int() {
+  [[ "$2" =~ ^[1-9][0-9]*$ ]] && return 0
+  printf '[test] ERROR: %s must be a positive whole number, got: %s\n' "$1" "$2" >&2
+  exit 1
+}
+require_positive_int NIKOS_TEST_VM_RAM "${VM_RAM}"
+require_positive_int NIKOS_TEST_VM_CPUS "${VM_CPUS}"
+require_positive_int NIKOS_TEST_VM_DISK "${VM_DISK}"
+
 VM_SSH_PORT=2222
 VM_USER="nikos"
 VM_PASS="nikos"
@@ -92,14 +110,20 @@ for arg in "$@"; do
   esac
 done
 
+# Only -b applies these, so --show-config must not state them for an existing guest.
+if [[ "${BUILD}" != "true" && -n "${NIKOS_TEST_VM_RAM:-}${NIKOS_TEST_VM_CPUS:-}${NIKOS_TEST_VM_DISK:-}" ]]; then
+  printf '[test] ERROR: NIKOS_TEST_VM_RAM, NIKOS_TEST_VM_CPUS and NIKOS_TEST_VM_DISK apply only with -b\n' >&2
+  exit 1
+fi
+
 case "${PROFILE}" in
   desktop)
     OS_ISO="${XUBUNTU_ISO}"; OS_ISO_URL="${XUBUNTU_ISO_URL}"; OS_LABEL="Xubuntu ${NIKOS_TEST_RELEASE}"
-    OS_ISO_MIN_BYTES=1000000000
+    OS_ISO_MIN_BYTES="${DESKTOP_ISO_MIN_BYTES}"
     ;;
   server)
     OS_ISO="${SERVER_ISO}"; OS_ISO_URL="${SERVER_ISO_URL}"; OS_LABEL="Ubuntu Server ${NIKOS_TEST_RELEASE}"
-    OS_ISO_MIN_BYTES=500000000
+    OS_ISO_MIN_BYTES="${SERVER_ISO_MIN_BYTES}"
     # A separate VM by default, so a server run never reuses a desktop guest.
     [[ "${VM_NAME_SET}" == "true" || -n "${NIKOS_TEST_VM:-}" ]] || VM_NAME="${VM_NAME_DEFAULT/NikOS-test/NikOS-test-server}"
     ;;
@@ -108,6 +132,9 @@ esac
 # An explicit ISO wins over the release's default, for the chosen profile.
 OS_ISO="${NIKOS_TEST_ISO:-${OS_ISO}}"
 OS_ISO_URL="${NIKOS_TEST_ISO_URL:-${OS_ISO_URL}}"
+# A given ISO with no URL has no download source: the default image must never
+# be written over it.
+[[ -z "${NIKOS_TEST_ISO:-}" || -n "${NIKOS_TEST_ISO_URL:-}" ]] || OS_ISO_URL=""
 
 if [[ "${SHOW_CONFIG}" == "true" ]]; then
   printf '%s=%s\n' \
@@ -304,7 +331,9 @@ fi
 if $BUILD; then
 
   # ISO
-  if [[ ! -f "${OS_ISO}" ]] || [[ $(stat -c%s "${OS_ISO}") -lt ${OS_ISO_MIN_BYTES} ]]; then
+  if [[ -z "${OS_ISO_URL}" ]]; then
+    [[ -f "${OS_ISO}" ]] || die "NIKOS_TEST_ISO not found: ${OS_ISO} (set NIKOS_TEST_ISO_URL to download it)"
+  elif [[ ! -f "${OS_ISO}" ]] || [[ $(stat -c%s "${OS_ISO}") -lt ${OS_ISO_MIN_BYTES} ]]; then
     log "Downloading ${OS_LABEL} ISO..."
     curl -L "${OS_ISO_URL}" -o "${OS_ISO}" --progress-bar
   fi
@@ -387,7 +416,9 @@ if $BUILD; then
 fi
 
 # ── Phase 3: Ensure VM is running ────────────────────────────────────────────
-vm_exists || die "VM '${VM_NAME}' does not exist. Run './test -b' first."
+# Name everything: a bare './test -b' would wipe the default VM instead.
+printf -v vm_name_quoted '%q' "${VM_NAME}"
+vm_exists || die "VM '${VM_NAME}' does not exist. Create it with: NIKOS_TEST_RELEASE=${NIKOS_TEST_RELEASE} ./test -b --profile=${PROFILE} --vm-name=${vm_name_quoted}"
 
 if ! vm_running; then
   log "Starting VM '${VM_NAME}'..."
@@ -398,6 +429,11 @@ ensure_ssh_port_forward
 
 # ── Phase 4: SSH in and run NikOS installer ───────────────────────────────────
 wait_for_ssh
+
+guest_release="$(vm_ssh ". /etc/os-release && printf '%s' \"\${VERSION_ID}\"")" \
+  || die "Could not read VERSION_ID from /etc/os-release in VM '${VM_NAME}'"
+[[ "${guest_release}" == "${NIKOS_TEST_RELEASE}" ]] \
+  || die "VM '${VM_NAME}' runs Ubuntu ${guest_release:-unknown}, but NIKOS_TEST_RELEASE is ${NIKOS_TEST_RELEASE}"
 
 run_installer
 
@@ -473,4 +509,5 @@ if [[ $fail -eq 0 ]]; then
   log "All checks passed — NikOS is good."
 else
   log "Some checks failed — review output above."
+  exit 1
 fi

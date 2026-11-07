@@ -25,6 +25,12 @@ All notable changes to NikOS are documented here.
   unchanged. `--show-config` prints the resolved settings and exits before
   anything is checked or started; an unknown argument is refused instead of
   ignored. `test` is now in the shellcheck list in CI.
+- `./test` stops before the installer when the guest's `VERSION_ID` differs
+  from `NIKOS_TEST_RELEASE`, and exits 1 when a checklist item fails. It refuses
+  a non-numeric RAM, CPU or disk value before touching the VM, and refuses those
+  settings without `-b`. `NIKOS_TEST_ISO` without a URL must exist and is never
+  overwritten. The missing-VM hint prints the full command, with release,
+  profile and VM name. The ISO size floors are set per release.
 
 ### Changed
 - `docs/install.md`, `docs/development.md`, `docs/profiles.md` and
