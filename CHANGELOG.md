@@ -43,6 +43,13 @@ All notable changes to NikOS are documented here.
   profile was checked. `tests/test_profiles.py` fails when either run is
   missing from `.github/workflows/test.yml`.
 
+### Fixed
+- A server install no longer ends with "Reboot to finish switching to LightDM
+  and the Xubuntu session". `_session_next_step` in `install.sh` takes the
+  chosen profile and on `server` prints "Server profile: log in over SSH and
+  run nikos doctor." in the summary dialog and on the terminal. The desktop
+  text is unchanged (https://github.com/nikolareljin/nikos/issues/67).
+
 ### Changed
 - `docs/install.md`, `docs/development.md`, `docs/profiles.md` and
   `docs/debugging.md` describe the 26.04 run of `./test`, the RAM each
