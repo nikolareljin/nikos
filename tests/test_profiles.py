@@ -282,3 +282,38 @@ def test_ci_check_runs_the_playbook_as_a_desktop_and_as_a_server() -> None:
     assert len(desktop) == 1, runs
     skip = re.compile(r"--skip-tags\s+(\S+)")
     assert skip.search(server[0]).group(1) == skip.search(desktop[0]).group(1), runs
+
+
+def _next_step(profile: str, **env: str) -> str:
+    script = "\n".join([_extract("_session_next_step"), f"_session_next_step {profile}"])
+    out = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={"PATH": "/usr/bin:/bin", **env},
+    )
+    return out.stdout
+
+
+def test_server_next_step_points_at_ssh_not_the_display_manager() -> None:
+    out = _next_step("server", XDG_CURRENT_DESKTOP="ubuntu:GNOME")
+    assert "LightDM" not in out
+    assert "Xubuntu" not in out
+    assert "ssh" in out.lower()
+    assert "nikos doctor" in out
+
+
+@pytest.mark.parametrize(
+    "env,expected",
+    [
+        ({"XDG_CURRENT_DESKTOP": "XFCE"}, "Log out and back in"),
+        ({"DESKTOP_SESSION": "xubuntu"}, "Log out and back in"),
+        ({"XDG_CURRENT_DESKTOP": "ubuntu:GNOME"}, "Reboot to finish switching to LightDM"),
+        ({}, "Reboot to finish switching to LightDM"),
+    ],
+    ids=["xfce", "xubuntu-session", "gnome", "no-session"],
+)
+def test_desktop_next_step_is_unchanged(env: dict, expected: str) -> None:
+    assert expected in _next_step("desktop", **env)
+    assert expected in _next_step("", **env)

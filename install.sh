@@ -409,10 +409,16 @@ _collect_become_password_dialog() {
   printf '%s\n' "${pw}"
 }
 
-# What the user has to do to land in the Xubuntu session. Switching the
+# What the user has to do next, by profile. A server has no session to
+# switch, so it gets the SSH and doctor hint. On a desktop, switching the
 # display manager only takes effect once the current graphical session ends,
 # and a session started under GDM has to go all the way through a reboot.
 _session_next_step() {
+  local profile="${1:-desktop}"
+  if [[ "${profile}" == "server" ]]; then
+    echo "Server profile: log in over SSH and run nikos doctor."
+    return 0
+  fi
   local current="${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-unknown}}"
   case "${current,,}" in
     *xfce*|*xubuntu*)
@@ -612,7 +618,7 @@ _install_summary() {
   Unreachable:   ${unreachable}"
     _dlg_body+="
 
-$(_session_next_step)
+$(_session_next_step "${_chosen_profile}")
 
   Full log: ${INSTALL_LOG}"
     if [[ "${rc}" -eq 0 ]]; then
@@ -1701,7 +1707,7 @@ _install_summary "${_playbook_rc}"
 echo ""
 if [[ "${_playbook_rc}" -eq 0 ]]; then
   echo "NikOS ${NIKOS_VERSION} installation complete."
-  _session_next_step
+  _session_next_step "${_chosen_profile}"
 else
   echo "NikOS ${NIKOS_VERSION} installation finished with errors (rc=${_playbook_rc})."
   echo "Review the log above or: cat ${INSTALL_LOG}"
