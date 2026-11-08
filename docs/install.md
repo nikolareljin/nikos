@@ -33,7 +33,7 @@ The script will:
    playbook would not run them there.
 8. Present a `dialog` TUI checklist to select AI tools. On the `server` profile
    `ai-vscode` and `antigravity` are not listed, for the same reason.
-9. Ask for the timezone to use — detects the system timezone via `timedatectl` and offers:
+9. Ask for the timezone to use. It detects the system timezone via `timedatectl` and offers:
    - **Auto** — use the detected system timezone (NTP-synchronized)
    - **Keep existing** — if `vars/local.yml` already has `nikos_timezone` set (shown only
      when the configured value differs from the detected one)
