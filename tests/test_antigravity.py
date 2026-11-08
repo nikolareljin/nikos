@@ -246,3 +246,23 @@ def test_the_apt_ide_is_kept_where_there_is_no_ide_snap() -> None:
         "Say that Antigravity moved from the apt package to the snaps",
     ):
         assert "ansible_architecture == 'x86_64'" in str(_task(name).get("when", "")), name
+
+
+def test_removing_the_apt_package_leaves_the_vs_code_repository_alone() -> None:
+    # The package's postrm (Microsoft's VS Code script) deletes vscode.sources
+    # and /usr/share/keyrings/microsoft.gpg when antigravity/add-microsoft-repo
+    # is true, its debconf default. roles/editors owns both files.
+    names = [t.get("name") for t in TASKS]
+    seed = "Keep the apt package's removal script off the VS Code repository"
+    remove = "Remove Google's apt package for Antigravity (its repository stopped at 1.23.2)"
+    assert names.index(seed) < names.index(remove)
+    task = _task(seed)
+    assert task["ansible.builtin.debconf"] == {
+        "name": "antigravity",
+        "question": "antigravity/add-microsoft-repo",
+        "vtype": "boolean",
+        "value": "false",
+    }
+    when = " ".join(task["when"])
+    assert "ansible_architecture == 'x86_64'" in when
+    assert "'install ok installed' in antigravity_apt_status.stdout" in when

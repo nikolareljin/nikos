@@ -12,7 +12,9 @@ All notable changes to NikOS are documented here.
   opening the IDE (the hub snap's own command has the same name);
   `antigravity-hub` opens the hub. The IDE snap is amd64 only; on arm64 the
   role installs the hub alone and keeps the apt IDE. The apt package is removed only after the
-  snaps install, and a file at either wrapper path that NikOS did not write
+  snaps install, with its debconf answer `antigravity/add-microsoft-repo`
+  set to false first: its removal script otherwise deletes VS Code's
+  `vscode.sources` and `microsoft.gpg`, and a file at either wrapper path that NikOS did not write
   is left alone. The installer offers it with the AI tools,
   default No, and drops it with a note on the server profile; `nikos doctor`
   reports it as optional on a desktop; `./test` asserts both snaps are absent

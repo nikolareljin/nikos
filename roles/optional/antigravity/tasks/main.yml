@@ -65,6 +65,19 @@
     state: present
   when: not ansible_check_mode
 
+# The package's postrm is Microsoft's VS Code script: with this debconf answer
+# at its default (true) it deletes vscode.sources and microsoft.gpg, which
+# roles/editors owns. False keeps VS Code's apt repository in place.
+- name: Keep the apt package's removal script off the VS Code repository
+  ansible.builtin.debconf:
+    name: antigravity
+    question: antigravity/add-microsoft-repo
+    vtype: boolean
+    value: "false"
+  when:
+    - ansible_architecture == 'x86_64'
+    - "'install ok installed' in antigravity_apt_status.stdout"
+
 - name: Remove Google's apt package for Antigravity (its repository stopped at 1.23.2)
   ansible.builtin.apt:
     name: antigravity
