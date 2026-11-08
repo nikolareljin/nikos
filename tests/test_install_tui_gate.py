@@ -443,6 +443,59 @@ def test_desktop_only_tags_come_from_site_yml(tmp_path):
     assert out.strip() == "RC=0", out
 
 
+@pytest.mark.parametrize(
+    "gate",
+    [
+        "      when: nikos_profile == 'desktop'",
+        "      when: \"nikos_profile == 'desktop'\"",
+        "      when: 'nikos_profile == \"desktop\"'",
+        "      when: nikos_profile == 'desktop'  # GUI only",
+        "      when:\n        - nikos_profile == 'desktop'",
+        "      when:\n        - \"nikos_profile == 'desktop'\"  # GUI only",
+    ],
+    ids=["plain", "double-quoted", "single-quoted", "comment", "list", "quoted-list-comment"],
+)
+def test_desktop_only_tags_read_every_gate_style(tmp_path, gate):
+    """A gate written in any common YAML style still hides the role on a server."""
+    home = tmp_path / "home"
+    (home / "roles" / "paint" / "tasks").mkdir(parents=True)
+    (home / "roles" / "paint" / "tasks" / "main.yml").write_text(
+        "- name: brush\n  tags:\n    - brushes\n    - always\n", encoding="utf-8"
+    )
+    (home / "site.yml").write_text(
+        "- hosts: localhost\n  roles:\n    - role: base\n      tags: [base]\n"
+        f"    - role: paint  # art\n      tags:\n        - paint\n        - 'canvas'\n{gate}\n"
+        "    - role: network\n      tags: [network]\n      when: other == 'desktop'\n",
+        encoding="utf-8",
+    )
+    program = write_program(
+        tmp_path, ("_desktop_only_tags",), f'NIKOS_HOME="{home}"\n_desktop_only_tags\n'
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    assert out.split() == ["brushes", "canvas", "paint"], out
+
+
+def test_a_tag_an_ungated_role_also_carries_stays_offered(tmp_path):
+    """A task tag shared with a role that runs on a server is not hidden."""
+    home = tmp_path / "home"
+    for role, tag in (("paint", "shared"), ("network", "shared")):
+        (home / "roles" / role / "tasks").mkdir(parents=True)
+        (home / "roles" / role / "tasks" / "main.yml").write_text(
+            f"- name: step\n  tags: [{tag}]\n", encoding="utf-8"
+        )
+    (home / "site.yml").write_text(
+        "- hosts: localhost\n  roles:\n"
+        "    - role: paint\n      tags: [paint]\n      when: nikos_profile == 'desktop'\n"
+        "    - role: network\n      tags: [network]\n",
+        encoding="utf-8",
+    )
+    program = write_program(
+        tmp_path, ("_desktop_only_tags",), f'NIKOS_HOME="{home}"\n_desktop_only_tags\n'
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    assert out.split() == ["paint"], out
+
+
 def test_jev_defaults_to_no_in_the_plain_picker():
     text = INSTALL_SH.read_text(encoding="utf-8")
     assert '[[ "${opt_jev,,}" == "y" ]] && SELECTED_AI_TOOLS+=("jev")' in text

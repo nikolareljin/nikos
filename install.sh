@@ -1267,24 +1267,63 @@ _release_note() {
 # carrying `when: nikos_profile == 'desktop'` there, plus the tags of the tasks
 # inside those roles (`ai-vscode` sits inside `editors`). Read from the
 # checkout, so a role gated in site.yml is hidden by the pickers without a
-# second list to keep in step with it. `never` and `always` are not bundles.
+# second list to keep in step with it. A tag that an ungated role also carries
+# stays offered. `never` and `always` are not bundles.
 _desktop_only_tags() {
-  local site="${NIKOS_HOME}/site.yml" role tags file
+  local site="${NIKOS_HOME}/site.yml" gate role tags file
   [[ -f "${site}" ]] || return 0
+  # One "role tag..." line per role gated on nikos_profile == 'desktop'. A
+  # gate may be a plain, quoted or block-list `when:` with a trailing comment.
+  # Tags may be a flow list, a scalar or a block list.
   awk '
-    function flush() { if (gated && role != "") print role, tags; role = ""; tags = ""; gated = 0 }
-    /^    - role: / { flush(); role = $3; next }
-    /^      tags: \[/ { t = $0; sub(/^[^[]*\[/, "", t); sub(/\].*$/, "", t); gsub(/,/, " ", t); tags = t; next }
-    /^      when: nikos_profile == .desktop.$/ { gated = 1; next }
-    /^  [^ ]/ { flush() }
+    function clean(s) {
+      sub(/[ \t]+#.*$/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s)
+      if (s ~ /^".*"$/ || s ~ /^'\''.*'\''$/) s = substr(s, 2, length(s) - 2)
+      return s
+    }
+    function is_gate(s) { s = clean(s); gsub(/[ \t]+/, "", s); return s ~ /^nikos_profile==["'\'']desktop["'\'']$/ }
+    function add_tags(s, n, i, a) {
+      s = clean(s); gsub(/[][]/, "", s); n = split(s, a, ",")
+      for (i = 1; i <= n; i++) { a[i] = clean(a[i]); if (a[i] != "") tags = tags " " a[i] }
+    }
+    function flush() { if (role != "") print (gated ? "G" : "U"), role tags; role = ""; tags = ""; gated = 0; list = "" }
+    { line = $0; match(line, /^[ \t]*/); ind = RLENGTH; body = substr(line, ind + 1) }
+    body == "" || body ~ /^#/ { next }
+    body ~ /^- role:/ { flush(); role = clean(substr(body, 8)); keycol = ind + 2; next }
+    role == "" { next }
+    ind < keycol { flush(); next }
+    ind > keycol && body ~ /^- / {
+      if (list == "tags") add_tags(substr(body, 3))
+      else if (list == "when" && is_gate(substr(body, 3))) gated = 1
+      next
+    }
+    ind == keycol && body ~ /^tags:/ { list = "tags"; add_tags(substr(body, 6)); next }
+    ind == keycol && body ~ /^when:/ { list = "when"; if (is_gate(substr(body, 6))) gated = 1; next }
+    ind == keycol { list = "" }
     END { flush() }
-  ' "${site}" | while read -r role tags; do
-    tr ' ' '\n' <<< "${tags}"
+  ' "${site}" | while read -r gate role tags; do
+    tr ' ' '\n' <<< "${tags}" | sed "s/^/${gate} /"
     for file in "${NIKOS_HOME}/roles/${role}/tasks/"*.yml "${NIKOS_HOME}/roles/optional/${role}/tasks/"*.yml; do
       [[ -f "${file}" ]] || continue
-      grep -oP '^\s*tags:\s*\[\K[^\]]+' "${file}" | tr ',' '\n' || true
+      awk '
+        function clean(s) {
+          sub(/[ \t]+#.*$/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s)
+          if (s ~ /^".*"$/ || s ~ /^'\''.*'\''$/) s = substr(s, 2, length(s) - 2)
+          return s
+        }
+        { match($0, /^[ \t]*/); ind = RLENGTH; body = substr($0, ind + 1) }
+        inlist && ind > tcol && body ~ /^- / { print clean(substr(body, 3)); next }
+        { inlist = 0 }
+        body ~ /^(- )?tags:/ {
+          if (body ~ /^- /) { body = substr(body, 3); ind += 2 }
+          v = clean(substr(body, 6)); gsub(/[][]/, "", v)
+          n = split(v, a, ","); for (i = 1; i <= n; i++) print clean(a[i])
+          if (v == "") { inlist = 1; tcol = ind }
+        }
+      ' "${file}" | sed "s/^/${gate} /"
     done
-  done | tr -d ' ' | awk '!/^(never|always)?$/' | sort -u
+  done | awk '$2 !~ /^(never|always)?$/ { seen[$2] = seen[$2] $1 }
+    END { for (t in seen) if (seen[t] !~ /U/) print t }' | sort -u
 }
 
 # True when the chosen profile would never run <tag>, so the pickers leave it
