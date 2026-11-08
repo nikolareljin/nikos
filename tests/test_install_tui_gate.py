@@ -30,6 +30,7 @@ clone-and-run path is ever exercised.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -315,7 +316,7 @@ def prompts_in(out: str) -> list[str]:
     return [p for _, p in sorted(found)]
 
 
-def run_prompt_flow(tmp_path: Path, answers: list[str]) -> str:
+def run_prompt_flow(tmp_path: Path, answers: list[str], prelude: str = "") -> str:
     body = SELECTION_BODY.replace(
         "__SELECTION_DISPATCH__",
         textwrap.dedent(
@@ -326,6 +327,7 @@ def run_prompt_flow(tmp_path: Path, answers: list[str]) -> str:
             _select_profile_dialog() { exit 99; }
             """
         )
+        + prelude
         + extract_prompt_flow(),
     ).replace("__REPO_ROOT__", str(REPO_ROOT))
     program = write_program(tmp_path, FLOW_HELPERS, body)
@@ -1071,3 +1073,54 @@ def test_a_symlinked_ungated_task_still_keeps_its_tag(tmp_path, awk, link):
         encoding="utf-8",
     )
     assert _desktop_only(tmp_path, home, awk) == ["paint"]
+
+
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize("fault", ["unreadable-task", "unreadable-site", "symlink-loop"])
+def test_a_scan_error_hides_nothing_and_the_installer_goes_on(tmp_path, awk, fault):
+    """A task file the scan cannot read may carry a server tag, so hide nothing."""
+    if fault.startswith("unreadable") and os.geteuid() == 0:
+        pytest.skip("root reads a chmod 000 file")
+    home = tmp_path / "home"
+    _role(home, "paint", "- name: x\n  debug: {}\n  tags: [shared]\n")
+    _role(home, "net", "- name: y\n  debug: {}\n  tags: [shared]\n")
+    (home / "site.yml").write_text(
+        "- hosts: localhost\n  roles:\n"
+        "    - role: paint\n      tags: [paint]\n      when: nikos_profile == 'desktop'\n"
+        "    - role: net\n      tags: [net]\n",
+        encoding="utf-8",
+    )
+    if fault == "unreadable-task":
+        (home / "roles" / "net" / "tasks" / "main.yml").chmod(0)
+    elif fault == "unreadable-site":
+        (home / "site.yml").chmod(0)
+    else:
+        (home / "roles" / "net" / "tasks" / "loop").symlink_to("..", target_is_directory=True)
+    shim = tmp_path / f"awk-{awk}"
+    shim.mkdir()
+    (shim / "awk").symlink_to(shutil.which(awk))
+    program = write_program(
+        tmp_path, ("_desktop_only_tags",),
+        f'set -euo pipefail\nNIKOS_HOME="{home}"\nout="$(_desktop_only_tags)"\n'
+        'echo "OUT=[${out}]"\necho REACHED\n',
+    )
+    result = subprocess.run(
+        ["bash", str(program)], capture_output=True, timeout=60,
+        env={"PATH": f"{shim}:/usr/bin:/bin", "HOME": str(tmp_path)},
+    )
+    out = result.stdout.decode()
+    assert result.returncode == 0 and "REACHED" in out, (out, result.stderr)
+    assert "OUT=[]" in out, out
+    assert len(result.stderr.decode().splitlines()) <= 1, result.stderr
+
+
+@needs_pty
+def test_a_server_run_scans_site_yml_once(tmp_path):
+    """The dialog pickers run in subshells; a cache filled there is lost."""
+    prelude = (
+        'eval "$(declare -f _desktop_only_tags | sed \'1s/_desktop_only_tags/_real_scan/\')"\n'
+        '_desktop_only_tags() { echo SCANNED >&2; _real_scan; }\n'
+    )
+    out = run_prompt_flow(tmp_path, ["server"] + ["n"] * 18 + [""] * 6, prelude)
+    assert "PROFILE_WRITTEN=server" in out, out
+    assert out.count("SCANNED") == 1, out

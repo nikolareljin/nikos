@@ -1272,8 +1272,11 @@ _release_note() {
 # tag a server runs is worse than offering one it skips. `never` and `always`
 # are not bundles.
 _desktop_only_tags() {
-  local site="${NIKOS_HOME}/site.yml" gate role tags file dir
+  local site="${NIKOS_HOME}/site.yml" raw
   [[ -f "${site}" ]] || return 0
+  # Fail safe: a file the scan cannot read may carry a tag a server runs, so
+  # any find or awk error hides nothing and the installer goes on.
+  if ! raw="$(set -o pipefail; local gate role tags file dir
   # One "G|U role tag..." line per list item in site.yml; role is "-" for an
   # item with no role. G only for a role gated on exactly
   # nikos_profile == 'desktop', as a plain, quoted or block-list `when:` with a
@@ -1325,12 +1328,12 @@ _desktop_only_tags() {
     # A tags: outside any item: offered whatever it is on.
     body ~ /^tags:/ { item = 1; keycol = ind; key(body) }
     END { flush() }
-  ' "${site}" | while read -r gate role tags; do
+  ' "${site}" 2>/dev/null | while read -r gate role tags; do
     tr ' ' '\n' <<< "${tags}" | sed "s/^/${gate} /"
     [[ "${role}" == "-" ]] && continue
     for dir in "${NIKOS_HOME}/roles/${role}/tasks" "${NIKOS_HOME}/roles/optional/${role}/tasks"; do
       [[ -d "${dir}" ]] || continue
-      find -L "${dir}" -type f \( -name '*.yml' -o -name '*.yaml' \) | while read -r file; do
+      find -L "${dir}" -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null | while read -r file; do
         awk '
           function clean(s) {
             sub(/[ \t]+#.*$/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s)
@@ -1346,11 +1349,15 @@ _desktop_only_tags() {
             n = split(v, a, ","); for (i = 1; i <= n; i++) print clean(a[i])
             if (v == "") { inlist = 1; tcol = ind }
           }
-        ' "${file}" | sed "s/^/${gate} /"
-      done
+        ' "${file}" 2>/dev/null | sed "s/^/${gate} /" || exit 1
+      done || exit 1
     done
-  done | awk '$2 !~ /^(never|always)?$/ { seen[$2] = seen[$2] $1 }
-    END { for (t in seen) if (seen[t] !~ /U/) print t }' | sort -u
+  done)"; then
+    echo "Note: could not read site.yml or a role task file; no bundle is hidden." >&2
+    return 0
+  fi
+  awk '$2 !~ /^(never|always)?$/ { seen[$2] = seen[$2] $1 }
+    END { for (t in seen) if (seen[t] !~ /U/) print t }' <<< "${raw}" | sort -u
 }
 
 # True when the chosen profile would never run <tag>, so the pickers leave it
@@ -1637,7 +1644,10 @@ fi
 _set_profile_in_local_vars "${_chosen_profile}"
 _logfile "Profile: ${_chosen_profile} (was: ${_configured_profile:-unset}; $(_display_manager_note))"
 if [[ "${_chosen_profile}" == "server" ]]; then
-  _logfile "Profile server: not offered: $(_desktop_only_tags | tr '\n' ' ')"
+  # Read once here: the pickers run in subshells, so a cache they filled
+  # would be lost and the scan (and any note it prints) repeated per picker.
+  _DESKTOP_ONLY_TAGS="$(_desktop_only_tags)"
+  _logfile "Profile server: not offered: $(tr '\n' ' ' <<< "${_DESKTOP_ONLY_TAGS}")"
 fi
 
 # Bundle and AI tool selection ─────────────────────────────────────

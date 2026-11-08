@@ -44,7 +44,8 @@ On a server, `nikos add music`, `nikos add education` and `nikos add antigravity
 stop with an error instead of reporting success for a role that would not run.
 The installer does not offer them, nor `ai-vscode`, when the `server` profile
 is chosen: it reads the roles gated on the desktop profile from `site.yml` and
-leaves their tags out of both pickers.
+leaves their tags out of both pickers. If `site.yml` or a role task file cannot
+be read, it hides nothing.
 `antigravity` is in both lists: it carries `never` like the optional roles, so
 it runs only when named, and the desktop gate, because it installs two GUI
 snaps.

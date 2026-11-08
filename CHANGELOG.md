@@ -71,7 +71,8 @@ All notable changes to NikOS are documented here.
   roles gated on `nikos_profile == 'desktop'` in `site.yml`, not kept by
   hand. The desktop flow asks the same questions in the same order as before;
   the timezone follows the pickers as before. A desktop-only item that still
-  reaches the selection on a server is dropped with a note
+  reaches the selection on a server is dropped with a note. If `site.yml` or
+  a role task file cannot be read, nothing is hidden
   (https://github.com/nikolareljin/nikos/issues/67).
 - Antigravity is NikOS-owned like Ollama and MongoDB: distrodeck's
   `antigravity` entry (Google's apt repository, stale at 1.23.2 since
