@@ -26,16 +26,19 @@ The script will:
 4. Offer to upgrade unsupported Ansible versions from the Ansible Ubuntu PPA
 5. Clone the repo (with submodules) to `~/.local/share/nikos`; when launched
    from a non-main checkout, the persistent repo follows that same branch
-6. Present a `dialog` TUI checklist to select optional bundles
-7. Present a `dialog` TUI checklist to select AI tools
-8. Ask for the timezone to use — detects the system timezone via `timedatectl` and offers:
+6. Ask for the profile, `desktop` (default) or `server`, saying whether a display
+   manager was found, and write it to `vars/local.yml`. See [profiles.md](profiles.md).
+7. Present a `dialog` TUI checklist to select optional bundles. On the `server`
+   profile the desktop-only bundles (`music`, `education`) are not listed: the
+   playbook would not run them there.
+8. Present a `dialog` TUI checklist to select AI tools. On the `server` profile
+   `ai-vscode` and `antigravity` are not listed, for the same reason.
+9. Ask for the timezone to use — detects the system timezone via `timedatectl` and offers:
    - **Auto** — use the detected system timezone (NTP-synchronized)
    - **Keep existing** — if `vars/local.yml` already has `nikos_timezone` set (shown only
      when the configured value differs from the detected one)
    - **Custom** — enter any IANA timezone string (e.g. `America/New_York`, `Asia/Tokyo`)
    The chosen timezone is written to `vars/local.yml` before the playbook runs.
-9. Ask for the profile, `desktop` (default) or `server`, saying whether a display
-   manager was found, and write it to `vars/local.yml`. See [profiles.md](profiles.md).
 10. Run `ansible-playbook` from the local clone, behind a per-role progress gauge
 
 ## What the playbook does (in order)

@@ -289,6 +289,20 @@ def test_ci_check_runs_the_playbook_as_a_desktop_and_as_a_server() -> None:
     assert skip.search(server[0]).group(1) == skip.search(desktop[0]).group(1), runs
 
 
+def test_installer_asks_the_profile_before_the_bundles() -> None:
+    """The pickers need the profile to know what not to offer, so it comes first."""
+    text = INSTALL_SH.read_text(encoding="utf-8")
+    profile = text.index("_select_profile_plain \"${_default_profile}\"")
+    bundles = text.index("_raw=$(_select_bundles_dialog)")
+    ai_tools = text.index("_raw=$(_select_ai_tools_dialog)")
+    timezone = text.index("_select_timezone_plain \"${_detected_tz}\"")
+    assert profile < bundles < ai_tools < timezone
+    # The after-the-fact warning for a bundle chosen before the profile is gone;
+    # what stays is a drop guard that runs right after the pickers.
+    assert "The bundles were chosen before the profile" not in text
+    assert text.index("_drop_desktop_only_selections\n") < timezone
+
+
 def _next_step(profile: str, **env: str) -> str:
     script = "\n".join([_extract("_session_next_step"), f"_session_next_step {profile}"])
     out = subprocess.run(

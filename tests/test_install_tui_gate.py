@@ -46,11 +46,17 @@ SELECTION_HELPERS = (
     "_have_tty",
     "_say_tty",
     "_ask_tty",
+    "_ask_optional",
+    "_desktop_only_tags",
+    "_hidden_on_this_profile",
     "_require_tty_for_selection",
     "_select_bundles_plain",
     "_select_ai_tools_plain",
+    "_drop_desktop_only_selections",
     "_build_tag_args",
 )
+# The profile prompt, which now comes first, on top of the selection helpers.
+FLOW_HELPERS = SELECTION_HELPERS + ("_select_profile_plain",)
 
 needs_pty = pytest.mark.skipif(
     shutil.which("script") is None, reason="util-linux `script` is required"
@@ -77,7 +83,15 @@ def extract_selection_dispatch() -> str:
     caller threw the answers away, so the real dispatch is what runs here.
     """
     text = INSTALL_SH.read_text(encoding="utf-8")
-    start = text.index("if _can_use_dialog; then", text.index("_select_ai_tools_plain() {"))
+    start = text.index("if _can_use_dialog; then", text.index("# Bundle and AI tool selection"))
+    end = text.index("\n# Timezone", start)
+    return text[start:end]
+
+
+def extract_prompt_flow() -> str:
+    """The profile block and the selection dispatch, in the order install.sh runs them."""
+    text = INSTALL_SH.read_text(encoding="utf-8")
+    start = text.index("# Profile ", text.index("_drop_desktop_only_selections() {"))
     end = text.index("\n# Timezone", start)
     return text[start:end]
 
@@ -192,6 +206,9 @@ AI_ANSWERS = ["", "", "n", "", "", "", "y"]
 
 SELECTION_BODY = """
     _safe_logfile() { :; }
+    _logfile() { :; }
+    # The real site.yml and roles decide what a server is not offered.
+    NIKOS_HOME="__REPO_ROOT__"
     # Force the branch a machine without `dialog` takes.
     _can_use_dialog() { return 1; }
 
@@ -221,7 +238,7 @@ def test_plain_selection_round_trips_the_answers(tmp_path, antigravity_answer, e
     """What was answered is what reaches the tags - the whole of #53."""
     body = SELECTION_BODY.replace(
         "__SELECTION_DISPATCH__", extract_selection_dispatch()
-    )
+    ).replace("__REPO_ROOT__", str(REPO_ROOT))
     program = write_program(tmp_path, SELECTION_HELPERS, body)
     bindir = stub_dialog(tmp_path)
     answers = "\n".join(BUNDLE_ANSWERS + AI_ANSWERS + [antigravity_answer]) + "\n"
@@ -251,6 +268,181 @@ def test_plain_selection_round_trips_the_answers(tmp_path, antigravity_answer, e
     assert "antigravity" not in skip, skip
 
 
+# Every prompt of the plain pickers, in the order a desktop is asked them.
+# A server is asked the same list minus the four site.yml never runs there.
+DESKTOP_PROMPTS = [
+    "Install network tools?",
+    "Install music tools?",
+    "Install education tools?",
+    "Install Neovim?",
+    "Install Zsh + Starship?",
+    "Install Java 21?",
+    "Install Bun?",
+    "Install OpenClaw?",
+    "Pull every Ollama module",
+    "Install BitNet.cpp?",
+    "Install mistral.rs?",
+    "Install PostgreSQL + pgvector",
+    "Install MongoDB + mongosh + Atlas CLI",
+    "Install Redis?",
+    "Install Qdrant?",
+    "Install kubectl + Helm?",
+    "Install Podman?",
+    "Install act?",
+    "Install Netdata",
+    "Install Fabric AI pattern CLI?",
+    "Install Ollama, Miniforge, nikos-ai env, aider, and agent SDKs?",
+    "Install Gemini CLI?",
+    "Install Claude Code CLI?",
+    "Install GitHub Copilot CLI extension?",
+    "Install ai-runner local model UI?",
+    "Install AI VS Code extensions (Continue, Copilot)?",
+    "Install the Jev client",
+    "Install Google Antigravity IDE and agent hub",
+]
+DESKTOP_ONLY_PROMPTS = {
+    "Install music tools?",
+    "Install education tools?",
+    "Install AI VS Code extensions (Continue, Copilot)?",
+    "Install Google Antigravity IDE and agent hub",
+}
+SERVER_PROMPTS = [p for p in DESKTOP_PROMPTS if p not in DESKTOP_ONLY_PROMPTS]
+
+
+def prompts_in(out: str) -> list[str]:
+    """The known prompts in the order they were printed."""
+    found = [(out.index(p), p) for p in DESKTOP_PROMPTS if p in out]
+    return [p for _, p in sorted(found)]
+
+
+def run_prompt_flow(tmp_path: Path, answers: list[str]) -> str:
+    body = SELECTION_BODY.replace(
+        "__SELECTION_DISPATCH__",
+        textwrap.dedent(
+            """
+            _get_configured_profile() { :; }
+            _set_profile_in_local_vars() { echo "PROFILE_WRITTEN=$1"; }
+            _display_manager_note() { echo "No display manager found on this machine."; }
+            _select_profile_dialog() { exit 99; }
+            """
+        )
+        + extract_prompt_flow(),
+    ).replace("__REPO_ROOT__", str(REPO_ROOT))
+    program = write_program(tmp_path, FLOW_HELPERS, body)
+    bindir = stub_dialog(tmp_path)
+    return run(
+        [SCRIPT, "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        path=with_stub(bindir),
+        stdin=("\n".join(answers) + "\n").encode(),
+        home=tmp_path,
+    )
+
+
+@needs_pty
+def test_the_profile_is_asked_before_the_bundles(tmp_path):
+    """Enter at the profile prompt keeps the desktop and every prompt that follows."""
+    out = run_prompt_flow(tmp_path, [""] + ["n"] * 20 + [""] * 8)
+    assert out.index("Profile [desktop]:") < out.index("Optional app bundles"), out
+    assert "PROFILE_WRITTEN=desktop" in out, out
+    assert prompts_in(out) == DESKTOP_PROMPTS, out
+    assert field(out, "BUNDLES") == ""
+    assert field(out, "AI") == "ai-local ai-gemini ai-claude ai-copilot-cli ai-runner ai-vscode"
+
+
+@needs_pty
+def test_a_server_is_not_offered_the_desktop_only_choices(tmp_path):
+    """Nothing is asked that site.yml would then skip; the tags say so too."""
+    # Every remaining bundle declined but BitNet; every remaining AI tool defaulted.
+    bundle_answers = ["n"] * 18
+    bundle_answers[SERVER_PROMPTS.index("Install BitNet.cpp?")] = "y"
+    out = run_prompt_flow(tmp_path, ["server"] + bundle_answers + [""] * 6)
+    assert "PROFILE_WRITTEN=server" in out, out
+    assert prompts_in(out) == SERVER_PROMPTS, out
+    for prompt in DESKTOP_ONLY_PROMPTS:
+        assert prompt not in out, prompt
+    assert field(out, "BUNDLES") == "bitnet"
+    ai = field(out, "AI").split()
+    assert "ai-vscode" not in ai and "antigravity" not in ai, ai
+    assert ai == ["ai-local", "ai-gemini", "ai-claude", "ai-copilot-cli", "ai-runner"], ai
+    skip = set(field(out, "SKIP").split(","))
+    # Declined by construction, so the playbook is told to skip them.
+    assert {"music", "education", "ai-vscode"} <= skip, skip
+    assert field(out, "EXPLICIT") == "bitnet"
+    assert "NOTE:" not in out, out
+
+
+def test_a_desktop_only_selection_that_slips_through_is_dropped_on_a_server(tmp_path):
+    """The pickers never offer them, so this guards every other way into the arrays."""
+    program = write_program(
+        tmp_path,
+        SELECTION_HELPERS,
+        f"""
+    _safe_logfile() {{ :; }}
+    _logfile() {{ echo "LOG=$*"; }}
+    NIKOS_HOME="{REPO_ROOT}"
+    _chosen_profile=server
+    SELECTED_BUNDLES=(music bitnet education)
+    SELECTED_AI_TOOLS=(ai-local antigravity ai-vscode)
+    _drop_desktop_only_selections 2>&1
+    _build_tag_args
+    printf 'BUNDLES=%s\\n' "${{SELECTED_BUNDLES[*]}}"
+    printf 'AI=%s\\n' "${{SELECTED_AI_TOOLS[*]}}"
+    printf 'EXPLICIT=%s\\n' "${{EXPLICIT_OPTIONAL_TAGS#,}}"
+    printf 'SKIP=%s\\n' "${{SKIP_TAGS#,}}"
+""",
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    assert field(out, "BUNDLES") == "bitnet", out
+    assert field(out, "AI") == "ai-local", out
+    assert field(out, "EXPLICIT") == "bitnet", out
+    assert "antigravity" not in field(out, "EXPLICIT"), out
+    for item in ("music", "education", "antigravity", "ai-vscode"):
+        assert f"NOTE: {item} is a desktop bundle and is not installed on the server profile." in out, out
+        assert f"LOG=Profile server: desktop bundle {item} selected and dropped" in out, out
+
+
+def test_a_desktop_keeps_a_selection_the_drop_guard_sees(tmp_path):
+    program = write_program(
+        tmp_path,
+        SELECTION_HELPERS,
+        f"""
+    _logfile() {{ echo "LOG=$*"; }}
+    NIKOS_HOME="{REPO_ROOT}"
+    _chosen_profile=desktop
+    SELECTED_BUNDLES=(music bitnet)
+    SELECTED_AI_TOOLS=(ai-local antigravity)
+    _drop_desktop_only_selections 2>&1
+    printf 'BUNDLES=%s\\n' "${{SELECTED_BUNDLES[*]}}"
+    printf 'AI=%s\\n' "${{SELECTED_AI_TOOLS[*]}}"
+""",
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    assert field(out, "BUNDLES") == "music bitnet", out
+    assert field(out, "AI") == "ai-local antigravity", out
+    assert "NOTE:" not in out and "LOG=" not in out, out
+
+
+def test_desktop_only_tags_come_from_site_yml(tmp_path):
+    """The hidden set is the desktop gate in site.yml plus the task tags inside those roles."""
+    program = write_program(
+        tmp_path,
+        ("_desktop_only_tags",),
+        f'NIKOS_HOME="{REPO_ROOT}"\n_desktop_only_tags\n',
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    tags = set(out.split())
+    assert {"music", "education", "antigravity", "ai-vscode", "editors", "desktop", "theming"} <= tags
+    assert not tags & {"never", "always", "network", "ai-local", "jev", "base"}, tags
+    # A gate on a role that is not in site.yml yields nothing, not an error.
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    program = write_program(
+        tmp_path, ("_desktop_only_tags",), f'NIKOS_HOME="{empty}"\n_desktop_only_tags; echo "RC=$?"\n'
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    assert out.strip() == "RC=0", out
+
+
 def test_jev_defaults_to_no_in_the_plain_picker():
     text = INSTALL_SH.read_text(encoding="utf-8")
     assert '[[ "${opt_jev,,}" == "y" ]] && SELECTED_AI_TOOLS+=("jev")' in text
@@ -261,7 +453,7 @@ def test_antigravity_defaults_to_no_in_both_pickers():
     text = INSTALL_SH.read_text(encoding="utf-8")
     assert '[[ "${opt_antigravity,,}" == "y" ]] && SELECTED_AI_TOOLS+=("antigravity")' in text
     assert '"antigravity"     "Google Antigravity IDE and agent hub (snaps, desktop only)" off' in text
-    assert "[y/N]" in next(l for l in text.splitlines() if "_ask_tty opt_antigravity" in l)
+    assert "[y/N]" in next(l for l in text.splitlines() if "_ask_optional antigravity opt_antigravity" in l)
 
 
 TIMEZONE_HELPERS = ("_say_tty", "_ask_tty", "_select_timezone_plain")
