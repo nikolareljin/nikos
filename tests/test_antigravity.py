@@ -265,4 +265,51 @@ def test_removing_the_apt_package_leaves_the_vs_code_repository_alone() -> None:
     }
     when = " ".join(task["when"])
     assert "ansible_architecture == 'x86_64'" in when
-    assert "'install ok installed' in antigravity_apt_status.stdout" in when
+    assert "antigravity_apt_status" in when
+
+
+# dpkg-query output for each package state, and whether the preseed must run.
+# A removed-but-not-purged package ("rc") still has its postrm, and the apt
+# task purges it, so the preseed must run there too.
+DPKG_STATES = [
+    (0, "install ok installed", True),
+    (0, "deinstall ok config-files", True),
+    (0, "install ok half-configured", True),
+    (0, "install ok triggers-pending", True),
+    (0, "unknown ok not-installed", False),
+    (1, "", False),
+]
+
+
+def _clause(expr: str, env: dict) -> bool:
+    """Evaluate one `when` clause: names, attributes, constants, ==, in, not in."""
+    import ast
+    import operator
+
+    ops = {ast.Eq: operator.eq, ast.In: lambda a, b: a in b, ast.NotIn: lambda a, b: a not in b}
+
+    def value(node: ast.AST):
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Name):
+            return env[node.id]
+        if isinstance(node, ast.Attribute):
+            return getattr(value(node.value), node.attr)
+        raise AssertionError(f"unsupported clause: {expr}")
+
+    tree = ast.parse(expr, mode="eval").body
+    assert isinstance(tree, ast.Compare) and len(tree.ops) == 1, expr
+    return ops[type(tree.ops[0])](value(tree.left), value(tree.comparators[0]))
+
+
+def test_the_preseed_runs_in_every_state_the_purge_runs_the_postrm() -> None:
+    from types import SimpleNamespace
+
+    task = _task("Keep the apt package's removal script off the VS Code repository")
+    for rc, stdout, expected in DPKG_STATES:
+        env = {
+            "ansible_architecture": "x86_64",
+            "antigravity_apt_status": SimpleNamespace(rc=rc, stdout=stdout),
+        }
+        got = all(_clause(clause, env) for clause in task["when"])
+        assert got is expected, (rc, stdout)

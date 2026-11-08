@@ -67,7 +67,9 @@
 
 # The package's postrm is Microsoft's VS Code script: with this debconf answer
 # at its default (true) it deletes vscode.sources and microsoft.gpg, which
-# roles/editors owns. False keeps VS Code's apt repository in place.
+# roles/editors owns. False keeps VS Code's apt repository in place. Any state
+# dpkg knows counts: a removed but unpurged package ("rc") still has the postrm,
+# and the purge below runs it.
 - name: Keep the apt package's removal script off the VS Code repository
   ansible.builtin.debconf:
     name: antigravity
@@ -76,7 +78,8 @@
     value: "false"
   when:
     - ansible_architecture == 'x86_64'
-    - "'install ok installed' in antigravity_apt_status.stdout"
+    - antigravity_apt_status.rc == 0
+    - "'not-installed' not in antigravity_apt_status.stdout"
 
 - name: Remove Google's apt package for Antigravity (its repository stopped at 1.23.2)
   ansible.builtin.apt:
