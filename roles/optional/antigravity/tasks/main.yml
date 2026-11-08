@@ -1,0 +1,152 @@
+---
+# Google Antigravity from the snap store: the IDE (nikos_antigravity_ide_snap)
+# and the agent hub (nikos_antigravity_hub_snap), both classic, both from the
+# verified "ubuntu" publisher, on nikos_antigravity_snap_channel. There is no
+# version pin: snapd checks the store signature on every install and refresh,
+# and `nikos update` runs `snap refresh` (roles/dev-tools).
+#
+# The IDE used to come through distrodeck from Google's apt repository, which
+# stopped at 1.23.2 in 2026-04. That package, its source list and its key are
+# removed here so a machine never carries both copies. ~/.config is left
+# alone (the apt IDE kept its profile in ~/.config/Antigravity).
+#
+# The hub snap's own command is /snap/bin/antigravity, the name the apt package
+# used for the IDE. /usr/local/bin precedes /snap/bin on PATH, so two wrappers
+# keep both reachable: `antigravity` opens the IDE as before, `antigravity-hub`
+# opens the hub. Desktop launchers call the snap commands by full path and are
+# not affected. A file at either path that NikOS did not write is left alone.
+#
+# Order matters: the apt package is removed only after both snaps installed,
+# so a failed snap install leaves the old IDE in place. The IDE snap is
+# published for amd64 only; elsewhere only the hub is installed and the apt
+# IDE (Google publishes it for arm64 too) is kept, as the only IDE there.
+- name: Install snapd
+  ansible.builtin.apt:
+    name: snapd
+    state: present
+
+# A fresh snapd (or a first boot) refuses installs until seeding is done.
+- name: Wait for snapd to finish seeding
+  ansible.builtin.command:
+    argv: [snap, wait, system, seed.loaded]
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Check for Google's apt package for Antigravity
+  ansible.builtin.command:
+    argv: [dpkg-query, -W, "-f=${Status}", antigravity]
+  register: antigravity_apt_status
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install the Antigravity IDE snap
+  community.general.snap:
+    name: "{{ nikos_antigravity_ide_snap }}"
+    classic: true
+    channel: "{{ nikos_antigravity_snap_channel }}"
+    state: present
+  when:
+    - not ansible_check_mode
+    - ansible_architecture == 'x86_64'
+
+- name: Say that the Antigravity IDE snap is amd64 only
+  ansible.builtin.debug:
+    msg: >-
+      The {{ nikos_antigravity_ide_snap }} snap is published for amd64 only;
+      on {{ ansible_architecture }} only the agent hub is installed.
+  when: ansible_architecture != 'x86_64'
+
+- name: Install the Antigravity hub snap
+  community.general.snap:
+    name: "{{ nikos_antigravity_hub_snap }}"
+    classic: true
+    channel: "{{ nikos_antigravity_snap_channel }}"
+    state: present
+  when: not ansible_check_mode
+
+# The package's postrm is Microsoft's VS Code script: with this debconf answer
+# at its default (true) it deletes vscode.sources and microsoft.gpg, which
+# roles/editors owns. False keeps VS Code's apt repository in place. Any state
+# dpkg knows counts: a removed but unpurged package ("rc") still has the postrm,
+# and the purge below runs it.
+- name: Keep the apt package's removal script off the VS Code repository
+  ansible.builtin.debconf:
+    name: antigravity
+    question: antigravity/add-microsoft-repo
+    vtype: boolean
+    value: "false"
+  when:
+    - ansible_architecture == 'x86_64'
+    - antigravity_apt_status.rc == 0
+    - "'not-installed' not in antigravity_apt_status.stdout"
+
+- name: Remove Google's apt package for Antigravity (its repository stopped at 1.23.2)
+  ansible.builtin.apt:
+    name: antigravity
+    state: absent
+    purge: true
+  when: ansible_architecture == 'x86_64'
+
+- name: Remove Google's apt repository for Antigravity
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/sources.list.d/antigravity.list
+    - /etc/apt/sources.list.d/antigravity.list.save
+    - /etc/apt/keyrings/antigravity-repo-key.gpg
+  when: ansible_architecture == 'x86_64'
+
+- name: Say that Antigravity moved from the apt package to the snaps
+  ansible.builtin.debug:
+    msg: >-
+      Antigravity moved from Google's apt package (stale at 1.23.2; the
+      package and its repository are removed) to the
+      {{ nikos_antigravity_ide_snap }} snap. Nothing under ~/.config is touched.
+  when:
+    - ansible_architecture == 'x86_64'
+    - "'install ok installed' in antigravity_apt_status.stdout"
+
+# rc 0: absent or written by NikOS (first comment line "# NikOS:"); rc 1: someone else's.
+- name: Check the wrapper paths for files NikOS did not write
+  ansible.builtin.command:
+    argv: [sh, -c, '! test -e "$1" || grep -q "^# NikOS:" "$1"', sh, "{{ item }}"]
+  loop:
+    - /usr/local/bin/antigravity
+    - /usr/local/bin/antigravity-hub
+  register: antigravity_wrapper_guard
+  changed_when: false
+  failed_when: antigravity_wrapper_guard.rc not in [0, 1]
+  check_mode: false
+
+- name: Say which wrapper paths hold a file NikOS leaves alone
+  ansible.builtin.debug:
+    msg: "{{ item.item }} exists and was not written by NikOS; left as is."
+  loop: "{{ antigravity_wrapper_guard.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.rc != 0
+
+- name: Install the antigravity command (the IDE, as with the apt package)
+  ansible.builtin.copy:
+    dest: /usr/local/bin/antigravity
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # NikOS: `antigravity` opens the IDE, as Google's apt package did.
+      # /snap/bin/{{ nikos_antigravity_hub_command }} is the agent hub; `antigravity-hub` opens it.
+      exec /snap/bin/{{ nikos_antigravity_ide_command }} "$@"
+  when:
+    - ansible_architecture == 'x86_64'
+    - antigravity_wrapper_guard.results[0].rc == 0
+
+- name: Install the antigravity-hub command
+  ansible.builtin.copy:
+    dest: /usr/local/bin/antigravity-hub
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # NikOS: the Antigravity agent hub ({{ nikos_antigravity_hub_snap }} snap).
+      exec /snap/bin/{{ nikos_antigravity_hub_command }} "$@"
+  when: antigravity_wrapper_guard.results[1].rc == 0

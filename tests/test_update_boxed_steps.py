@@ -181,6 +181,7 @@ def drive_update(
         '_playbook() { echo "playbook:$*" >> "${CALLS}"; NIKOS_LAST_RUN_LOG=/logs/run.log; }\n'
         '_models_offer_removal() { echo "models:offer-removal" >> "${CALLS}"; }\n'
         '_exec_update_continuation() { echo "continuation" >> "${CALLS}"; }\n'
+        '_migrate_antigravity_to_snap() { :; }\n'
         '_get_saved_optional_tags() { printf "\\n"; }\n'
         + (extract("_logfile") + "\n\n" if real_logfile else "")
         + "\n\n".join(extract(name) for name in BOX_FUNCTIONS + ("cmd_update",))

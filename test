@@ -501,6 +501,8 @@ server_checks=(
   "! test -e /usr/share/themes/Nordic"
   "! test -e /usr/share/nikos/wallpaper.png"
   "! test -e /usr/share/plymouth/themes/nikos"
+  "! snap list antigravity-ide-snap 2>/dev/null"
+  "! snap list antigravity 2>/dev/null"
 )
 desktop_checks=(
   "command -v code"

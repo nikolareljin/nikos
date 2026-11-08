@@ -162,7 +162,8 @@
     msg: >-
       Not installed through distrodeck: {{ dev_tools_owned | join(', ') }}.
       NikOS owns these: Ollama comes from the ai-stack role, MongoDB from
-      `nikos add mongodb`. Run `nikos add tools` to save a list without them.
+      `nikos add mongodb`, Antigravity from `nikos add antigravity`. Run
+      `nikos add tools` to save a list without them.
   when:
     - (dev_tools_catalog.rc | default(1)) == 0
     - dev_tools_owned | length > 0

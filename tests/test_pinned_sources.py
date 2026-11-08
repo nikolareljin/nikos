@@ -2,7 +2,9 @@
 
 Allowed: distro packages, vendor apt repositories whose key fingerprint is
 checked before apt trusts it, release files pinned to a version and a sha256,
-registry installs at an exact version, git checkouts at a pinned commit.
+registry installs at an exact version, git checkouts at a pinned commit, and
+snaps from the store on a named channel (store-signed, verified publisher,
+refreshed by snapd; no version pin by design).
 Not allowed: `curl | sh`, downloaded install scripts run unchecked,
 `releases/latest`, `@latest`, branch heads, unchecked downloads.
 """

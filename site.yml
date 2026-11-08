@@ -173,6 +173,9 @@
     - role: jev
       become: false
       tags: [never, jev]
+    - role: antigravity
+      tags: [never, antigravity]
+      when: nikos_profile == 'desktop'
     - role: k8s-tools
       become: false
       tags: [never, k8s-tools]

@@ -5,6 +5,20 @@ All notable changes to NikOS are documented here.
 ## Unreleased
 
 ### Added
+- `nikos add antigravity` (desktop only): Google Antigravity from the snap
+  store, the IDE (`antigravity-ide-snap`) and the agent hub (`antigravity`),
+  both classic on `latest/stable` from the verified publisher, unpinned by
+  design and refreshed by snapd and `nikos update`. `antigravity` keeps
+  opening the IDE (the hub snap's own command has the same name);
+  `antigravity-hub` opens the hub. The IDE snap is amd64 only; on arm64 the
+  role installs the hub alone and keeps the apt IDE. The apt package is removed only after the
+  snaps install, with its debconf answer `antigravity/add-microsoft-repo`
+  set to false first: its removal script otherwise deletes VS Code's
+  `vscode.sources` and `microsoft.gpg`, and a file at either wrapper path that NikOS did not write
+  is left alone. The installer offers it with the AI tools,
+  default No, and drops it with a note on the server profile; `nikos doctor`
+  reports it as optional on a desktop; `./test` asserts both snaps are absent
+  on a server.
 - `nikos doctor` starts with the release: the `PRETTY_NAME`, `ID`,
   `VERSION_ID` and codename from `/etc/os-release`, then a pass for Ubuntu
   22.04, 24.04 or 26.04 and a warning, not a failure, for any other release
@@ -51,6 +65,14 @@ All notable changes to NikOS are documented here.
   text is unchanged (https://github.com/nikolareljin/nikos/issues/67).
 
 ### Changed
+- Antigravity is NikOS-owned like Ollama and MongoDB: distrodeck's
+  `antigravity` entry (Google's apt repository, stale at 1.23.2 since
+  2026-04) is hidden from the tool picker and dropped from a saved list with
+  a note. On amd64 the role removes that apt package, `antigravity.list`,
+  `antigravity.list.save` and `antigravity-repo-key.gpg`; `~/.config` is not
+  touched. `nikos update` adds the bundle once on a desktop that has the apt
+  package or `antigravity` in its saved distrodeck list, so the move happens
+  without a hand step.
 - `docs/install.md`, `docs/development.md`, `docs/profiles.md` and
   `docs/debugging.md` describe the 26.04 run of `./test`, the RAM each
   release needs, sudo-rs and chrony on 26.04, and that the bundles not named

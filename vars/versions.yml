@@ -13,6 +13,10 @@
 #   scripts/bump-versions.py reads to check, bump and verify it.
 # - The Jev SDK has its own hash-pinned lock file:
 #   roles/optional/jev/files/requirements.lock.
+# - Snaps from the store on a named channel carry no pin on purpose and are
+#   not listed here: snapd checks the store signature on every install and
+#   refresh, the publisher is verified, and snapd refreshes them. Snap names
+#   and channels are configuration in vars/main.yml (Antigravity).
 #
 # Update with: python3 scripts/bump-versions.py --check | --bump NAME | --verify
 

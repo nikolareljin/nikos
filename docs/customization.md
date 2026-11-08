@@ -277,6 +277,7 @@ nikos add zsh        # Zsh plus Starship prompt
 nikos add act        # Run GitHub Actions locally
 nikos add fabric     # Fabric AI pattern CLI
 nikos add jev        # Jev client: official TypeSafe SDK + `jev` command (run `jev login` with your key)
+nikos add antigravity # Google Antigravity IDE and agent hub, as snaps (desktop only)
 nikos add k8s-tools  # kubectl and Helm
 nikos add bitnet     # BitNet.cpp 1-bit LLM inference (bitnet-cli)
 nikos add mistral-rs # mistral.rs Rust LLM server

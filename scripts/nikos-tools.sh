@@ -22,9 +22,10 @@
 # output is not the documented shape: at least six columns (distrodeck only
 # ever appends), and a tool name that is safe in a comma-separated list.
 # Tools NikOS installs itself, never through distrodeck: Ollama (ai-stack, the
-# one owner of the inference port) and MongoDB (`nikos add mongodb`). Keep in
-# step with nikos_distrodeck_owned_tools in vars/main.yml; a test checks it.
-NIKOS_DISTRODECK_OWNED_TOOLS="${NIKOS_DISTRODECK_OWNED_TOOLS:-ollama,mongodb}"
+# one owner of the inference port), MongoDB (`nikos add mongodb`) and Antigravity
+# (`nikos add antigravity`, snaps instead of distrodeck's stale apt repository).
+# Keep in step with nikos_distrodeck_owned_tools in vars/main.yml; a test checks it.
+NIKOS_DISTRODECK_OWNED_TOOLS="${NIKOS_DISTRODECK_OWNED_TOOLS:-ollama,mongodb,antigravity}"
 
 nikos_tools_catalog() {
   local out
@@ -52,6 +53,7 @@ nikos_tools_drop_owned() {
       case "${name}" in
         ollama) echo "NOTE: dropping distrodeck's ollama: NikOS installs Ollama itself (ai-stack role)." >&2 ;;
         mongodb) echo "NOTE: dropping distrodeck's mongodb: use 'nikos add mongodb' instead." >&2 ;;
+        antigravity) echo "NOTE: dropping distrodeck's antigravity: use 'nikos add antigravity' instead." >&2 ;;
         *) echo "NOTE: dropping distrodeck's ${name}: NikOS installs it itself." >&2 ;;
       esac
       continue

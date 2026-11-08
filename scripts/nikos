@@ -595,7 +595,7 @@ NIKOS_COMMANDS=(
   "update;update;update;yes;Move to the newest release, then re-run playbook (idempotent)"
   "update;update --ref <r>;update --ref {Branch or tag};yes;Update to a specific branch or tag instead"
   "add;add tools;add tools;yes;Choose distrodeck tools by category and install them"
-  "add;add <name>;add {Optional role};yes;Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | openclaw"
+  "add;add <name>;add {Optional role};yes;Install optional role: network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | antigravity | bitnet | mistral-rs | monitoring | openclaw"
   "add;add ollama-<m>;add ollama-{Role: text, reasoning, coding, vision, embedding or models};yes;Ollama module, this machine's model per role: text | reasoning | coding | vision | embedding | models (all)"
   "add;add model <m>;add model {Ollama model};yes;Install an Ollama model outside the approved set; updates keep it"
   "status;status;status;no;Show NikOS version, Ollama models, installed roles"
@@ -727,6 +727,12 @@ _get_default_skip_tags() {
 
 _save_skip_tags() {
   local optional_tags="${2:-}" migrated="${3:-}" tools="${NIKOS_TOOLS_TO_SAVE-}"
+  local antigravity_migrated="${NIKOS_ANTIGRAVITY_MIGRATED_TO_SAVE-}"
+  # The Antigravity latch also rides along unless the caller sets it.
+  if [[ -z "${NIKOS_ANTIGRAVITY_MIGRATED_TO_SAVE+set}" && -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    antigravity_migrated="$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_ANTIGRAVITY_MIGRATED:-}")"
+  fi
   # The distrodeck tool list rides along unchanged unless the caller sets
   # NIKOS_TOOLS_TO_SAVE, so rewriting the skip tags can never drop it.
   if [[ -z "${NIKOS_TOOLS_TO_SAVE+set}" && -f "${SELECTIONS_FILE}" ]]; then
@@ -745,6 +751,7 @@ _save_skip_tags() {
     printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${optional_tags}"
     printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "${migrated}"
     printf "NIKOS_DISTRODECK_TOOLS_SAVED=%q\n" "${tools}"
+    printf "NIKOS_ANTIGRAVITY_MIGRATED=%q\n" "${antigravity_migrated}"
   } > "${SELECTIONS_FILE}"
 }
 
@@ -752,7 +759,7 @@ _migrate_saved_optional_tags() {
   local skip_tags optional_tags="" tag
   local -a optional_role_tags=(
     neovim java bun redis postgres mongodb qdrant k8s-tools podman zsh act fabric jev
-    bitnet mistral-rs monitoring openclaw ollama-models ollama-reasoning
+    antigravity bitnet mistral-rs monitoring openclaw ollama-models ollama-reasoning
     ollama-coding ollama-text ollama-vision ollama-embedding
   )
 
@@ -768,6 +775,35 @@ _migrate_saved_optional_tags() {
     fi
   done
   _save_skip_tags "${skip_tags}" "${optional_tags}" "1"
+}
+
+# One-time move of Antigravity to the snaps. Until this release the IDE came
+# through distrodeck from Google's apt repository, which stopped at 1.23.2. A
+# desktop that has that package, or `antigravity` in its saved distrodeck list,
+# gets the antigravity bundle added to its selection, so the optional replay
+# of `nikos update` installs the snaps and removes the package. A server is
+# left alone: the role does not run there. Runs once per desktop: the latch
+# NIKOS_ANTIGRAVITY_MIGRATED keeps a bundle the user later drops from coming
+# back (on arm64 the role keeps the apt IDE, so the package stays installed).
+_migrate_antigravity_to_snap() {
+  local tools status
+  [[ "$(_nikos_var nikos_profile desktop)" == "desktop" ]] || return 0
+  # shellcheck source=/dev/null
+  [[ -f "${SELECTIONS_FILE}" && "$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_ANTIGRAVITY_MIGRATED:-}")" == "1" ]] && return 0
+  case ",$(_get_saved_optional_tags)," in
+    *,antigravity,*)
+      NIKOS_ANTIGRAVITY_MIGRATED_TO_SAVE=1 _save_skip_tags "$(_get_default_skip_tags)"
+      return 0
+      ;;
+  esac
+  tools="$(_get_saved_tools)"
+  status="$(dpkg-query -W -f='${Status}' antigravity 2>/dev/null || true)"
+  if [[ ",${tools}," == *",antigravity,"* || "${status}" == "install ok installed" ]]; then
+    print_info "Antigravity moves from Google's apt package (stale at 1.23.2) to the snaps: adding the antigravity bundle."
+    _logfile "Antigravity: apt package or saved distrodeck tool found; antigravity bundle added to the selection" 2>/dev/null || true
+    _add_optional_tag antigravity
+  fi
+  NIKOS_ANTIGRAVITY_MIGRATED_TO_SAVE=1 _save_skip_tags "$(_get_default_skip_tags)"
 }
 
 _get_saved_optional_tags() {
@@ -1155,6 +1191,7 @@ cmd_update() {
     exit "${rc}"
   fi
   local optional_tags
+  _migrate_antigravity_to_snap
   optional_tags="$(_get_saved_optional_tags)"
   if [[ -n "${optional_tags}" ]]; then
     print_info "Refreshing selected optional bundles: ${optional_tags}"
@@ -1181,10 +1218,10 @@ cmd_add() {
       bin="$(_distrodeck_bin)" || { print_error "distrodeck not found. Run 'nikos setup' first."; exit 1; }
       "${bin}" install-tools --tools "${tools}"
       ;;
-    network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
+    network | music | education | neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | antigravity | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
       # site.yml skips the desktop layer on a server, so this would report
       # success and install nothing.
-      if [[ "${role}" == "music" || "${role}" == "education" ]] &&
+      if [[ "${role}" == "music" || "${role}" == "education" || "${role}" == "antigravity" ]] &&
         [[ "$(_nikos_var nikos_profile desktop)" != "desktop" ]]; then
         print_error "${role} is a desktop bundle and this machine's profile is $(_nikos_var nikos_profile desktop) (vars/local.yml)."
         exit 1
@@ -1192,7 +1229,7 @@ cmd_add() {
       print_info "Installing optional bundle: ${role}"
       _remove_skip_tag "${role}"
       case "${role}" in
-        neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
+        neovim | java | bun | redis | postgres | mongodb | qdrant | k8s-tools | podman | zsh | act | fabric | jev | antigravity | bitnet | mistral-rs | monitoring | openclaw | ollama-models | ollama-reasoning | ollama-coding | ollama-text | ollama-vision | ollama-embedding)
           _add_optional_tag "${role}"
           ;;
       esac
@@ -1200,7 +1237,7 @@ cmd_add() {
       ;;
     *)
       print_error "Unknown optional role: ${role}"
-      echo "Available: network, music, education, neovim, java, bun, redis, postgres, mongodb, qdrant, k8s-tools, podman, zsh, act, fabric, jev, bitnet, mistral-rs, monitoring, openclaw, ollama-models, ollama-reasoning, ollama-coding, ollama-text, ollama-vision, ollama-embedding, model <name>"
+      echo "Available: network, music, education, neovim, java, bun, redis, postgres, mongodb, qdrant, k8s-tools, podman, zsh, act, fabric, jev, antigravity, bitnet, mistral-rs, monitoring, openclaw, ollama-models, ollama-reasoning, ollama-coding, ollama-text, ollama-vision, ollama-embedding, model <name>"
       exit 1
       ;;
   esac
@@ -1659,6 +1696,15 @@ cmd_doctor() {
     check "VS Code installed" command -v code
     check "Nordic GTK theme" test -d /usr/share/themes/Nordic
     check "Papirus icons" test -d /usr/share/icons/Papirus-Dark
+    # Opt-in (nikos add antigravity), so a warning, not a failure. The IDE
+    # snap is amd64 only; elsewhere the role installs just the hub.
+    if [[ "$(uname -m)" == "x86_64" ]]; then
+      optional_check "Antigravity IDE installed (nikos add antigravity)" \
+        test -x "/snap/bin/$(_nikos_var nikos_antigravity_ide_command antigravity-ide-snap.antigravity-ide)"
+    else
+      optional_check "Antigravity hub installed (nikos add antigravity)" \
+        test -x "/snap/bin/$(_nikos_var nikos_antigravity_hub_command antigravity)"
+    fi
   else
     print_info "Skipping desktop checks (VS Code, Nordic, Papirus) for profile ${profile}"
   fi
