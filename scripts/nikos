@@ -1681,9 +1681,15 @@ cmd_doctor() {
     check "VS Code installed" command -v code
     check "Nordic GTK theme" test -d /usr/share/themes/Nordic
     check "Papirus icons" test -d /usr/share/icons/Papirus-Dark
-    # Opt-in (nikos add antigravity), so a warning, not a failure.
-    optional_check "Antigravity IDE installed (nikos add antigravity)" \
-      test -x "/snap/bin/$(_nikos_var nikos_antigravity_ide_command antigravity-ide-snap.antigravity-ide)"
+    # Opt-in (nikos add antigravity), so a warning, not a failure. The IDE
+    # snap is amd64 only; elsewhere the role installs just the hub.
+    if [[ "$(uname -m)" == "x86_64" ]]; then
+      optional_check "Antigravity IDE installed (nikos add antigravity)" \
+        test -x "/snap/bin/$(_nikos_var nikos_antigravity_ide_command antigravity-ide-snap.antigravity-ide)"
+    else
+      optional_check "Antigravity hub installed (nikos add antigravity)" \
+        test -x "/snap/bin/$(_nikos_var nikos_antigravity_hub_command antigravity)"
+    fi
   else
     print_info "Skipping desktop checks (VS Code, Nordic, Papirus) for profile ${profile}"
   fi

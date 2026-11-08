@@ -10,7 +10,10 @@ All notable changes to NikOS are documented here.
   both classic on `latest/stable` from the verified publisher, unpinned by
   design and refreshed by snapd and `nikos update`. `antigravity` keeps
   opening the IDE (the hub snap's own command has the same name);
-  `antigravity-hub` opens the hub. The installer offers it with the AI tools,
+  `antigravity-hub` opens the hub. The IDE snap is amd64 only; on arm64 the
+  role installs the hub alone. The apt package is removed only after the
+  snaps install, and a file at either wrapper path that NikOS did not write
+  is left alone. The installer offers it with the AI tools,
   default No, and drops it with a note on the server profile; `nikos doctor`
   reports it as optional on a desktop; `./test` asserts both snaps are absent
   on a server.

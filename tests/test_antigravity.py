@@ -55,19 +55,20 @@ def test_snap_names_and_channel_are_configuration_not_pins() -> None:
 
 
 def test_both_snaps_are_installed_classic_on_the_named_channel() -> None:
-    task = _task("Install the Antigravity snaps")
-    snap = task["community.general.snap"]
-    assert snap["classic"] is True
-    assert snap["channel"] == "{{ nikos_antigravity_snap_channel }}"
-    assert snap["state"] == "present"
-    assert task["loop"] == ["{{ nikos_antigravity_ide_snap }}", "{{ nikos_antigravity_hub_snap }}"]
-    # snapd is not on the CI runner's --check path; the task has to sit it out.
-    assert "not ansible_check_mode" in str(task["when"])
+    for name, var in (("Install the Antigravity IDE snap", "ide"), ("Install the Antigravity hub snap", "hub")):
+        task = _task(name)
+        snap = task["community.general.snap"]
+        assert snap["name"] == "{{ nikos_antigravity_%s_snap }}" % var
+        assert snap["classic"] is True
+        assert snap["channel"] == "{{ nikos_antigravity_snap_channel }}"
+        assert snap["state"] == "present"
+        # snapd is not on the CI runner's --check path; the task has to sit it out.
+        assert "not ansible_check_mode" in str(task["when"])
 
 
 def test_snapd_is_installed_first() -> None:
     names = [t.get("name") for t in TASKS]
-    assert names.index("Install snapd") < names.index("Install the Antigravity snaps")
+    assert names.index("Install snapd") < names.index("Install the Antigravity IDE snap")
     assert _task("Install snapd")["ansible.builtin.apt"] == {"name": "snapd", "state": "present"}
 
 
@@ -158,6 +159,9 @@ def test_doctor_reads_the_ide_command_from_the_playbook_vars() -> None:
     line = next(l for l in nikos.splitlines() if "Antigravity IDE installed" in l)
     assert line.lstrip().startswith("optional_check"), line
     assert f'_nikos_var nikos_antigravity_ide_command {VARS["nikos_antigravity_ide_command"]}' in nikos
+    # Off amd64 there is no IDE snap; doctor checks the hub there instead.
+    assert f'_nikos_var nikos_antigravity_hub_command {VARS["nikos_antigravity_hub_command"]}' in nikos
+    assert '"$(uname -m)" == "x86_64"' in nikos
 
 
 def test_check_mode_runs_the_role_without_installing() -> None:
@@ -172,8 +176,58 @@ def test_check_mode_runs_the_role_without_installing() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     out = result.stdout
-    assert "Install the Antigravity snaps" in out
-    snap_block = out[out.index("Install the Antigravity snaps"):]
-    assert snap_block.splitlines()[1].startswith("skipping:"), snap_block[:300]
+    for name in ("Install the Antigravity IDE snap", "Install the Antigravity hub snap"):
+        assert name in out
+        snap_block = out[out.index(name):]
+        assert snap_block.splitlines()[1].startswith("skipping:"), snap_block[:300]
     assert "Install the antigravity command" in out
     assert "failed=0" in out
+
+
+def test_the_apt_package_is_removed_only_after_the_snaps_install() -> None:
+    """A failed snap install must not leave the machine with no Antigravity.
+
+    Tasks run in order and a failure stops the play, so the apt removal has to
+    come after both snap installs.
+    """
+    names = [t.get("name") for t in TASKS]
+    removal = names.index("Remove Google's apt package for Antigravity (its repository stopped at 1.23.2)")
+    assert names.index("Install the Antigravity IDE snap") < removal
+    assert names.index("Install the Antigravity hub snap") < removal
+    assert names.index("Remove Google's apt repository for Antigravity") > names.index("Install the Antigravity hub snap")
+
+
+def test_snapd_seeding_is_awaited_before_the_snap_installs() -> None:
+    names = [t.get("name") for t in TASKS]
+    wait = _task("Wait for snapd to finish seeding")
+    assert wait["ansible.builtin.command"]["argv"] == ["snap", "wait", "system", "seed.loaded"]
+    assert names.index("Install snapd") < names.index("Wait for snapd to finish seeding")
+    assert names.index("Wait for snapd to finish seeding") < names.index("Install the Antigravity IDE snap")
+
+
+def test_the_ide_snap_is_amd64_only_and_the_hub_installs_everywhere() -> None:
+    ide = _task("Install the Antigravity IDE snap")
+    assert "ansible_architecture == 'x86_64'" in str(ide["when"])
+    hub = _task("Install the Antigravity hub snap")
+    assert "ansible_architecture" not in str(hub.get("when", ""))
+    # No IDE wrapper pointing at a snap that is not there.
+    wrapper = _task("Install the antigravity command (the IDE, as with the apt package)")
+    assert "ansible_architecture == 'x86_64'" in str(wrapper["when"])
+
+
+def _run_guard(tmp_path: Path, existing: str | None) -> int:
+    guard = _task("Check the wrapper paths for files NikOS did not write")
+    argv = guard["ansible.builtin.command"]["argv"]
+    target = tmp_path / "antigravity"
+    if existing is not None:
+        target.write_text(existing, encoding="utf-8")
+    argv = [a.replace("{{ item }}", str(target)) for a in argv]
+    return subprocess.run(argv, capture_output=True, text=True, timeout=10).returncode
+
+
+def test_a_user_file_in_usr_local_bin_is_not_overwritten(tmp_path: Path) -> None:
+    assert _run_guard(tmp_path, None) == 0
+    assert _run_guard(tmp_path, "#!/bin/sh\n# NikOS: `antigravity` opens the IDE\n") == 0
+    assert _run_guard(tmp_path, "#!/bin/sh\nexec my-own-thing\n") == 1
+    for name in ("Install the antigravity command (the IDE, as with the apt package)", "Install the antigravity-hub command"):
+        assert "antigravity_wrapper_guard" in str(_task(name)["when"]), name
