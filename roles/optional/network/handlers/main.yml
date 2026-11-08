@@ -1,0 +1,8 @@
+---
+# apt does not re-run the postinst of a package already present, so a changed
+# capture answer reaches dumpcap only through dpkg-reconfigure.
+- name: Reconfigure wireshark-common
+  ansible.builtin.command:
+    cmd: dpkg-reconfigure -f noninteractive wireshark-common
+  become: true
+  changed_when: true

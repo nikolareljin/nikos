@@ -1,11 +1,28 @@
 ---
+# Runs on both profiles (site.yml does not gate the role). The capture tools
+# split by profile below: the Wireshark GUI and the OpenVPN NetworkManager GUI
+# plugin need a desktop; a server gets tshark, the same capture engine without
+# the Qt front end.
+
+# Both wireshark and tshark pull in wireshark-common, whose postinst asks
+# whether non-root users may capture. apt runs non-interactive here, so an
+# unseeded question takes its default (false) and the wireshark group below
+# does nothing. Seeded first, so a fresh install reads it; an install that
+# already has the package re-reads it through the handler.
+- name: Seed wireshark-common/install-setuid so the wireshark group may capture
+  ansible.builtin.debconf:
+    name: wireshark-common
+    question: wireshark-common/install-setuid
+    vtype: boolean
+    value: "true"
+  become: true
+  notify: Reconfigure wireshark-common
+
 - name: Install network tools
   ansible.builtin.apt:
     name:
       - nmap
-      - wireshark
       - network-manager-openvpn
-      - network-manager-openvpn-gnome
       - traceroute
       - tcpdump
       - netcat-openbsd
@@ -14,9 +31,28 @@
     cache_valid_time: 3600
   become: true
 
+- name: Install the Wireshark GUI and the OpenVPN NetworkManager GUI plugin
+  ansible.builtin.apt:
+    name:
+      - wireshark
+      - network-manager-openvpn-gnome
+    state: present
+  become: true
+  when: nikos_profile == 'desktop'
+
+- name: Install tshark
+  ansible.builtin.apt:
+    name: tshark
+    state: present
+  become: true
+  when: nikos_profile == 'server'
+
+# wireshark-common's postinst creates the group, so a check run on a machine
+# without it has no group to add to.
 - name: Add user to wireshark group
   ansible.builtin.user:
     name: "{{ ansible_user_id }}"
     groups: wireshark
     append: true
   become: true
+  when: not ansible_check_mode

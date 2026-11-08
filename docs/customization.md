@@ -262,7 +262,7 @@ Add extension IDs (from the VS Code Marketplace URL) to `nikos_vscode_extensions
 ## Adding optional bundles
 
 ```bash
-nikos add network    # nmap, wireshark, OpenVPN, traceroute, tcpdump
+nikos add network    # nmap, wireshark (tshark on a server), OpenVPN, traceroute, tcpdump
 nikos add music      # LMMS, Ardour (Flatpak), Audacity
 nikos add education  # LibreOffice, draw.io (Flatpak), Anki
 nikos add neovim     # Neovim plus a minimal lazy.nvim bootstrap config

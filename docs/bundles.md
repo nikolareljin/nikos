@@ -141,6 +141,12 @@ to `--skip-tags` in `_build_tag_args`. Neither behaviour is wrong; they are
 answers to different questions, and a document or a selector that reports one
 as the other is telling somebody their machine has something it does not.
 
+`network` is the one bundle here whose contents depend on the profile: the
+role runs on both, and on `server` installs `tshark` in place of the
+`wireshark` GUI and leaves out `network-manager-openvpn-gnome`. That is a
+`when` on two tasks inside the role, not on the role, so the installer still
+offers the tag on a server.
+
 This is exactly what a manifest has to encode: the tag, its playbook default,
 and the offered default, as three separate fields. Deriving one from another
 would bake in the assumption that just failed.

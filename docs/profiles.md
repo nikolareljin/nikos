@@ -40,6 +40,13 @@ so a server run skips them even when they are named in `--tags`. On a desktop
 they can also be left out for one run with
 `--skip-tags desktop,theming,editors`.
 
+`network` runs on both profiles, with one task-level split: on `server` it
+installs `tshark` in place of the `wireshark` GUI and leaves out
+`network-manager-openvpn-gnome`. `nmap`, `tcpdump`, `traceroute`, `netcat`
+and `network-manager-openvpn` install on both, and the capture answer
+(`wireshark-common/install-setuid`) is seeded on both, so the `wireshark`
+group lets a user capture without root on a server too.
+
 On a server, `nikos add music`, `nikos add education` and `nikos add antigravity`
 stop with an error instead of reporting success for a role that would not run.
 The installer does not offer them, nor `ai-vscode`, when the `server` profile

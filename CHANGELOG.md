@@ -65,6 +65,17 @@ All notable changes to NikOS are documented here.
   text is unchanged (https://github.com/nikolareljin/nikos/issues/67).
 
 ### Changed
+- The `network` bundle no longer installs GUI packages on a server. With
+  `nikos_profile: server` the role installs `tshark` in place of the
+  `wireshark` GUI and leaves out `network-manager-openvpn-gnome`; `nmap`,
+  `tcpdump`, `traceroute`, `netcat-openbsd` and `network-manager-openvpn`
+  install on both profiles and the desktop install is unchanged. The role
+  seeds `wireshark-common/install-setuid` to true before the install and
+  reconfigures an already installed `wireshark-common` when the answer
+  changed, so the `wireshark` group it adds the user to lets that user
+  capture without root. The installer names `tshark` in the bundle's
+  description on a server; `nikos add network` keeps working on both
+  profiles.
 - `install.sh` asks for the profile before the bundle and AI tool pickers,
   and on `server` leaves out what `site.yml` would not run there: `music`,
   `education`, `ai-vscode` and `antigravity`. The list is read from the
