@@ -343,8 +343,11 @@ def test_desktop_next_step_is_unchanged(env: dict, expected: str) -> None:
 # so two tasks inside the role split by profile; the role itself stays
 # ungated so the installer keeps offering the tag on a server.
 NETWORK_TASKS = REPO / "roles" / "optional" / "network" / "tasks" / "main.yml"
-NETWORK_GUI = {"wireshark", "network-manager-openvpn-gnome"}
-NETWORK_SHARED = {"nmap", "tcpdump", "traceroute", "netcat-openbsd", "network-manager-openvpn"}
+# network-manager-openvpn depends on network-manager; on a server that would
+# install NetworkManager beside netplan/networkd, so a server gets openvpn.
+NETWORK_DESKTOP = {"wireshark", "network-manager-openvpn", "network-manager-openvpn-gnome"}
+NETWORK_SERVER = {"tshark", "openvpn"}
+NETWORK_SHARED = {"nmap", "tcpdump", "traceroute", "netcat-openbsd"}
 
 
 def _network_tasks() -> list[dict]:
@@ -371,8 +374,9 @@ def test_network_bundle_installs_gui_packages_only_on_a_desktop() -> None:
             server |= names
         else:
             pytest.fail(f"unexpected gate {when!r} on {task.get('name')}")
-    assert desktop == NETWORK_GUI
-    assert server == {"tshark"}
+    assert desktop == NETWORK_DESKTOP
+    assert server == NETWORK_SERVER
+    assert not any(n.startswith("network-manager") for n in ungated | server)
     assert ungated == NETWORK_SHARED
     assert not ungated & (desktop | server)
 
@@ -391,7 +395,7 @@ def test_wireshark_capture_answer_is_seeded_before_the_install() -> None:
         "value": "true",
     }
     assert seed.get("when") is None, "seeded on both profiles"
-    installs = [i for i, t in enumerate(tasks) if _apt_names(t) & (NETWORK_GUI | {"tshark"})]
+    installs = [i for i, t in enumerate(tasks) if _apt_names(t) & {"wireshark", "tshark"}]
     assert installs and seeds[0] < min(installs)
     # An install that already has wireshark-common never re-reads the answer
     # through apt; a changed seed notifies a handler that reconfigures it.
@@ -423,8 +427,8 @@ def test_network_run_installs_the_capture_tool_for_the_profile(profile: str) -> 
     result = _ansible("--tags", "network", "-e", f"nikos_profile={profile}")
     assert result.returncode == 0, result.stdout + result.stderr
     status = _task_status(result.stdout)
-    gui = status["Install the Wireshark GUI and the OpenVPN NetworkManager GUI plugin"]
-    tshark = status["Install tshark"]
+    gui = status["Install the Wireshark GUI and the OpenVPN NetworkManager plugins"]
+    tshark = status["Install tshark and openvpn"]
     assert status["Install network tools"] != "skipping", status
     if profile == "server":
         assert gui == "skipping" and tshark != "skipping", status

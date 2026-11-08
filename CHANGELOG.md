@@ -67,9 +67,10 @@ All notable changes to NikOS are documented here.
 ### Changed
 - The `network` bundle no longer installs GUI packages on a server. With
   `nikos_profile: server` the role installs `tshark` in place of the
-  `wireshark` GUI and leaves out `network-manager-openvpn-gnome`; `nmap`,
-  `tcpdump`, `traceroute`, `netcat-openbsd` and `network-manager-openvpn`
-  install on both profiles and the desktop install is unchanged. The role
+  `wireshark` GUI and `openvpn` in place of `network-manager-openvpn` and
+  `network-manager-openvpn-gnome` (the first depends on `network-manager`,
+  which would land beside netplan); `nmap`, `tcpdump`, `traceroute` and
+  `netcat-openbsd` install on both profiles and the desktop install is unchanged. The role
   seeds `wireshark-common/install-setuid` to true before the install and
   reconfigures an already installed `wireshark-common` when the answer
   changed, so the `wireshark` group it adds the user to lets that user

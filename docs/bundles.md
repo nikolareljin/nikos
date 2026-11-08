@@ -143,7 +143,8 @@ as the other is telling somebody their machine has something it does not.
 
 `network` is the one bundle here whose contents depend on the profile: the
 role runs on both, and on `server` installs `tshark` in place of the
-`wireshark` GUI and leaves out `network-manager-openvpn-gnome`. That is a
+`wireshark` GUI and `openvpn` in place of the two NetworkManager OpenVPN
+packages (`network-manager-openvpn` depends on `network-manager`). That is a
 `when` on two tasks inside the role, not on the role, so the installer still
 offers the tag on a server.
 

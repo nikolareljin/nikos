@@ -41,9 +41,10 @@ they can also be left out for one run with
 `--skip-tags desktop,theming,editors`.
 
 `network` runs on both profiles, with one task-level split: on `server` it
-installs `tshark` in place of the `wireshark` GUI and leaves out
-`network-manager-openvpn-gnome`. `nmap`, `tcpdump`, `traceroute`, `netcat`
-and `network-manager-openvpn` install on both, and the capture answer
+installs `tshark` in place of the `wireshark` GUI and `openvpn` in place of
+`network-manager-openvpn` and `network-manager-openvpn-gnome`, so a server
+never gets NetworkManager beside netplan. `nmap`, `tcpdump`, `traceroute` and
+`netcat` install on both, and the capture answer
 (`wireshark-common/install-setuid`) is seeded on both, so the `wireshark`
 group lets a user capture without root on a server too.
 

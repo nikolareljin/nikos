@@ -1,8 +1,9 @@
 ---
 # Runs on both profiles (site.yml does not gate the role). The capture tools
-# split by profile below: the Wireshark GUI and the OpenVPN NetworkManager GUI
-# plugin need a desktop; a server gets tshark, the same capture engine without
-# the Qt front end.
+# split by profile below: the Wireshark GUI and the OpenVPN NetworkManager
+# plugins need a desktop. network-manager-openvpn depends on network-manager,
+# which a server (netplan + networkd) must not get, so a server gets tshark and
+# the plain openvpn client instead.
 
 # Both wireshark and tshark pull in wireshark-common, whose postinst asks
 # whether non-root users may capture. apt runs non-interactive here, so an
@@ -22,7 +23,6 @@
   ansible.builtin.apt:
     name:
       - nmap
-      - network-manager-openvpn
       - traceroute
       - tcpdump
       - netcat-openbsd
@@ -31,18 +31,21 @@
     cache_valid_time: 3600
   become: true
 
-- name: Install the Wireshark GUI and the OpenVPN NetworkManager GUI plugin
+- name: Install the Wireshark GUI and the OpenVPN NetworkManager plugins
   ansible.builtin.apt:
     name:
       - wireshark
+      - network-manager-openvpn
       - network-manager-openvpn-gnome
     state: present
   become: true
   when: nikos_profile == 'desktop'
 
-- name: Install tshark
+- name: Install tshark and openvpn
   ansible.builtin.apt:
-    name: tshark
+    name:
+      - tshark
+      - openvpn
     state: present
   become: true
   when: nikos_profile == 'server'
