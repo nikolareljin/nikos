@@ -1330,7 +1330,7 @@ _desktop_only_tags() {
     [[ "${role}" == "-" ]] && continue
     for dir in "${NIKOS_HOME}/roles/${role}/tasks" "${NIKOS_HOME}/roles/optional/${role}/tasks"; do
       [[ -d "${dir}" ]] || continue
-      find "${dir}" -type f \( -name '*.yml' -o -name '*.yaml' \) | while read -r file; do
+      find -L "${dir}" -type f \( -name '*.yml' -o -name '*.yaml' \) | while read -r file; do
         awk '
           function clean(s) {
             sub(/[ \t]+#.*$/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s)

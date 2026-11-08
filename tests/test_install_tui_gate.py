@@ -1047,3 +1047,27 @@ def test_a_compound_gate_is_not_read_as_desktop_only(tmp_path, awk, gate):
         encoding="utf-8",
     )
     assert _desktop_only(tmp_path, home, awk) == []
+
+
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize("link", ["tasks-dir", "task-file"])
+def test_a_symlinked_ungated_task_still_keeps_its_tag(tmp_path, awk, link):
+    """find without -L skipped a symlinked tasks dir or file, hiding a server tag."""
+    home = tmp_path / "home"
+    _role(home, "paint", "- name: x\n  debug: {}\n  tags: [shared]\n")
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "main.yml").write_text("- name: y\n  debug: {}\n  tags: [shared]\n", encoding="utf-8")
+    if link == "tasks-dir":
+        (home / "roles" / "net").mkdir(parents=True)
+        (home / "roles" / "net" / "tasks").symlink_to(shared, target_is_directory=True)
+    else:
+        (home / "roles" / "net" / "tasks").mkdir(parents=True)
+        (home / "roles" / "net" / "tasks" / "main.yml").symlink_to(shared / "main.yml")
+    (home / "site.yml").write_text(
+        "- hosts: localhost\n  roles:\n"
+        "    - role: paint\n      tags: [paint]\n      when: nikos_profile == 'desktop'\n"
+        "    - role: net\n      tags: [net]\n",
+        encoding="utf-8",
+    )
+    assert _desktop_only(tmp_path, home, awk) == ["paint"]
