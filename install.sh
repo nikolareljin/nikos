@@ -820,20 +820,12 @@ _ensure_ansible_collections() {
 }
 
 _persist_selected_options() {
-  local antigravity_migrated=""
   mkdir -p "${NIKOS_CONFIG_DIR}"
-  # Kept as found: `nikos update` sets it once it has moved Antigravity to the
-  # snaps, so a bundle deselected here is not added back.
-  if [[ -f "${SELECTIONS_FILE}" ]]; then
-    # shellcheck source=/dev/null
-    antigravity_migrated="$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_ANTIGRAVITY_MIGRATED:-}")"
-  fi
   {
     printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
     printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${2}"
     printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "1"
-    printf "NIKOS_DISTRODECK_TOOLS_SAVED=%q\n" "${3:-}"
-    printf "NIKOS_ANTIGRAVITY_MIGRATED=%q\n" "${antigravity_migrated}"
+    printf "NIKOS_DISTRODECK_TOOLS_SAVED=%q\nNIKOS_ANTIGRAVITY_MIGRATED=%q\n" "${3:-}" "${4:-}"
   } > "${SELECTIONS_FILE}"
 }
 
@@ -1087,6 +1079,15 @@ _saved_distrodeck_tools() {
   [[ -f "${SELECTIONS_FILE}" ]] || return 0
   # shellcheck source=/dev/null
   ( source "${SELECTIONS_FILE}"; printf '%s\n' "${NIKOS_DISTRODECK_TOOLS_SAVED:-}" )
+}
+
+# Passed to _persist_selected_options, which keeps it as found: `nikos update`
+# sets it once it has moved Antigravity to the snaps, so a bundle deselected
+# here is not added back. Read before the write, which truncates the file.
+_saved_antigravity_latch() {
+  [[ -f "${SELECTIONS_FILE}" ]] || return 0
+  # shellcheck source=/dev/null
+  ( source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_ANTIGRAVITY_MIGRATED:-}" )
 }
 
 # Clone (or update) the repo with submodules to a persistent location
@@ -1625,7 +1626,7 @@ _build_tag_args() {
 
 _build_tag_args
 
-_persist_selected_options "${SKIP_TAGS#,}" "${EXPLICIT_OPTIONAL_TAGS#,}" "${NIKOS_SELECTED_TOOLS}"
+_persist_selected_options "${SKIP_TAGS#,}" "${EXPLICIT_OPTIONAL_TAGS#,}" "${NIKOS_SELECTED_TOOLS}" "$(_saved_antigravity_latch)"
 _logfile "Selected bundles: ${SELECTED_BUNDLES[*]:-none}"
 _logfile "Selected AI tools: ${SELECTED_AI_TOOLS[*]:-none}"
 _logfile "Skip tags: ${SKIP_TAGS#,}"

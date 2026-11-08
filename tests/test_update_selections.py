@@ -551,13 +551,19 @@ def test_the_installer_keeps_the_antigravity_latch(tmp_path):
     config_dir.mkdir()
     (config_dir / "selected-options.env").write_text("NIKOS_ANTIGRAVITY_MIGRATED='1'\n", encoding="utf-8")
     src = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
-    body = re.search(r"^_persist_selected_options\(\) \{\n.*?^\}\n", src, re.S | re.M).group(0)
+    body = "".join(
+        re.search(rf"^{name}\(\) \{{\n.*?^\}}\n", src, re.S | re.M).group(0)
+        for name in ("_persist_selected_options", "_saved_antigravity_latch")
+    )
     program = (
         f"NIKOS_CONFIG_DIR={str(config_dir)!r}\n"
         'SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"\n'
         + body
-        + '_persist_selected_options "network" "redis" "vlc"\n'
+        + '_persist_selected_options "network" "redis" "vlc" "$(_saved_antigravity_latch)"\n'
     )
+    # The installer's one call passes the latch the same way.
+    calls = re.findall(r"^_persist_selected_options .*$", src, re.M)
+    assert calls and all(c.endswith('"$(_saved_antigravity_latch)"') for c in calls), calls
     result = subprocess.run(["bash", "-c", program], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     saved = read_selections(config_dir)
