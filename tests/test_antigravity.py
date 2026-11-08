@@ -217,12 +217,12 @@ def test_the_ide_snap_is_amd64_only_and_the_hub_installs_everywhere() -> None:
 
 def _run_guard(tmp_path: Path, existing: str | None) -> int:
     guard = _task("Check the wrapper paths for files NikOS did not write")
-    argv = guard["ansible.builtin.command"]["argv"]
+    script = '! test -e "$1" || grep -q "^# NikOS:" "$1"'
+    assert guard["ansible.builtin.command"]["argv"] == ["sh", "-c", script, "sh", "{{ item }}"]
     target = tmp_path / "antigravity"
     if existing is not None:
         target.write_text(existing, encoding="utf-8")
-    argv = [a.replace("{{ item }}", str(target)) for a in argv]
-    return subprocess.run(argv, capture_output=True, text=True, timeout=10).returncode
+    return subprocess.run(["sh", "-c", script, "sh", str(target)], capture_output=True, text=True, timeout=10).returncode
 
 
 def test_a_user_file_in_usr_local_bin_is_not_overwritten(tmp_path: Path) -> None:
