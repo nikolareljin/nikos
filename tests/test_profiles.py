@@ -13,6 +13,7 @@ by the `nikos` CLI. Each check here is one way that fact could be lost:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -454,30 +455,42 @@ def test_installer_names_the_capture_tool_the_profile_gets(profile: str, expecte
 
 
 NETWORK_LEFTOVERS = ["wireshark", "network-manager-openvpn-gnome", "network-manager-openvpn", "network-manager"]
+WARN_TASK = "Warn about desktop network packages left on a server"
 
 
-def _installed(pkg: str) -> bool:
-    out = subprocess.run(
-        ["dpkg-query", "-W", "-f=${db:Status-Status}", pkg], capture_output=True, text=True
-    )
-    return out.returncode == 0 and out.stdout == "installed"
+@pytest.mark.parametrize(
+    "profile,installed,expected",
+    [
+        ("server", ["network-manager", "wireshark", "curl"], ["wireshark", "network-manager"]),
+        ("server", NETWORK_LEFTOVERS, NETWORK_LEFTOVERS),
+        ("server", ["curl"], []),
+        ("server", [], []),
+        ("desktop", NETWORK_LEFTOVERS, []),
+    ],
+    ids=["server-some", "server-all", "server-none", "server-empty", "desktop-never"],
+)
+def test_network_run_names_desktop_leftovers_on_a_server(
+    profile: str, installed: list[str], expected: list[str]
+) -> None:
+    """Never removed (network-manager over SSH can cut the link); named instead.
 
-
-@pytest.mark.skipif(not shutil.which("dpkg-query"), reason="needs dpkg")
-@pytest.mark.parametrize("profile", ["server", "desktop"])
-def test_network_run_names_desktop_leftovers_on_a_server(profile: str) -> None:
-    """Never removed (network-manager over SSH can cut the link); named instead."""
-    result = _ansible("--tags", "network", "-e", f"nikos_profile={profile}")
+    Package facts are faked through network_installed_packages, so the result
+    does not depend on what the test host has installed.
+    """
+    facts = json.dumps({"network_installed_packages": {p: [{"name": p}] for p in installed}})
+    result = _ansible("--tags", "network", "-e", f"nikos_profile={profile}", "-e", facts)
     assert result.returncode == 0, result.stdout + result.stderr
-    status = _task_status(result.stdout)
-    warn = status.get("Warn about desktop network packages left on a server")
-    present = [p for p in NETWORK_LEFTOVERS if _installed(p)]
-    if profile == "desktop" or not present:
-        assert warn == "skipping", status
+    warn = _task_status(result.stdout).get(WARN_TASK)
+    if not expected:
+        assert warn == "skipping", result.stdout
+        assert "WARN: desktop network packages" not in result.stdout
         return
-    assert warn == "ok", status
+    assert warn == "ok", result.stdout
     line = re.search(r"sudo apt-get remove ([\w -]+)", result.stdout)
-    assert line and line.group(1).split() == present, result.stdout
+    assert line and line.group(1).split() == expected, result.stdout
+    assert "WARN: desktop network packages from an earlier run are still installed: " + " ".join(expected) in result.stdout
     assert "over SSH can drop the connection" in result.stdout
-    text = NETWORK_TASKS.read_text(encoding="utf-8")
-    assert "state: absent" not in text
+
+
+def test_network_role_never_removes_packages() -> None:
+    assert "state: absent" not in NETWORK_TASKS.read_text(encoding="utf-8")

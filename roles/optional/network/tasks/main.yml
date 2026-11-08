@@ -74,10 +74,11 @@
       - "WARN: desktop network packages from an earlier run are still installed: {{ network_server_leftovers | join(' ') }}"
       - "Remove them by hand from a local console: sudo apt-get remove {{ network_server_leftovers | join(' ') }}"
       - "Removing network-manager over SSH can drop the connection; first check the server's netplan renderer is networkd."
+  # network_installed_packages is a test seam: -e sets it to fake package facts.
   vars:
     network_server_leftovers: >-
       {{ ['wireshark', 'network-manager-openvpn-gnome', 'network-manager-openvpn', 'network-manager']
-         | select('in', ansible_facts.packages | default({})) | list }}
+         | select('in', network_installed_packages | default(ansible_facts.packages | default({}))) | list }}
   when:
     - nikos_profile == 'server'
     - network_server_leftovers | length > 0
