@@ -59,3 +59,25 @@
     append: true
   become: true
   when: not ansible_check_mode
+
+# A server that ran an earlier version of this role still has the desktop
+# packages. They are not removed here: removing network-manager over SSH can
+# drop the connection. The run names them and the command instead.
+- name: Read installed packages for the server leftover check
+  ansible.builtin.package_facts:
+    manager: apt
+  when: nikos_profile == 'server'
+
+- name: Warn about desktop network packages left on a server
+  ansible.builtin.debug:
+    msg:
+      - "WARN: desktop network packages from an earlier run are still installed: {{ network_server_leftovers | join(' ') }}"
+      - "Remove them by hand from a local console: sudo apt-get remove {{ network_server_leftovers | join(' ') }}"
+      - "Removing network-manager over SSH can drop the connection; first check the server's netplan renderer is networkd."
+  vars:
+    network_server_leftovers: >-
+      {{ ['wireshark', 'network-manager-openvpn-gnome', 'network-manager-openvpn', 'network-manager']
+         | select('in', ansible_facts.packages | default({})) | list }}
+  when:
+    - nikos_profile == 'server'
+    - network_server_leftovers | length > 0

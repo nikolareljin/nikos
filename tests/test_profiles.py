@@ -451,3 +451,33 @@ def test_installer_names_the_capture_tool_the_profile_gets(profile: str, expecte
     # Both pickers read it; a literal tool list in either one goes stale.
     assert text.count("$(_network_bundle_tools)") == 2, text.count("$(_network_bundle_tools)")
     assert "(nmap, wireshark, OpenVPN)" not in text
+
+
+NETWORK_LEFTOVERS = ["wireshark", "network-manager-openvpn-gnome", "network-manager-openvpn", "network-manager"]
+
+
+def _installed(pkg: str) -> bool:
+    out = subprocess.run(
+        ["dpkg-query", "-W", "-f=${db:Status-Status}", pkg], capture_output=True, text=True
+    )
+    return out.returncode == 0 and out.stdout == "installed"
+
+
+@pytest.mark.skipif(not shutil.which("dpkg-query"), reason="needs dpkg")
+@pytest.mark.parametrize("profile", ["server", "desktop"])
+def test_network_run_names_desktop_leftovers_on_a_server(profile: str) -> None:
+    """Never removed (network-manager over SSH can cut the link); named instead."""
+    result = _ansible("--tags", "network", "-e", f"nikos_profile={profile}")
+    assert result.returncode == 0, result.stdout + result.stderr
+    status = _task_status(result.stdout)
+    warn = status.get("Warn about desktop network packages left on a server")
+    present = [p for p in NETWORK_LEFTOVERS if _installed(p)]
+    if profile == "desktop" or not present:
+        assert warn == "skipping", status
+        return
+    assert warn == "ok", status
+    line = re.search(r"sudo apt-get remove ([\w -]+)", result.stdout)
+    assert line and line.group(1).split() == present, result.stdout
+    assert "over SSH can drop the connection" in result.stdout
+    text = NETWORK_TASKS.read_text(encoding="utf-8")
+    assert "state: absent" not in text

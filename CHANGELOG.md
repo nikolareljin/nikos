@@ -77,6 +77,10 @@ All notable changes to NikOS are documented here.
   capture without root. The installer names `tshark` in the bundle's
   description on a server; `nikos add network` keeps working on both
   profiles.
+  A server that still has `wireshark`, `network-manager-openvpn-gnome`,
+  `network-manager-openvpn` or `network-manager` from an earlier run keeps
+  them: the role prints a WARN naming them and the `apt-get remove` command,
+  since removing `network-manager` over SSH can drop the connection.
 - `install.sh` asks for the profile before the bundle and AI tool pickers,
   and on `server` leaves out what `site.yml` would not run there: `music`,
   `education`, `ai-vscode` and `antigravity`. The list is read from the

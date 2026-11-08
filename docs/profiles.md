@@ -48,6 +48,13 @@ never gets NetworkManager beside netplan. `nmap`, `tcpdump`, `traceroute` and
 (`wireshark-common/install-setuid`) is seeded on both, so the `wireshark`
 group lets a user capture without root on a server too.
 
+The role does not remove those desktop packages from a server that got them
+from an earlier run. It prints a WARN naming whichever of `wireshark`,
+`network-manager-openvpn-gnome`, `network-manager-openvpn` and
+`network-manager` are installed, with the `sudo apt-get remove` command.
+Run it from a local console: removing `network-manager` over SSH can drop the
+connection if the netplan renderer is NetworkManager.
+
 On a server, `nikos add music`, `nikos add education` and `nikos add antigravity`
 stop with an error instead of reporting success for a role that would not run.
 The installer does not offer them, nor `ai-vscode`, when the `server` profile
