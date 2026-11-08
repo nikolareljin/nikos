@@ -18,7 +18,8 @@
 #
 # Order matters: the apt package is removed only after both snaps installed,
 # so a failed snap install leaves the old IDE in place. The IDE snap is
-# published for amd64 only; elsewhere only the hub is installed.
+# published for amd64 only; elsewhere only the hub is installed and the apt
+# IDE (Google publishes it for arm64 too) is kept, as the only IDE there.
 - name: Install snapd
   ansible.builtin.apt:
     name: snapd
@@ -69,6 +70,7 @@
     name: antigravity
     state: absent
     purge: true
+  when: ansible_architecture == 'x86_64'
 
 - name: Remove Google's apt repository for Antigravity
   ansible.builtin.file:
@@ -78,6 +80,7 @@
     - /etc/apt/sources.list.d/antigravity.list
     - /etc/apt/sources.list.d/antigravity.list.save
     - /etc/apt/keyrings/antigravity-repo-key.gpg
+  when: ansible_architecture == 'x86_64'
 
 - name: Say that Antigravity moved from the apt package to the snaps
   ansible.builtin.debug:
@@ -85,7 +88,9 @@
       Antigravity moved from Google's apt package (stale at 1.23.2; the
       package and its repository are removed) to the
       {{ nikos_antigravity_ide_snap }} snap. Nothing under ~/.config is touched.
-  when: "'install ok installed' in antigravity_apt_status.stdout"
+  when:
+    - ansible_architecture == 'x86_64'
+    - "'install ok installed' in antigravity_apt_status.stdout"
 
 # rc 0: absent or written by NikOS (first comment line "# NikOS:"); rc 1: someone else's.
 - name: Check the wrapper paths for files NikOS did not write

@@ -11,7 +11,7 @@ All notable changes to NikOS are documented here.
   design and refreshed by snapd and `nikos update`. `antigravity` keeps
   opening the IDE (the hub snap's own command has the same name);
   `antigravity-hub` opens the hub. The IDE snap is amd64 only; on arm64 the
-  role installs the hub alone. The apt package is removed only after the
+  role installs the hub alone and keeps the apt IDE. The apt package is removed only after the
   snaps install, and a file at either wrapper path that NikOS did not write
   is left alone. The installer offers it with the AI tools,
   default No, and drops it with a note on the server profile; `nikos doctor`
@@ -66,7 +66,7 @@ All notable changes to NikOS are documented here.
 - Antigravity is NikOS-owned like Ollama and MongoDB: distrodeck's
   `antigravity` entry (Google's apt repository, stale at 1.23.2 since
   2026-04) is hidden from the tool picker and dropped from a saved list with
-  a note. The role removes that apt package, `antigravity.list`,
+  a note. On amd64 the role removes that apt package, `antigravity.list`,
   `antigravity.list.save` and `antigravity-repo-key.gpg`; `~/.config` is not
   touched. `nikos update` adds the bundle once on a desktop that has the apt
   package or `antigravity` in its saved distrodeck list, so the move happens

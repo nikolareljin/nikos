@@ -80,7 +80,7 @@ def test_the_apt_package_and_repository_are_removed_not_added() -> None:
     status = _task("Check for Google's apt package for Antigravity")
     assert status["check_mode"] is False and status["failed_when"] is False
     said = _task("Say that Antigravity moved from the apt package to the snaps")
-    assert "antigravity_apt_status.stdout" in said["when"]
+    assert "antigravity_apt_status.stdout" in str(said["when"])
     files = _task("Remove Google's apt repository for Antigravity")
     assert files["ansible.builtin.file"] == {"path": "{{ item }}", "state": "absent"}
     assert set(files["loop"]) == APT_REPO_FILES
@@ -231,3 +231,18 @@ def test_a_user_file_in_usr_local_bin_is_not_overwritten(tmp_path: Path) -> None
     assert _run_guard(tmp_path, "#!/bin/sh\nexec my-own-thing\n") == 1
     for name in ("Install the antigravity command (the IDE, as with the apt package)", "Install the antigravity-hub command"):
         assert "antigravity_wrapper_guard" in str(_task(name)["when"]), name
+
+
+def test_the_apt_ide_is_kept_where_there_is_no_ide_snap() -> None:
+    """Google's apt repository publishes antigravity for arm64 too.
+
+    Off amd64 there is no IDE snap, so purging the apt package there would
+    leave the machine with no IDE at all. Removal and the "moved" message are
+    amd64 only, like the IDE snap.
+    """
+    for name in (
+        "Remove Google's apt package for Antigravity (its repository stopped at 1.23.2)",
+        "Remove Google's apt repository for Antigravity",
+        "Say that Antigravity moved from the apt package to the snaps",
+    ):
+        assert "ansible_architecture == 'x86_64'" in str(_task(name).get("when", "")), name
