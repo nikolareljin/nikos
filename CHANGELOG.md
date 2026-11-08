@@ -16,7 +16,7 @@ All notable changes to NikOS are documented here.
   set to false first: its removal script otherwise deletes VS Code's
   `vscode.sources` and `microsoft.gpg`, and a file at either wrapper path that NikOS did not write
   is left alone. The installer offers it with the AI tools,
-  default No, and drops it with a note on the server profile; `nikos doctor`
+  default No, and not at all on the server profile; `nikos doctor`
   reports it as optional on a desktop; `./test` asserts both snaps are absent
   on a server.
 - `nikos doctor` starts with the release: the `PRETTY_NAME`, `ID`,
@@ -65,6 +65,15 @@ All notable changes to NikOS are documented here.
   text is unchanged (https://github.com/nikolareljin/nikos/issues/67).
 
 ### Changed
+- `install.sh` asks for the profile before the bundle and AI tool pickers,
+  and on `server` leaves out what `site.yml` would not run there: `music`,
+  `education`, `ai-vscode` and `antigravity`. The list is read from the
+  roles gated on `nikos_profile == 'desktop'` in `site.yml`, not kept by
+  hand. The desktop flow asks the same questions in the same order as before;
+  the timezone follows the pickers as before. A desktop-only item that still
+  reaches the selection on a server is dropped with a note. If `site.yml` or
+  a role task file cannot be read, nothing is hidden
+  (https://github.com/nikolareljin/nikos/issues/67).
 - Antigravity is NikOS-owned like Ollama and MongoDB: distrodeck's
   `antigravity` entry (Google's apt repository, stale at 1.23.2 since
   2026-04) is hidden from the tool picker and dropped from a saved list with

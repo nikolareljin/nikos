@@ -30,6 +30,7 @@ clone-and-run path is ever exercised.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -46,11 +47,17 @@ SELECTION_HELPERS = (
     "_have_tty",
     "_say_tty",
     "_ask_tty",
+    "_ask_optional",
+    "_desktop_only_tags",
+    "_hidden_on_this_profile",
     "_require_tty_for_selection",
     "_select_bundles_plain",
     "_select_ai_tools_plain",
+    "_drop_desktop_only_selections",
     "_build_tag_args",
 )
+# The profile prompt, which now comes first, on top of the selection helpers.
+FLOW_HELPERS = SELECTION_HELPERS + ("_select_profile_plain",)
 
 needs_pty = pytest.mark.skipif(
     shutil.which("script") is None, reason="util-linux `script` is required"
@@ -77,7 +84,15 @@ def extract_selection_dispatch() -> str:
     caller threw the answers away, so the real dispatch is what runs here.
     """
     text = INSTALL_SH.read_text(encoding="utf-8")
-    start = text.index("if _can_use_dialog; then", text.index("_select_ai_tools_plain() {"))
+    start = text.index("if _can_use_dialog; then", text.index("# Bundle and AI tool selection"))
+    end = text.index("\n# Timezone", start)
+    return text[start:end]
+
+
+def extract_prompt_flow() -> str:
+    """The profile block and the selection dispatch, in the order install.sh runs them."""
+    text = INSTALL_SH.read_text(encoding="utf-8")
+    start = text.index("# Profile ", text.index("_drop_desktop_only_selections() {"))
     end = text.index("\n# Timezone", start)
     return text[start:end]
 
@@ -192,6 +207,9 @@ AI_ANSWERS = ["", "", "n", "", "", "", "y"]
 
 SELECTION_BODY = """
     _safe_logfile() { :; }
+    _logfile() { :; }
+    # The real site.yml and roles decide what a server is not offered.
+    NIKOS_HOME="__REPO_ROOT__"
     # Force the branch a machine without `dialog` takes.
     _can_use_dialog() { return 1; }
 
@@ -221,7 +239,7 @@ def test_plain_selection_round_trips_the_answers(tmp_path, antigravity_answer, e
     """What was answered is what reaches the tags - the whole of #53."""
     body = SELECTION_BODY.replace(
         "__SELECTION_DISPATCH__", extract_selection_dispatch()
-    )
+    ).replace("__REPO_ROOT__", str(REPO_ROOT))
     program = write_program(tmp_path, SELECTION_HELPERS, body)
     bindir = stub_dialog(tmp_path)
     answers = "\n".join(BUNDLE_ANSWERS + AI_ANSWERS + [antigravity_answer]) + "\n"
@@ -251,6 +269,235 @@ def test_plain_selection_round_trips_the_answers(tmp_path, antigravity_answer, e
     assert "antigravity" not in skip, skip
 
 
+# Every prompt of the plain pickers, in the order a desktop is asked them.
+# A server is asked the same list minus the four site.yml never runs there.
+DESKTOP_PROMPTS = [
+    "Install network tools?",
+    "Install music tools?",
+    "Install education tools?",
+    "Install Neovim?",
+    "Install Zsh + Starship?",
+    "Install Java 21?",
+    "Install Bun?",
+    "Install OpenClaw?",
+    "Pull every Ollama module",
+    "Install BitNet.cpp?",
+    "Install mistral.rs?",
+    "Install PostgreSQL + pgvector",
+    "Install MongoDB + mongosh + Atlas CLI",
+    "Install Redis?",
+    "Install Qdrant?",
+    "Install kubectl + Helm?",
+    "Install Podman?",
+    "Install act?",
+    "Install Netdata",
+    "Install Fabric AI pattern CLI?",
+    "Install Ollama, Miniforge, nikos-ai env, aider, and agent SDKs?",
+    "Install Gemini CLI?",
+    "Install Claude Code CLI?",
+    "Install GitHub Copilot CLI extension?",
+    "Install ai-runner local model UI?",
+    "Install AI VS Code extensions (Continue, Copilot)?",
+    "Install the Jev client",
+    "Install Google Antigravity IDE and agent hub",
+]
+DESKTOP_ONLY_PROMPTS = {
+    "Install music tools?",
+    "Install education tools?",
+    "Install AI VS Code extensions (Continue, Copilot)?",
+    "Install Google Antigravity IDE and agent hub",
+}
+SERVER_PROMPTS = [p for p in DESKTOP_PROMPTS if p not in DESKTOP_ONLY_PROMPTS]
+
+
+def prompts_in(out: str) -> list[str]:
+    """The known prompts in the order they were printed."""
+    found = [(out.index(p), p) for p in DESKTOP_PROMPTS if p in out]
+    return [p for _, p in sorted(found)]
+
+
+def run_prompt_flow(tmp_path: Path, answers: list[str], prelude: str = "") -> str:
+    body = SELECTION_BODY.replace(
+        "__SELECTION_DISPATCH__",
+        textwrap.dedent(
+            """
+            _get_configured_profile() { :; }
+            _set_profile_in_local_vars() { echo "PROFILE_WRITTEN=$1"; }
+            _display_manager_note() { echo "No display manager found on this machine."; }
+            _select_profile_dialog() { exit 99; }
+            """
+        )
+        + prelude
+        + extract_prompt_flow(),
+    ).replace("__REPO_ROOT__", str(REPO_ROOT))
+    program = write_program(tmp_path, FLOW_HELPERS, body)
+    bindir = stub_dialog(tmp_path)
+    return run(
+        [SCRIPT, "-qec", f"bash {program} < /dev/null", "/dev/null"],
+        path=with_stub(bindir),
+        stdin=("\n".join(answers) + "\n").encode(),
+        home=tmp_path,
+    )
+
+
+@needs_pty
+def test_the_profile_is_asked_before_the_bundles(tmp_path):
+    """Enter at the profile prompt keeps the desktop and every prompt that follows."""
+    out = run_prompt_flow(tmp_path, [""] + ["n"] * 20 + [""] * 8)
+    assert out.index("Profile [desktop]:") < out.index("Optional app bundles"), out
+    assert "PROFILE_WRITTEN=desktop" in out, out
+    assert prompts_in(out) == DESKTOP_PROMPTS, out
+    assert field(out, "BUNDLES") == ""
+    assert field(out, "AI") == "ai-local ai-gemini ai-claude ai-copilot-cli ai-runner ai-vscode"
+
+
+@needs_pty
+def test_a_server_is_not_offered_the_desktop_only_choices(tmp_path):
+    """Nothing is asked that site.yml would then skip; the tags say so too."""
+    # Every remaining bundle declined but BitNet; every remaining AI tool defaulted.
+    bundle_answers = ["n"] * 18
+    bundle_answers[SERVER_PROMPTS.index("Install BitNet.cpp?")] = "y"
+    out = run_prompt_flow(tmp_path, ["server"] + bundle_answers + [""] * 6)
+    assert "PROFILE_WRITTEN=server" in out, out
+    assert prompts_in(out) == SERVER_PROMPTS, out
+    for prompt in DESKTOP_ONLY_PROMPTS:
+        assert prompt not in out, prompt
+    assert field(out, "BUNDLES") == "bitnet"
+    ai = field(out, "AI").split()
+    assert "ai-vscode" not in ai and "antigravity" not in ai, ai
+    assert ai == ["ai-local", "ai-gemini", "ai-claude", "ai-copilot-cli", "ai-runner"], ai
+    skip = set(field(out, "SKIP").split(","))
+    # Declined by construction, so the playbook is told to skip them.
+    assert {"music", "education", "ai-vscode"} <= skip, skip
+    assert field(out, "EXPLICIT") == "bitnet"
+    assert "NOTE:" not in out, out
+
+
+def test_a_desktop_only_selection_that_slips_through_is_dropped_on_a_server(tmp_path):
+    """The pickers never offer them, so this guards every other way into the arrays."""
+    program = write_program(
+        tmp_path,
+        SELECTION_HELPERS,
+        f"""
+    _safe_logfile() {{ :; }}
+    _logfile() {{ echo "LOG=$*"; }}
+    NIKOS_HOME="{REPO_ROOT}"
+    _chosen_profile=server
+    SELECTED_BUNDLES=(music bitnet education)
+    SELECTED_AI_TOOLS=(ai-local antigravity ai-vscode)
+    _drop_desktop_only_selections 2>&1
+    _build_tag_args
+    printf 'BUNDLES=%s\\n' "${{SELECTED_BUNDLES[*]}}"
+    printf 'AI=%s\\n' "${{SELECTED_AI_TOOLS[*]}}"
+    printf 'EXPLICIT=%s\\n' "${{EXPLICIT_OPTIONAL_TAGS#,}}"
+    printf 'SKIP=%s\\n' "${{SKIP_TAGS#,}}"
+""",
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    assert field(out, "BUNDLES") == "bitnet", out
+    assert field(out, "AI") == "ai-local", out
+    assert field(out, "EXPLICIT") == "bitnet", out
+    assert "antigravity" not in field(out, "EXPLICIT"), out
+    for item in ("music", "education", "antigravity", "ai-vscode"):
+        assert f"NOTE: {item} is a desktop bundle and is not installed on the server profile." in out, out
+        assert f"LOG=Profile server: desktop bundle {item} selected and dropped" in out, out
+
+
+def test_a_desktop_keeps_a_selection_the_drop_guard_sees(tmp_path):
+    program = write_program(
+        tmp_path,
+        SELECTION_HELPERS,
+        f"""
+    _logfile() {{ echo "LOG=$*"; }}
+    NIKOS_HOME="{REPO_ROOT}"
+    _chosen_profile=desktop
+    SELECTED_BUNDLES=(music bitnet)
+    SELECTED_AI_TOOLS=(ai-local antigravity)
+    _drop_desktop_only_selections 2>&1
+    printf 'BUNDLES=%s\\n' "${{SELECTED_BUNDLES[*]}}"
+    printf 'AI=%s\\n' "${{SELECTED_AI_TOOLS[*]}}"
+""",
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    assert field(out, "BUNDLES") == "music bitnet", out
+    assert field(out, "AI") == "ai-local antigravity", out
+    assert "NOTE:" not in out and "LOG=" not in out, out
+
+
+def test_desktop_only_tags_come_from_site_yml(tmp_path):
+    """The hidden set is the desktop gate in site.yml plus the task tags inside those roles."""
+    program = write_program(
+        tmp_path,
+        ("_desktop_only_tags",),
+        f'NIKOS_HOME="{REPO_ROOT}"\n_desktop_only_tags\n',
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    tags = set(out.split())
+    assert {"music", "education", "antigravity", "ai-vscode", "editors", "desktop", "theming"} <= tags
+    assert not tags & {"never", "always", "network", "ai-local", "jev", "base"}, tags
+    # A gate on a role that is not in site.yml yields nothing, not an error.
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    program = write_program(
+        tmp_path, ("_desktop_only_tags",), f'NIKOS_HOME="{empty}"\n_desktop_only_tags; echo "RC=$?"\n'
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    assert out.strip() == "RC=0", out
+
+
+@pytest.mark.parametrize(
+    "gate",
+    [
+        "      when: nikos_profile == 'desktop'",
+        "      when: \"nikos_profile == 'desktop'\"",
+        "      when: 'nikos_profile == \"desktop\"'",
+        "      when: nikos_profile == 'desktop'  # GUI only",
+        "      when:\n        - nikos_profile == 'desktop'",
+        "      when:\n        - \"nikos_profile == 'desktop'\"  # GUI only",
+    ],
+    ids=["plain", "double-quoted", "single-quoted", "comment", "list", "quoted-list-comment"],
+)
+def test_desktop_only_tags_read_every_gate_style(tmp_path, gate):
+    """A gate written in any common YAML style still hides the role on a server."""
+    home = tmp_path / "home"
+    (home / "roles" / "paint" / "tasks").mkdir(parents=True)
+    (home / "roles" / "paint" / "tasks" / "main.yml").write_text(
+        "- name: brush\n  tags:\n    - brushes\n    - always\n", encoding="utf-8"
+    )
+    (home / "site.yml").write_text(
+        "- hosts: localhost\n  roles:\n    - role: base\n      tags: [base]\n"
+        f"    - role: paint  # art\n      tags:\n        - paint\n        - 'canvas'\n{gate}\n"
+        "    - role: network\n      tags: [network]\n      when: other == 'desktop'\n",
+        encoding="utf-8",
+    )
+    program = write_program(
+        tmp_path, ("_desktop_only_tags",), f'NIKOS_HOME="{home}"\n_desktop_only_tags\n'
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    assert out.split() == ["brushes", "canvas", "paint"], out
+
+
+def test_a_tag_an_ungated_role_also_carries_stays_offered(tmp_path):
+    """A task tag shared with a role that runs on a server is not hidden."""
+    home = tmp_path / "home"
+    for role, tag in (("paint", "shared"), ("network", "shared")):
+        (home / "roles" / role / "tasks").mkdir(parents=True)
+        (home / "roles" / role / "tasks" / "main.yml").write_text(
+            f"- name: step\n  tags: [{tag}]\n", encoding="utf-8"
+        )
+    (home / "site.yml").write_text(
+        "- hosts: localhost\n  roles:\n"
+        "    - role: paint\n      tags: [paint]\n      when: nikos_profile == 'desktop'\n"
+        "    - role: network\n      tags: [network]\n",
+        encoding="utf-8",
+    )
+    program = write_program(
+        tmp_path, ("_desktop_only_tags",), f'NIKOS_HOME="{home}"\n_desktop_only_tags\n'
+    )
+    out = run(["bash", str(program)], path="/usr/bin:/bin", home=tmp_path)
+    assert out.split() == ["paint"], out
+
+
 def test_jev_defaults_to_no_in_the_plain_picker():
     text = INSTALL_SH.read_text(encoding="utf-8")
     assert '[[ "${opt_jev,,}" == "y" ]] && SELECTED_AI_TOOLS+=("jev")' in text
@@ -261,7 +508,7 @@ def test_antigravity_defaults_to_no_in_both_pickers():
     text = INSTALL_SH.read_text(encoding="utf-8")
     assert '[[ "${opt_antigravity,,}" == "y" ]] && SELECTED_AI_TOOLS+=("antigravity")' in text
     assert '"antigravity"     "Google Antigravity IDE and agent hub (snaps, desktop only)" off' in text
-    assert "[y/N]" in next(l for l in text.splitlines() if "_ask_tty opt_antigravity" in l)
+    assert "[y/N]" in next(l for l in text.splitlines() if "_ask_optional antigravity opt_antigravity" in l)
 
 
 TIMEZONE_HELPERS = ("_say_tty", "_ask_tty", "_select_timezone_plain")
@@ -702,3 +949,178 @@ def test_update_stops_after_three_rejected_passwords(tmp_path):
     assert "RC=1" in out and "REACHED_PLAY" not in out, out
     assert "ERR Sudo rejected the password three times" in out, out
     assert "--ask-become-pass" not in field(out, "ARGS"), out
+
+
+AWKS = [a for a in ("mawk", "gawk") if shutil.which(a)]
+
+
+def _desktop_only(tmp_path, home, awk):
+    """Run _desktop_only_tags against <home> with <awk> as the only awk on PATH."""
+    shim = tmp_path / f"awk-{awk}"
+    shim.mkdir(exist_ok=True)
+    link = shim / "awk"
+    if not link.exists():
+        link.symlink_to(shutil.which(awk))
+    program = write_program(
+        tmp_path, ("_desktop_only_tags",), f'NIKOS_HOME="{home}"\n_desktop_only_tags\n'
+    )
+    return run(["bash", str(program)], path=f"{shim}:/usr/bin:/bin", home=tmp_path).split()
+
+
+def _role(home, role, tasks="", sub=None):
+    tdir = home / "roles" / role / "tasks"
+    if sub:
+        tdir = tdir / sub
+    tdir.mkdir(parents=True, exist_ok=True)
+    (tdir / "main.yml").write_text(tasks, encoding="utf-8")
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_desktop_only_tags_on_the_repo_agree_across_awks(tmp_path, awk):
+    """Ubuntu ships mawk as awk; the parser must give gawk's answer there."""
+    out = _desktop_only(tmp_path, REPO_ROOT, awk)
+    assert "music" in out and "base" not in out and "network" not in out, out
+
+
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize(
+    "site, shared_task_dir",
+    [
+        # The ungated role's tasks sit in a subdirectory.
+        ("    - role: net\n      tags: [net]\n", "sub"),
+        # The ungated entry names its tags before its role.
+        ("    - tags: [net, shared]\n      role: net\n", None),
+        # A play-level task with no role carries the tag.
+        ("  tasks:\n    - name: step\n      ansible.builtin.include_role:\n"
+         "        name: net\n      tags: [shared]\n", None),
+    ],
+    ids=["nested-task-dir", "tags-before-role", "play-task"],
+)
+def test_a_tag_that_also_runs_ungated_is_never_hidden(tmp_path, awk, site, shared_task_dir):
+    """Hiding a tag a server runs is worse than offering a desktop one."""
+    home = tmp_path / "home"
+    _role(home, "paint", "- name: x\n  debug: {}\n  tags: [shared]\n")
+    _role(home, "net", "- name: y\n  debug: {}\n  tags: [shared]\n", sub=shared_task_dir)
+    (home / "site.yml").write_text(
+        "- hosts: localhost\n  roles:\n"
+        "    - role: paint\n      tags: [paint]\n      when: nikos_profile == 'desktop'\n"
+        + site,
+        encoding="utf-8",
+    )
+    assert _desktop_only(tmp_path, home, awk) == ["paint"]
+
+
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize(
+    "site",
+    [
+        "- hosts: localhost\n  roles:\n"
+        "    - { role: paint, tags: [paint, 'canvas'], when: \"nikos_profile == 'desktop'\" }\n"
+        "    - { role: net, tags: net }\n",
+        "- hosts: localhost\r\n  roles:\r\n    - role: paint\r\n      tags: [paint, canvas]\r\n"
+        "      when: nikos_profile == 'desktop'\r\n    - role: net\r\n      tags: [net]\r\n",
+    ],
+    ids=["flow-mapping", "crlf"],
+)
+def test_desktop_only_tags_read_flow_mappings_and_crlf(tmp_path, awk, site):
+    home = tmp_path / "home"
+    _role(home, "paint", "- name: x\r\n  debug: {}\r\n  tags: [brushes]\r\n")
+    _role(home, "net")
+    (home / "site.yml").write_text(site, encoding="utf-8")
+    assert _desktop_only(tmp_path, home, awk) == ["brushes", "canvas", "paint"]
+
+
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize(
+    "gate",
+    [
+        "nikos_profile == 'desktop' or extra",
+        "nikos_profile == 'desktop' and extra",
+        "not nikos_profile == 'desktop'",
+        "nikos_profile != 'desktop'",
+    ],
+)
+def test_a_compound_gate_is_not_read_as_desktop_only(tmp_path, awk, gate):
+    """Only the exact gate hides a role; anything that may run on a server stays."""
+    home = tmp_path / "home"
+    _role(home, "paint")
+    (home / "site.yml").write_text(
+        f"- hosts: localhost\n  roles:\n    - role: paint\n      tags: [paint]\n      when: {gate}\n",
+        encoding="utf-8",
+    )
+    assert _desktop_only(tmp_path, home, awk) == []
+
+
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize("link", ["tasks-dir", "task-file"])
+def test_a_symlinked_ungated_task_still_keeps_its_tag(tmp_path, awk, link):
+    """find without -L skipped a symlinked tasks dir or file, hiding a server tag."""
+    home = tmp_path / "home"
+    _role(home, "paint", "- name: x\n  debug: {}\n  tags: [shared]\n")
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "main.yml").write_text("- name: y\n  debug: {}\n  tags: [shared]\n", encoding="utf-8")
+    if link == "tasks-dir":
+        (home / "roles" / "net").mkdir(parents=True)
+        (home / "roles" / "net" / "tasks").symlink_to(shared, target_is_directory=True)
+    else:
+        (home / "roles" / "net" / "tasks").mkdir(parents=True)
+        (home / "roles" / "net" / "tasks" / "main.yml").symlink_to(shared / "main.yml")
+    (home / "site.yml").write_text(
+        "- hosts: localhost\n  roles:\n"
+        "    - role: paint\n      tags: [paint]\n      when: nikos_profile == 'desktop'\n"
+        "    - role: net\n      tags: [net]\n",
+        encoding="utf-8",
+    )
+    assert _desktop_only(tmp_path, home, awk) == ["paint"]
+
+
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize("fault", ["unreadable-task", "unreadable-site", "symlink-loop"])
+def test_a_scan_error_hides_nothing_and_the_installer_goes_on(tmp_path, awk, fault):
+    """A task file the scan cannot read may carry a server tag, so hide nothing."""
+    if fault.startswith("unreadable") and os.geteuid() == 0:
+        pytest.skip("root reads a chmod 000 file")
+    home = tmp_path / "home"
+    _role(home, "paint", "- name: x\n  debug: {}\n  tags: [shared]\n")
+    _role(home, "net", "- name: y\n  debug: {}\n  tags: [shared]\n")
+    (home / "site.yml").write_text(
+        "- hosts: localhost\n  roles:\n"
+        "    - role: paint\n      tags: [paint]\n      when: nikos_profile == 'desktop'\n"
+        "    - role: net\n      tags: [net]\n",
+        encoding="utf-8",
+    )
+    if fault == "unreadable-task":
+        (home / "roles" / "net" / "tasks" / "main.yml").chmod(0)
+    elif fault == "unreadable-site":
+        (home / "site.yml").chmod(0)
+    else:
+        (home / "roles" / "net" / "tasks" / "loop").symlink_to("..", target_is_directory=True)
+    shim = tmp_path / f"awk-{awk}"
+    shim.mkdir()
+    (shim / "awk").symlink_to(shutil.which(awk))
+    program = write_program(
+        tmp_path, ("_desktop_only_tags",),
+        f'set -euo pipefail\nNIKOS_HOME="{home}"\nout="$(_desktop_only_tags)"\n'
+        'echo "OUT=[${out}]"\necho REACHED\n',
+    )
+    result = subprocess.run(
+        ["bash", str(program)], capture_output=True, timeout=60,
+        env={"PATH": f"{shim}:/usr/bin:/bin", "HOME": str(tmp_path)},
+    )
+    out = result.stdout.decode()
+    assert result.returncode == 0 and "REACHED" in out, (out, result.stderr)
+    assert "OUT=[]" in out, out
+    assert len(result.stderr.decode().splitlines()) <= 1, result.stderr
+
+
+@needs_pty
+def test_a_server_run_scans_site_yml_once(tmp_path):
+    """The dialog pickers run in subshells; a cache filled there is lost."""
+    prelude = (
+        'eval "$(declare -f _desktop_only_tags | sed \'1s/_desktop_only_tags/_real_scan/\')"\n'
+        '_desktop_only_tags() { echo SCANNED >&2; _real_scan; }\n'
+    )
+    out = run_prompt_flow(tmp_path, ["server"] + ["n"] * 18 + [""] * 6, prelude)
+    assert "PROFILE_WRITTEN=server" in out, out
+    assert out.count("SCANNED") == 1, out

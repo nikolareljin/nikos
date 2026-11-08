@@ -12,7 +12,8 @@ Every install declares one profile:
 | `desktop` (default) | a workstation or laptop | core + desktop layer |
 | `server` | Ubuntu Server 24.04, a headless box, a lab node | core only |
 
-The installer asks once and writes the answer to `vars/local.yml`:
+The installer asks once, before the bundle and AI tool pickers, and writes the
+answer to `vars/local.yml`:
 
 ```yaml
 nikos_profile: "server"
@@ -40,8 +41,11 @@ they can also be left out for one run with
 `--skip-tags desktop,theming,editors`.
 
 On a server, `nikos add music`, `nikos add education` and `nikos add antigravity`
-stop with an error instead of reporting success for a role that would not run,
-and the installer says when a desktop bundle was selected but will be skipped.
+stop with an error instead of reporting success for a role that would not run.
+The installer does not offer them, nor `ai-vscode`, when the `server` profile
+is chosen: it reads the roles gated on the desktop profile from `site.yml` and
+leaves their tags out of both pickers. If `site.yml` or a role task file cannot
+be read, it hides nothing.
 `antigravity` is in both lists: it carries `never` like the optional roles, so
 it runs only when named, and the desktop gate, because it installs two GUI
 snaps.

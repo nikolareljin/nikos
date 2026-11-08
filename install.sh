@@ -1263,34 +1263,148 @@ _release_note() {
   esac
 }
 
+# Tags that site.yml runs only on the desktop profile: the tags of every role
+# carrying `when: nikos_profile == 'desktop'` there, plus the tags of the tasks
+# inside those roles (`ai-vscode` sits inside `editors`). Read from the
+# checkout, so a role gated in site.yml is hidden by the pickers without a
+# second list to keep in step with it. A tag that anything ungated also carries
+# (another role, its task files, a play-level task) stays offered: hiding a
+# tag a server runs is worse than offering one it skips. `never` and `always`
+# are not bundles.
+_desktop_only_tags() {
+  local site="${NIKOS_HOME}/site.yml" raw
+  [[ -f "${site}" ]] || return 0
+  # Fail safe: a file the scan cannot read may carry a tag a server runs, so
+  # any find or awk error hides nothing and the installer goes on.
+  if ! raw="$(set -o pipefail; local gate role tags file dir
+  # One "G|U role tag..." line per list item in site.yml; role is "-" for an
+  # item with no role. G only for a role gated on exactly
+  # nikos_profile == 'desktop', as a plain, quoted or block-list `when:` with a
+  # trailing comment, in block or flow-mapping style. Tags may be a flow list,
+  # a scalar or a block list. A `tags:` outside any item is printed as U.
+  awk '
+    function clean(s) {
+      sub(/[ \t]+#.*$/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s)
+      if (s ~ /^".*"$/ || s ~ /^'\''.*'\''$/) s = substr(s, 2, length(s) - 2)
+      return s
+    }
+    function is_gate(s) { s = clean(s); gsub(/[ \t]+/, "", s); return s ~ /^nikos_profile==["'\'']desktop["'\'']$/ }
+    function add_tags(s, n, i, a) {
+      s = clean(s); gsub(/[][]/, "", s); n = split(s, a, ",")
+      for (i = 1; i <= n; i++) { a[i] = clean(a[i]); if (a[i] != "") tags = tags " " a[i] }
+    }
+    function flush() {
+      if (item) print (gated && role != "" ? "G" : "U"), (role == "" ? "-" : role) tags
+      item = 0; role = ""; tags = ""; gated = 0; list = ""
+    }
+    function key(s) {
+      if (s ~ /^role:/) role = clean(substr(s, 6))
+      else if (s ~ /^tags:/) { list = "tags"; add_tags(substr(s, 6)) }
+      else if (s ~ /^when:/) { list = "when"; if (is_gate(substr(s, 6))) gated = 1 }
+      else list = ""
+    }
+    # - { role: x, tags: [a, b], when: "..." } on one line.
+    function flow(s, v) {
+      sub(/^\{/, "", s); sub(/\}[ \t]*(#.*)?$/, "", s)
+      if (match(s, /role:[ \t]*[^,]+/)) role = clean(substr(s, RSTART + 5, RLENGTH - 5))
+      if (match(s, /tags:[ \t]*\[[^]]*\]/) || match(s, /tags:[ \t]*[^,]+/)) add_tags(substr(s, RSTART + 5, RLENGTH - 5))
+      if (match(s, /when:[ \t]*("[^"]*"|'\''[^'\'']*'\''|[^,]+)/) && is_gate(substr(s, RSTART + 5, RLENGTH - 5))) gated = 1
+    }
+    { line = $0; sub(/\r$/, "", line); match(line, /^[ \t]*/); ind = RLENGTH; body = substr(line, ind + 1) }
+    body == "" || body ~ /^#/ || body ~ /^(---|\.\.\.)/ { next }
+    item && ind > keycol && body ~ /^- / && (list == "tags" || list == "when") {
+      if (list == "tags") add_tags(substr(body, 3))
+      else if (is_gate(substr(body, 3))) gated = 1
+      next
+    }
+    body ~ /^- / {
+      flush(); item = 1; keycol = ind + 2; body = substr(body, 3); sub(/^[ \t]+/, "", body)
+      if (body ~ /^\{/) { flow(body); flush() } else key(body)
+      next
+    }
+    item && ind == keycol { key(body); next }
+    item && ind > keycol { next }
+    { flush() }
+    # A tags: outside any item: offered whatever it is on.
+    body ~ /^tags:/ { item = 1; keycol = ind; key(body) }
+    END { flush() }
+  ' "${site}" 2>/dev/null | while read -r gate role tags; do
+    tr ' ' '\n' <<< "${tags}" | sed "s/^/${gate} /"
+    [[ "${role}" == "-" ]] && continue
+    for dir in "${NIKOS_HOME}/roles/${role}/tasks" "${NIKOS_HOME}/roles/optional/${role}/tasks"; do
+      [[ -d "${dir}" ]] || continue
+      find -L "${dir}" -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null | while read -r file; do
+        awk '
+          function clean(s) {
+            sub(/[ \t]+#.*$/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s)
+            if (s ~ /^".*"$/ || s ~ /^'\''.*'\''$/) s = substr(s, 2, length(s) - 2)
+            return s
+          }
+          { line = $0; sub(/\r$/, "", line); match(line, /^[ \t]*/); ind = RLENGTH; body = substr(line, ind + 1) }
+          inlist && ind > tcol && body ~ /^- / { print clean(substr(body, 3)); next }
+          { inlist = 0 }
+          body ~ /^(- )?tags:/ {
+            if (body ~ /^- /) { body = substr(body, 3); ind += 2 }
+            v = clean(substr(body, 6)); gsub(/[][]/, "", v)
+            n = split(v, a, ","); for (i = 1; i <= n; i++) print clean(a[i])
+            if (v == "") { inlist = 1; tcol = ind }
+          }
+        ' "${file}" 2>/dev/null | sed "s/^/${gate} /" || exit 1
+      done || exit 1
+    done
+  done)"; then
+    echo "Note: could not read site.yml or a role task file; no bundle is hidden." >&2
+    return 0
+  fi
+  awk '$2 !~ /^(never|always)?$/ { seen[$2] = seen[$2] $1 }
+    END { for (t in seen) if (seen[t] !~ /U/) print t }' <<< "${raw}" | sort -u
+}
+
+# True when the chosen profile would never run <tag>, so the pickers leave it
+# out. Only the server profile hides anything; the list is read once.
+_hidden_on_this_profile() {
+  [[ "${_chosen_profile:-desktop}" == "server" ]] || return 1
+  [[ -n "${_DESKTOP_ONLY_TAGS+x}" ]] || _DESKTOP_ONLY_TAGS="$(_desktop_only_tags)"
+  printf '%s\n' "${_DESKTOP_ONLY_TAGS}" | grep -qx -- "$1"
+}
+
+# _checklist_item <array> <tag> <description> <on|off>: one dialog checklist
+# row, appended to <array> unless the profile hides the tag.
+_checklist_item() {
+  local -n __items="$1"
+  _hidden_on_this_profile "$2" && return 0
+  __items+=("$2" "$3" "$4")
+}
+
 _select_bundles_dialog() {
   dialog_init
-  local result dialog_status
+  local result dialog_status items=()
+  _checklist_item items "network"       "Network tools (nmap, wireshark, OpenVPN)"     off
+  _checklist_item items "music"         "Music tools (LMMS, Ardour, Audacity)"         off
+  _checklist_item items "education"     "Education tools (LibreOffice, draw.io, Anki)$(_release_note education)" off
+  _checklist_item items "neovim"        "Neovim with lazy.nvim starter config"         off
+  _checklist_item items "zsh"           "Zsh with Starship prompt"                     off
+  _checklist_item items "java"          "OpenJDK 21"                                   off
+  _checklist_item items "bun"           "Bun JavaScript runtime"                       off
+  _checklist_item items "openclaw"      "OpenClaw LLM gateway CLI"                     off
+  _checklist_item items "ollama-models" "Every Ollama module, this machine's model per role" off
+  _checklist_item items "postgres"      "PostgreSQL with pgvector$(_release_note postgres)" off
+  _checklist_item items "mongodb"       "MongoDB Community, mongosh and Atlas CLI$(_release_note mongodb)" off
+  _checklist_item items "redis"         "Redis server and Python client"               off
+  _checklist_item items "qdrant"        "Qdrant vector database container"             off
+  _checklist_item items "k8s-tools"     "kubectl and Helm"                             off
+  _checklist_item items "podman"        "Podman container runtime"                     off
+  _checklist_item items "act"           "Run GitHub Actions locally"                   off
+  _checklist_item items "fabric"        "Fabric AI pattern CLI"                        off
+  _checklist_item items "bitnet"        "BitNet.cpp 1-bit LLM inference"               off
+  _checklist_item items "mistral-rs"    "mistral.rs Rust LLM server"                   off
+  _checklist_item items "monitoring"    "Netdata monitoring dashboard$(_release_note monitoring)" off
   if result=$(
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — Optional Bundles" \
       --checklist "Space to toggle, Enter to confirm:" \
       "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 20 \
-      "network"       "Network tools (nmap, wireshark, OpenVPN)"     off \
-      "music"         "Music tools (LMMS, Ardour, Audacity)"         off \
-      "education"     "Education tools (LibreOffice, draw.io, Anki)$(_release_note education)" off \
-      "neovim"        "Neovim with lazy.nvim starter config"         off \
-      "zsh"           "Zsh with Starship prompt"                     off \
-      "java"          "OpenJDK 21"                                   off \
-      "bun"           "Bun JavaScript runtime"                       off \
-      "openclaw"      "OpenClaw LLM gateway CLI"                     off \
-      "ollama-models" "Every Ollama module, this machine's model per role" off \
-      "postgres"      "PostgreSQL with pgvector$(_release_note postgres)" off \
-      "mongodb"       "MongoDB Community, mongosh and Atlas CLI$(_release_note mongodb)" off \
-      "redis"         "Redis server and Python client"               off \
-      "qdrant"        "Qdrant vector database container"             off \
-      "k8s-tools"     "kubectl and Helm"                             off \
-      "podman"        "Podman container runtime"                     off \
-      "act"           "Run GitHub Actions locally"                   off \
-      "fabric"        "Fabric AI pattern CLI"                        off \
-      "bitnet"        "BitNet.cpp 1-bit LLM inference"               off \
-      "mistral-rs"    "mistral.rs Rust LLM server"                   off \
-      "monitoring"    "Netdata monitoring dashboard$(_release_note monitoring)" off 0</dev/tty
+      "${items[@]}" 0</dev/tty
   ); then
     echo "${result}"
     return 0
@@ -1303,20 +1417,21 @@ _select_bundles_dialog() {
 
 _select_ai_tools_dialog() {
   dialog_init
-  local result dialog_status
+  local result dialog_status items=()
+  _checklist_item items "ai-local"        "Ollama, Miniforge, nikos-ai env, aider, agent SDKs" on
+  _checklist_item items "ai-gemini"       "Gemini CLI"                                           on
+  _checklist_item items "ai-claude"       "Claude Code CLI"                                      on
+  _checklist_item items "ai-copilot-cli"  "GitHub Copilot CLI extension"                         on
+  _checklist_item items "ai-runner"       "ai-runner local model UI"                             on
+  _checklist_item items "ai-vscode"       "AI VS Code extensions (Continue, Copilot)"            on
+  _checklist_item items "jev"             "Jev client (official TypeSafe SDK, your own API key)" off
+  _checklist_item items "antigravity"     "Google Antigravity IDE and agent hub (snaps, desktop only)" off
   if result=$(
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — AI Tools" \
       --checklist "Space to toggle, Enter to confirm:" \
       "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 8 \
-      "ai-local"        "Ollama, Miniforge, nikos-ai env, aider, agent SDKs" on \
-      "ai-gemini"       "Gemini CLI"                                           on \
-      "ai-claude"       "Claude Code CLI"                                      on \
-      "ai-copilot-cli"  "GitHub Copilot CLI extension"                         on \
-      "ai-runner"       "ai-runner local model UI"                             on \
-      "ai-vscode"       "AI VS Code extensions (Continue, Copilot)"            on \
-      "jev"             "Jev client (official TypeSafe SDK, your own API key)" off \
-      "antigravity"     "Google Antigravity IDE and agent hub (snaps, desktop only)" off 0</dev/tty
+      "${items[@]}" 0</dev/tty
   ); then
     echo "${result}"
     return 0
@@ -1368,6 +1483,17 @@ _ask_tty() {
   printf -v "${__ask_var}" '%s' "${__ask_answer}"
 }
 
+# _ask_optional <tag> <varname> <prompt>: _ask_tty, unless the profile hides
+# the tag; then the answer is "n" without a prompt, so a default-Yes tool is
+# declined too, and the picker's order and wording stay as they are.
+_ask_optional() {
+  if _hidden_on_this_profile "$1"; then
+    printf -v "$2" '%s' "n"
+    return 0
+  fi
+  _ask_tty "$2" "$3"
+}
+
 # A run with no controlling terminal cannot ask, and must not answer on the
 # operator's behalf: an empty selection is indistinguishable from a deliberate
 # "install nothing optional", which is how the dropped bundles in #53 stayed
@@ -1391,36 +1517,36 @@ _select_bundles_plain() {
 
   SELECTED_BUNDLES=()
   _say_tty "Optional app bundles (press Enter to skip each):"
-  _ask_tty opt_network "  Install network tools? (nmap, wireshark, OpenVPN) [y/N] "
-  _ask_tty opt_music "  Install music tools? (LMMS, Ardour, Audacity) [y/N] "
-  _ask_tty opt_education "  Install education tools? (LibreOffice, draw.io, Anki)$(_release_note education) [y/N] "
+  _ask_optional network opt_network "  Install network tools? (nmap, wireshark, OpenVPN) [y/N] "
+  _ask_optional music opt_music "  Install music tools? (LMMS, Ardour, Audacity) [y/N] "
+  _ask_optional education opt_education "  Install education tools? (LibreOffice, draw.io, Anki)$(_release_note education) [y/N] "
   _say_tty ""
   _say_tty "Dev environment:"
-  _ask_tty opt_neovim "  Install Neovim? [y/N] "
-  _ask_tty opt_zsh "  Install Zsh + Starship? [y/N] "
-  _ask_tty opt_java "  Install Java 21? [y/N] "
-  _ask_tty opt_bun "  Install Bun? [y/N] "
+  _ask_optional neovim opt_neovim "  Install Neovim? [y/N] "
+  _ask_optional zsh opt_zsh "  Install Zsh + Starship? [y/N] "
+  _ask_optional java opt_java "  Install Java 21? [y/N] "
+  _ask_optional bun opt_bun "  Install Bun? [y/N] "
   _say_tty ""
   _say_tty "LLM tools:"
-  _ask_tty opt_openclaw "  Install OpenClaw? [y/N] "
-  _ask_tty opt_ollama_models "  Pull every Ollama module, this machine's model per role? (12-57 GB by machine, 28 GB on a standard one) [y/N] "
-  _ask_tty opt_bitnet "  Install BitNet.cpp? [y/N] "
-  _ask_tty opt_mistral_rs "  Install mistral.rs? [y/N] "
+  _ask_optional openclaw opt_openclaw "  Install OpenClaw? [y/N] "
+  _ask_optional ollama-models opt_ollama_models "  Pull every Ollama module, this machine's model per role? (12-57 GB by machine, 28 GB on a standard one) [y/N] "
+  _ask_optional bitnet opt_bitnet "  Install BitNet.cpp? [y/N] "
+  _ask_optional mistral-rs opt_mistral_rs "  Install mistral.rs? [y/N] "
   _say_tty ""
   _say_tty "Databases:"
-  _ask_tty opt_postgres "  Install PostgreSQL + pgvector$(_release_note postgres)? [y/N] "
-  _ask_tty opt_mongodb "  Install MongoDB + mongosh + Atlas CLI$(_release_note mongodb)? [y/N] "
-  _ask_tty opt_redis "  Install Redis? [y/N] "
-  _ask_tty opt_qdrant "  Install Qdrant? [y/N] "
+  _ask_optional postgres opt_postgres "  Install PostgreSQL + pgvector$(_release_note postgres)? [y/N] "
+  _ask_optional mongodb opt_mongodb "  Install MongoDB + mongosh + Atlas CLI$(_release_note mongodb)? [y/N] "
+  _ask_optional redis opt_redis "  Install Redis? [y/N] "
+  _ask_optional qdrant opt_qdrant "  Install Qdrant? [y/N] "
   _say_tty ""
   _say_tty "Containers / Kubernetes:"
-  _ask_tty opt_k8s_tools "  Install kubectl + Helm? [y/N] "
-  _ask_tty opt_podman "  Install Podman? [y/N] "
-  _ask_tty opt_act "  Install act? [y/N] "
+  _ask_optional k8s-tools opt_k8s_tools "  Install kubectl + Helm? [y/N] "
+  _ask_optional podman opt_podman "  Install Podman? [y/N] "
+  _ask_optional act opt_act "  Install act? [y/N] "
   _say_tty ""
   _say_tty "Monitoring:"
-  _ask_tty opt_monitoring "  Install Netdata$(_release_note monitoring)? [y/N] "
-  _ask_tty opt_fabric "  Install Fabric AI pattern CLI? [y/N] "
+  _ask_optional monitoring opt_monitoring "  Install Netdata$(_release_note monitoring)? [y/N] "
+  _ask_optional fabric opt_fabric "  Install Fabric AI pattern CLI? [y/N] "
   [[ "${opt_network,,}"   == "y" ]] && SELECTED_BUNDLES+=("network")
   [[ "${opt_music,,}"     == "y" ]] && SELECTED_BUNDLES+=("music")
   [[ "${opt_education,,}" == "y" ]] && SELECTED_BUNDLES+=("education")
@@ -1452,14 +1578,14 @@ _select_ai_tools_plain() {
 
   SELECTED_AI_TOOLS=()
   _say_tty "AI tools (press Enter to accept the default Yes):"
-  _ask_tty opt_ai_local "  Install Ollama, Miniforge, nikos-ai env, aider, and agent SDKs? [Y/n] "
-  _ask_tty opt_ai_gemini "  Install Gemini CLI? [Y/n] "
-  _ask_tty opt_ai_claude "  Install Claude Code CLI? [Y/n] "
-  _ask_tty opt_ai_copilot_cli "  Install GitHub Copilot CLI extension? [Y/n] "
-  _ask_tty opt_ai_runner "  Install ai-runner local model UI? [Y/n] "
-  _ask_tty opt_ai_vscode "  Install AI VS Code extensions (Continue, Copilot)? [Y/n] "
-  _ask_tty opt_jev "  Install the Jev client (official TypeSafe SDK; needs your own API key)? [y/N] "
-  _ask_tty opt_antigravity "  Install Google Antigravity IDE and agent hub (snaps, desktop only)? [y/N] "
+  _ask_optional ai-local opt_ai_local "  Install Ollama, Miniforge, nikos-ai env, aider, and agent SDKs? [Y/n] "
+  _ask_optional ai-gemini opt_ai_gemini "  Install Gemini CLI? [Y/n] "
+  _ask_optional ai-claude opt_ai_claude "  Install Claude Code CLI? [Y/n] "
+  _ask_optional ai-copilot-cli opt_ai_copilot_cli "  Install GitHub Copilot CLI extension? [Y/n] "
+  _ask_optional ai-runner opt_ai_runner "  Install ai-runner local model UI? [Y/n] "
+  _ask_optional ai-vscode opt_ai_vscode "  Install AI VS Code extensions (Continue, Copilot)? [Y/n] "
+  _ask_optional jev opt_jev "  Install the Jev client (official TypeSafe SDK; needs your own API key)? [y/N] "
+  _ask_optional antigravity opt_antigravity "  Install Google Antigravity IDE and agent hub (snaps, desktop only)? [y/N] "
   [[ -z "${opt_ai_local}" || "${opt_ai_local,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-local")
   [[ -z "${opt_ai_gemini}" || "${opt_ai_gemini,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-gemini")
   [[ -z "${opt_ai_claude}" || "${opt_ai_claude,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-claude")
@@ -1471,6 +1597,60 @@ _select_ai_tools_plain() {
   return 0
 }
 
+# On a server the pickers never offer a desktop-only choice, so this drops only
+# what reached the arrays another way. site.yml would skip the role and the
+# run would report success for it, so say so rather than let it vanish.
+_drop_desktop_only_selections() {
+  [[ "${_chosen_profile:-desktop}" == "server" ]] || return 0
+  local _kept=() _item
+  for _item in "${SELECTED_BUNDLES[@]}" "${SELECTED_AI_TOOLS[@]}"; do
+    if _hidden_on_this_profile "${_item}"; then
+      echo "NOTE: ${_item} is a desktop bundle and is not installed on the server profile." >&2
+      _logfile "Profile server: desktop bundle ${_item} selected and dropped"
+    fi
+  done
+  for _item in "${SELECTED_BUNDLES[@]}"; do
+    _hidden_on_this_profile "${_item}" || _kept+=("${_item}")
+  done
+  SELECTED_BUNDLES=("${_kept[@]}")
+  _kept=()
+  for _item in "${SELECTED_AI_TOOLS[@]}"; do
+    _hidden_on_this_profile "${_item}" || _kept+=("${_item}")
+  done
+  SELECTED_AI_TOOLS=("${_kept[@]}")
+  return 0
+}
+
+# Profile ──────────────────────────────────────────────────────────
+# Defaults to desktop (or to what an earlier install recorded), so pressing
+# Enter through the installer reproduces a desktop install. Asked before the
+# bundles and AI tools: on a server the pickers leave out what site.yml would
+# not run there (music, education, ai-vscode, antigravity: _desktop_only_tags).
+_configured_profile="$(_get_configured_profile)"
+case "${_configured_profile}" in
+  desktop | server) _default_profile="${_configured_profile}" ;;
+  *) _default_profile="desktop" ;;
+esac
+_chosen_profile=""
+if _can_use_dialog; then
+  if ! _chosen_profile=$(_select_profile_dialog "${_default_profile}" "$(_display_manager_note)"); then
+    echo "Installer canceled during profile selection." >&2
+    exit 130
+  fi
+else
+  _require_tty_for_selection
+  _select_profile_plain "${_default_profile}" "$(_display_manager_note)"
+fi
+_set_profile_in_local_vars "${_chosen_profile}"
+_logfile "Profile: ${_chosen_profile} (was: ${_configured_profile:-unset}; $(_display_manager_note))"
+if [[ "${_chosen_profile}" == "server" ]]; then
+  # Read once here: the pickers run in subshells, so a cache they filled
+  # would be lost and the scan (and any note it prints) repeated per picker.
+  _DESKTOP_ONLY_TAGS="$(_desktop_only_tags)"
+  _logfile "Profile server: not offered: $(tr '\n' ' ' <<< "${_DESKTOP_ONLY_TAGS}")"
+fi
+
+# Bundle and AI tool selection ─────────────────────────────────────
 if _can_use_dialog; then
   if ! _raw=$(_select_bundles_dialog); then
     echo "Installer canceled during optional bundle selection." >&2
@@ -1490,6 +1670,7 @@ else
   _select_bundles_plain
   _select_ai_tools_plain
 fi
+_drop_desktop_only_selections
 
 # Timezone ─────────────────────────────────────────────────────────
 _detected_tz=$(_detect_system_timezone)
@@ -1506,49 +1687,6 @@ fi
 
 _set_timezone_in_local_vars "${_chosen_tz}"
 _logfile "Timezone: ${_chosen_tz} (detected: ${_detected_tz}, was: ${_configured_tz:-unset})"
-
-# Profile ──────────────────────────────────────────────────────────
-# Defaults to desktop (or to what an earlier install recorded), so pressing
-# Enter through the installer reproduces a desktop install. Asked after the
-# timezone because it uses the same /dev/tty prompt helpers.
-_configured_profile="$(_get_configured_profile)"
-case "${_configured_profile}" in
-  desktop | server) _default_profile="${_configured_profile}" ;;
-  *) _default_profile="desktop" ;;
-esac
-_chosen_profile=""
-if _can_use_dialog; then
-  if ! _chosen_profile=$(_select_profile_dialog "${_default_profile}" "$(_display_manager_note)"); then
-    echo "Installer canceled during profile selection." >&2
-    exit 130
-  fi
-else
-  _require_tty_for_selection
-  _select_profile_plain "${_default_profile}" "$(_display_manager_note)"
-fi
-_set_profile_in_local_vars "${_chosen_profile}"
-# The bundles were chosen before the profile. site.yml skips the desktop layer
-# on a server, so say so here rather than let a selected bundle vanish.
-if [[ "${_chosen_profile}" == "server" ]]; then
-  for _bundle in music education; do
-    if printf '%s\n' "${SELECTED_BUNDLES[@]}" | grep -qx "${_bundle}"; then
-      echo "NOTE: ${_bundle} is a desktop bundle and is not installed on the server profile." >&2
-      _logfile "Profile server: desktop bundle ${_bundle} selected and skipped"
-    fi
-  done
-  # Antigravity is offered with the AI tools but is a desktop app (two GUI
-  # snaps). Dropped here, so _build_tag_args never selects it on a server.
-  if printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -qx antigravity; then
-    echo "NOTE: antigravity is a desktop bundle and is not installed on the server profile." >&2
-    _logfile "Profile server: desktop bundle antigravity selected and skipped"
-    _kept_ai_tools=()
-    for _tool in "${SELECTED_AI_TOOLS[@]}"; do
-      [[ "${_tool}" == "antigravity" ]] || _kept_ai_tools+=("${_tool}")
-    done
-    SELECTED_AI_TOOLS=("${_kept_ai_tools[@]}")
-  fi
-fi
-_logfile "Profile: ${_chosen_profile} (was: ${_configured_profile:-unset}; $(_display_manager_note))"
 
 # distrodeck tools ─────────────────────────────────────────────────
 # NikOS installs exactly this list through `distrodeck install-tools --tools`.
@@ -1612,7 +1750,7 @@ _build_tag_args() {
   if printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -qx jev; then
     EXPLICIT_OPTIONAL_TAGS="${EXPLICIT_OPTIONAL_TAGS},jev"
   fi
-  # Same for Antigravity; on a server the profile step above already dropped it.
+  # Same for Antigravity; a server is never offered it (_desktop_only_tags).
   if printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -qx antigravity; then
     EXPLICIT_OPTIONAL_TAGS="${EXPLICIT_OPTIONAL_TAGS},antigravity"
   fi
