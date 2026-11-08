@@ -434,7 +434,14 @@ ANTIGRAVITY_HELPERS = SELECTION_HELPERS + ("_get_saved_tools", "_migrate_antigra
 
 
 def _run_antigravity_migration(
-    tmp_path: Path, *, profile: str, tools: str, apt_installed: bool, selected: str = "redis", runs: int = 1
+    tmp_path: Path,
+    *,
+    profile: str,
+    tools: str,
+    apt_installed: bool,
+    selected: str = "redis",
+    runs: int = 1,
+    between: str = "",
 ):
     """Drive the helper with a fake dpkg-query and a saved selections file."""
     bindir = tmp_path / "bin"
@@ -467,7 +474,9 @@ def _run_antigravity_migration(
         f'_nikos_var() {{ printf "%s\\n" "{profile}"; }}\n'
         + "\n\n".join(extract_helper(name) for name in ANTIGRAVITY_HELPERS)
         + "\n\n"
-        + "_migrate_antigravity_to_snap\n" * runs,
+        + "_migrate_antigravity_to_snap\n" * runs
+        + between
+        + ("_migrate_antigravity_to_snap\n" if between else ""),
         encoding="utf-8",
     )
     result = subprocess.run(
@@ -518,3 +527,39 @@ def test_the_antigravity_move_happens_once(tmp_path):
     )
     assert saved["NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED"] == "redis,antigravity"
     assert result.stdout.count("INFO:") == 1, result.stdout
+
+
+def test_a_bundle_dropped_after_the_move_is_not_added_back(tmp_path):
+    """On arm64 the role keeps the apt IDE, so the package stays installed.
+
+    Without a latch every later update would re-add a bundle the user dropped.
+    """
+    _, saved = _run_antigravity_migration(
+        tmp_path,
+        profile="desktop",
+        tools="antigravity",
+        apt_installed=True,
+        between='_save_skip_tags "network" "redis" "1"\n',
+    )
+    assert saved["NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED"] == "redis"
+    assert saved["NIKOS_ANTIGRAVITY_MIGRATED"] == "1"
+
+
+def test_the_installer_keeps_the_antigravity_latch(tmp_path):
+    """install.sh rewrites the selections file; the latch must survive it."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "selected-options.env").write_text("NIKOS_ANTIGRAVITY_MIGRATED='1'\n", encoding="utf-8")
+    src = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
+    body = re.search(r"^_persist_selected_options\(\) \{\n.*?^\}\n", src, re.S | re.M).group(0)
+    program = (
+        f"NIKOS_CONFIG_DIR={str(config_dir)!r}\n"
+        'SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"\n'
+        + body
+        + '_persist_selected_options "network" "redis" "vlc"\n'
+    )
+    result = subprocess.run(["bash", "-c", program], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    saved = read_selections(config_dir)
+    assert saved["NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED"] == "redis"
+    assert saved["NIKOS_ANTIGRAVITY_MIGRATED"] == "1"

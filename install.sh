@@ -820,12 +820,20 @@ _ensure_ansible_collections() {
 }
 
 _persist_selected_options() {
+  local antigravity_migrated=""
   mkdir -p "${NIKOS_CONFIG_DIR}"
+  # Kept as found: `nikos update` sets it once it has moved Antigravity to the
+  # snaps, so a bundle deselected here is not added back.
+  if [[ -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    antigravity_migrated="$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_ANTIGRAVITY_MIGRATED:-}")"
+  fi
   {
     printf "NIKOS_SKIP_TAGS_SAVED=%q\n" "${1}"
     printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${2}"
     printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "1"
     printf "NIKOS_DISTRODECK_TOOLS_SAVED=%q\n" "${3:-}"
+    printf "NIKOS_ANTIGRAVITY_MIGRATED=%q\n" "${antigravity_migrated}"
   } > "${SELECTIONS_FILE}"
 }
 

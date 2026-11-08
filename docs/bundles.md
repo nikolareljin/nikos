@@ -31,7 +31,7 @@ across roles rather than gathered in one:
 | `ollama-models`, `ollama-reasoning`, `ollama-coding`, `ollama-text`, `ollama-vision`, `ollama-embedding` | `roles/ai-stack/tasks/main.yml` |
 
 That is thirteen tags `site.yml` never mentions. It carries the other
-twenty-seven names, two of which (`always` and `never`) are Ansible keywords
+twenty-eight names, two of which (`always` and `never`) are Ansible keywords
 rather than bundles. So reading `site.yml` finds a list missing well over a
 third of what exists, and grepping the roles finds the rest only if you
 already know which roles to open. Only

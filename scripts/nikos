@@ -727,6 +727,12 @@ _get_default_skip_tags() {
 
 _save_skip_tags() {
   local optional_tags="${2:-}" migrated="${3:-}" tools="${NIKOS_TOOLS_TO_SAVE-}"
+  local antigravity_migrated="${NIKOS_ANTIGRAVITY_MIGRATED_TO_SAVE-}"
+  # The Antigravity latch also rides along unless the caller sets it.
+  if [[ -z "${NIKOS_ANTIGRAVITY_MIGRATED_TO_SAVE+set}" && -f "${SELECTIONS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    antigravity_migrated="$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_ANTIGRAVITY_MIGRATED:-}")"
+  fi
   # The distrodeck tool list rides along unchanged unless the caller sets
   # NIKOS_TOOLS_TO_SAVE, so rewriting the skip tags can never drop it.
   if [[ -z "${NIKOS_TOOLS_TO_SAVE+set}" && -f "${SELECTIONS_FILE}" ]]; then
@@ -745,6 +751,7 @@ _save_skip_tags() {
     printf "NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED=%q\n" "${optional_tags}"
     printf "NIKOS_OPTIONAL_TAGS_MIGRATED=%q\n" "${migrated}"
     printf "NIKOS_DISTRODECK_TOOLS_SAVED=%q\n" "${tools}"
+    printf "NIKOS_ANTIGRAVITY_MIGRATED=%q\n" "${antigravity_migrated}"
   } > "${SELECTIONS_FILE}"
 }
 
@@ -775,12 +782,19 @@ _migrate_saved_optional_tags() {
 # desktop that has that package, or `antigravity` in its saved distrodeck list,
 # gets the antigravity bundle added to its selection, so the optional replay
 # of `nikos update` installs the snaps and removes the package. A server is
-# left alone: the role does not run there. No-op once the bundle is selected.
+# left alone: the role does not run there. Runs once per desktop: the latch
+# NIKOS_ANTIGRAVITY_MIGRATED keeps a bundle the user later drops from coming
+# back (on arm64 the role keeps the apt IDE, so the package stays installed).
 _migrate_antigravity_to_snap() {
   local tools status
   [[ "$(_nikos_var nikos_profile desktop)" == "desktop" ]] || return 0
+  # shellcheck source=/dev/null
+  [[ -f "${SELECTIONS_FILE}" && "$(source "${SELECTIONS_FILE}"; printf '%s' "${NIKOS_ANTIGRAVITY_MIGRATED:-}")" == "1" ]] && return 0
   case ",$(_get_saved_optional_tags)," in
-    *,antigravity,*) return 0 ;;
+    *,antigravity,*)
+      NIKOS_ANTIGRAVITY_MIGRATED_TO_SAVE=1 _save_skip_tags "$(_get_default_skip_tags)"
+      return 0
+      ;;
   esac
   tools="$(_get_saved_tools)"
   status="$(dpkg-query -W -f='${Status}' antigravity 2>/dev/null || true)"
@@ -789,6 +803,7 @@ _migrate_antigravity_to_snap() {
     _logfile "Antigravity: apt package or saved distrodeck tool found; antigravity bundle added to the selection" 2>/dev/null || true
     _add_optional_tag antigravity
   fi
+  NIKOS_ANTIGRAVITY_MIGRATED_TO_SAVE=1 _save_skip_tags "$(_get_default_skip_tags)"
 }
 
 _get_saved_optional_tags() {
