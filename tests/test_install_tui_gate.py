@@ -947,3 +947,103 @@ def test_update_stops_after_three_rejected_passwords(tmp_path):
     assert "RC=1" in out and "REACHED_PLAY" not in out, out
     assert "ERR Sudo rejected the password three times" in out, out
     assert "--ask-become-pass" not in field(out, "ARGS"), out
+
+
+AWKS = [a for a in ("mawk", "gawk") if shutil.which(a)]
+
+
+def _desktop_only(tmp_path, home, awk):
+    """Run _desktop_only_tags against <home> with <awk> as the only awk on PATH."""
+    shim = tmp_path / f"awk-{awk}"
+    shim.mkdir(exist_ok=True)
+    link = shim / "awk"
+    if not link.exists():
+        link.symlink_to(shutil.which(awk))
+    program = write_program(
+        tmp_path, ("_desktop_only_tags",), f'NIKOS_HOME="{home}"\n_desktop_only_tags\n'
+    )
+    return run(["bash", str(program)], path=f"{shim}:/usr/bin:/bin", home=tmp_path).split()
+
+
+def _role(home, role, tasks="", sub=None):
+    tdir = home / "roles" / role / "tasks"
+    if sub:
+        tdir = tdir / sub
+    tdir.mkdir(parents=True, exist_ok=True)
+    (tdir / "main.yml").write_text(tasks, encoding="utf-8")
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_desktop_only_tags_on_the_repo_agree_across_awks(tmp_path, awk):
+    """Ubuntu ships mawk as awk; the parser must give gawk's answer there."""
+    out = _desktop_only(tmp_path, REPO_ROOT, awk)
+    assert "music" in out and "base" not in out and "network" not in out, out
+
+
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize(
+    "site, shared_task_dir",
+    [
+        # The ungated role's tasks sit in a subdirectory.
+        ("    - role: net\n      tags: [net]\n", "sub"),
+        # The ungated entry names its tags before its role.
+        ("    - tags: [net, shared]\n      role: net\n", None),
+        # A play-level task with no role carries the tag.
+        ("  tasks:\n    - name: step\n      ansible.builtin.include_role:\n"
+         "        name: net\n      tags: [shared]\n", None),
+    ],
+    ids=["nested-task-dir", "tags-before-role", "play-task"],
+)
+def test_a_tag_that_also_runs_ungated_is_never_hidden(tmp_path, awk, site, shared_task_dir):
+    """Hiding a tag a server runs is worse than offering a desktop one."""
+    home = tmp_path / "home"
+    _role(home, "paint", "- name: x\n  debug: {}\n  tags: [shared]\n")
+    _role(home, "net", "- name: y\n  debug: {}\n  tags: [shared]\n", sub=shared_task_dir)
+    (home / "site.yml").write_text(
+        "- hosts: localhost\n  roles:\n"
+        "    - role: paint\n      tags: [paint]\n      when: nikos_profile == 'desktop'\n"
+        + site,
+        encoding="utf-8",
+    )
+    assert _desktop_only(tmp_path, home, awk) == ["paint"]
+
+
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize(
+    "site",
+    [
+        "- hosts: localhost\n  roles:\n"
+        "    - { role: paint, tags: [paint, 'canvas'], when: \"nikos_profile == 'desktop'\" }\n"
+        "    - { role: net, tags: net }\n",
+        "- hosts: localhost\r\n  roles:\r\n    - role: paint\r\n      tags: [paint, canvas]\r\n"
+        "      when: nikos_profile == 'desktop'\r\n    - role: net\r\n      tags: [net]\r\n",
+    ],
+    ids=["flow-mapping", "crlf"],
+)
+def test_desktop_only_tags_read_flow_mappings_and_crlf(tmp_path, awk, site):
+    home = tmp_path / "home"
+    _role(home, "paint", "- name: x\r\n  debug: {}\r\n  tags: [brushes]\r\n")
+    _role(home, "net")
+    (home / "site.yml").write_text(site, encoding="utf-8")
+    assert _desktop_only(tmp_path, home, awk) == ["brushes", "canvas", "paint"]
+
+
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize(
+    "gate",
+    [
+        "nikos_profile == 'desktop' or extra",
+        "nikos_profile == 'desktop' and extra",
+        "not nikos_profile == 'desktop'",
+        "nikos_profile != 'desktop'",
+    ],
+)
+def test_a_compound_gate_is_not_read_as_desktop_only(tmp_path, awk, gate):
+    """Only the exact gate hides a role; anything that may run on a server stays."""
+    home = tmp_path / "home"
+    _role(home, "paint")
+    (home / "site.yml").write_text(
+        f"- hosts: localhost\n  roles:\n    - role: paint\n      tags: [paint]\n      when: {gate}\n",
+        encoding="utf-8",
+    )
+    assert _desktop_only(tmp_path, home, awk) == []
