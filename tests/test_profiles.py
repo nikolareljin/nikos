@@ -26,7 +26,7 @@ import yaml
 REPO = Path(__file__).resolve().parent.parent
 INSTALL_SH = REPO / "install.sh"
 NIKOS_CLI = REPO / "scripts" / "nikos"
-DESKTOP_ROLES = {"desktop", "theming", "editors", "music", "education"}
+DESKTOP_ROLES = {"desktop", "theming", "editors", "music", "education", "antigravity"}
 
 needs_pty = pytest.mark.skipif(
     shutil.which("script") is None, reason="util-linux `script` is required"
@@ -113,7 +113,7 @@ def test_a_server_run_skips_every_desktop_role() -> None:
     """Named by tag, on a server profile, the desktop roles still do nothing."""
     result = _ansible(
         "--tags",
-        "desktop,theming,editors,music,education",
+        "desktop,theming,editors,music,education,antigravity",
         "-e",
         "nikos_profile=server",
     )
@@ -222,17 +222,22 @@ def test_doctor_checks_desktop_items_only_on_a_desktop(tmp_path: Path, profile: 
     desktop_lines = [
         l for l in out.splitlines() if "VS Code installed" in l or "Nordic GTK theme" in l
     ]
+    # Opt-in on a desktop, so a warning there and no line at all on a server.
+    antigravity_lines = [l for l in out.splitlines() if "Antigravity IDE installed" in l]
     if profile == "server":
         assert not desktop_lines, out
+        assert not antigravity_lines, out
         assert "Skipping desktop checks" in out
     else:
         assert desktop_lines, out
+        assert antigravity_lines, out
+        assert "issue(s) found" in out
     # Nothing listens on the endpoint, so doctor must say so and fail.
     assert "does not answer at http://127.0.0.1:9" in out, out
     assert result.returncode != 0
 
 
-@pytest.mark.parametrize("bundle", ["music", "education"])
+@pytest.mark.parametrize("bundle", ["music", "education", "antigravity"])
 def test_nikos_add_refuses_a_desktop_bundle_on_a_server(tmp_path: Path, bundle: str) -> None:
     """site.yml would skip it and the run would report success anyway."""
     home = _fake_home(tmp_path, "server")

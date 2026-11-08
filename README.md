@@ -154,6 +154,7 @@ Models load on demand, so all of this is disk and bandwidth, not idle memory.
 | Tool | Detail |
 |---|---|
 | VS Code | Installed via Microsoft apt repo |
+| Google Antigravity | Opt-in (`nikos add antigravity`, desktop only): the IDE (`antigravity-ide-snap`) and the agent hub (`antigravity`) snaps, `latest/stable`, classic, verified publisher, refreshed by snapd. `antigravity` opens the IDE, `antigravity-hub` the hub |
 | Continue | AI code completion |
 | GitLens | Git history in editor |
 | GitHub Copilot | AI suggestions |
@@ -204,6 +205,7 @@ nikos add k8s-tools  # install optional: kubectl + Helm
 nikos add act        # install optional: local GitHub Actions runner
 nikos add fabric     # install optional: Fabric AI pattern CLI
 nikos add jev        # install optional: Jev client (official TypeSafe SDK; `jev login` with your API key)
+nikos add antigravity # install optional: Google Antigravity IDE + agent hub snaps (desktop only)
 nikos add openclaw   # install optional: OpenClaw LLM gateway CLI
 nikos add monitoring # install optional: Netdata
 nikos add bitnet     # install optional: BitNet.cpp 1-bit inference (bitnet-cli)

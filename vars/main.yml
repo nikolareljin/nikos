@@ -235,11 +235,27 @@ distrodeck_repo_url: "https://github.com/nikolareljin/distrodeck.git"
 nikos_distrodeck_tools: ""
 # distrodeck catalog entries NikOS installs itself and never passes to
 # distrodeck: Ollama is the ai-stack role's (one owner of the inference port),
-# MongoDB is `nikos add mongodb`. Hidden from the selection screens and dropped
-# from a saved list with a warning. scripts/nikos-tools.sh carries the same list.
+# MongoDB is `nikos add mongodb`, Antigravity is `nikos add antigravity` (snaps;
+# distrodeck's path is Google's apt repository, which stopped at 1.23.2). Hidden
+# from the selection screens and dropped from a saved list with a warning.
+# scripts/nikos-tools.sh carries the same list.
 nikos_distrodeck_owned_tools:
   - ollama
   - mongodb
+  - antigravity
+
+# -- Google Antigravity (optional bundle, desktop only) -----------------------
+# Two snaps, both classic, both from the verified "ubuntu" publisher, and no
+# version pin on purpose (vars/versions.yml says why): the IDE and the agent
+# hub. The command names are what each snap puts under /snap/bin. The hub's
+# command is also called antigravity, so roles/optional/antigravity wraps the
+# IDE as /usr/local/bin/antigravity (what the apt package installed) and the
+# hub as /usr/local/bin/antigravity-hub.
+nikos_antigravity_snap_channel: "latest/stable"
+nikos_antigravity_ide_snap: "antigravity-ide-snap"
+nikos_antigravity_ide_command: "antigravity-ide-snap.antigravity-ide"
+nikos_antigravity_hub_snap: "antigravity"
+nikos_antigravity_hub_command: "antigravity"
 
 # ── Java (optional bundle) ───────────────────────────────────────────────────
 # OpenJDK releases `nikos add java` installs. The first is the default java.

@@ -1299,14 +1299,15 @@ _select_ai_tools_dialog() {
     dialog --stdout \
       --title "NikOS ${NIKOS_VERSION} — AI Tools" \
       --checklist "Space to toggle, Enter to confirm:" \
-      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 7 \
+      "${DIALOG_HEIGHT}" "${DIALOG_WIDTH}" 8 \
       "ai-local"        "Ollama, Miniforge, nikos-ai env, aider, agent SDKs" on \
       "ai-gemini"       "Gemini CLI"                                           on \
       "ai-claude"       "Claude Code CLI"                                      on \
       "ai-copilot-cli"  "GitHub Copilot CLI extension"                         on \
       "ai-runner"       "ai-runner local model UI"                             on \
       "ai-vscode"       "AI VS Code extensions (Continue, Copilot)"            on \
-      "jev"             "Jev client (official TypeSafe SDK, your own API key)" off 0</dev/tty
+      "jev"             "Jev client (official TypeSafe SDK, your own API key)" off \
+      "antigravity"     "Google Antigravity IDE and agent hub (snaps, desktop only)" off 0</dev/tty
   ); then
     echo "${result}"
     return 0
@@ -1438,7 +1439,7 @@ _select_bundles_plain() {
 # gets the same fix -- it must not be assumed correct by inspection.
 _select_ai_tools_plain() {
   local opt_ai_local="" opt_ai_gemini="" opt_ai_claude="" \
-    opt_ai_copilot_cli="" opt_ai_runner="" opt_ai_vscode="" opt_jev=""
+    opt_ai_copilot_cli="" opt_ai_runner="" opt_ai_vscode="" opt_jev="" opt_antigravity=""
 
   SELECTED_AI_TOOLS=()
   _say_tty "AI tools (press Enter to accept the default Yes):"
@@ -1449,6 +1450,7 @@ _select_ai_tools_plain() {
   _ask_tty opt_ai_runner "  Install ai-runner local model UI? [Y/n] "
   _ask_tty opt_ai_vscode "  Install AI VS Code extensions (Continue, Copilot)? [Y/n] "
   _ask_tty opt_jev "  Install the Jev client (official TypeSafe SDK; needs your own API key)? [y/N] "
+  _ask_tty opt_antigravity "  Install Google Antigravity IDE and agent hub (snaps, desktop only)? [y/N] "
   [[ -z "${opt_ai_local}" || "${opt_ai_local,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-local")
   [[ -z "${opt_ai_gemini}" || "${opt_ai_gemini,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-gemini")
   [[ -z "${opt_ai_claude}" || "${opt_ai_claude,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-claude")
@@ -1456,6 +1458,7 @@ _select_ai_tools_plain() {
   [[ -z "${opt_ai_runner}" || "${opt_ai_runner,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-runner")
   [[ -z "${opt_ai_vscode}" || "${opt_ai_vscode,,}" == "y" ]] && SELECTED_AI_TOOLS+=("ai-vscode")
   [[ "${opt_jev,,}" == "y" ]] && SELECTED_AI_TOOLS+=("jev")
+  [[ "${opt_antigravity,,}" == "y" ]] && SELECTED_AI_TOOLS+=("antigravity")
   return 0
 }
 
@@ -1524,6 +1527,17 @@ if [[ "${_chosen_profile}" == "server" ]]; then
       _logfile "Profile server: desktop bundle ${_bundle} selected and skipped"
     fi
   done
+  # Antigravity is offered with the AI tools but is a desktop app (two GUI
+  # snaps). Dropped here, so _build_tag_args never selects it on a server.
+  if printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -qx antigravity; then
+    echo "NOTE: antigravity is a desktop bundle and is not installed on the server profile." >&2
+    _logfile "Profile server: desktop bundle antigravity selected and skipped"
+    _kept_ai_tools=()
+    for _tool in "${SELECTED_AI_TOOLS[@]}"; do
+      [[ "${_tool}" == "antigravity" ]] || _kept_ai_tools+=("${_tool}")
+    done
+    SELECTED_AI_TOOLS=("${_kept_ai_tools[@]}")
+  fi
 fi
 _logfile "Profile: ${_chosen_profile} (was: ${_configured_profile:-unset}; $(_display_manager_note))"
 
@@ -1588,6 +1602,10 @@ _build_tag_args() {
   # `never`, so a machine that never picked it never gets it on update.
   if printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -qx jev; then
     EXPLICIT_OPTIONAL_TAGS="${EXPLICIT_OPTIONAL_TAGS},jev"
+  fi
+  # Same for Antigravity; on a server the profile step above already dropped it.
+  if printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -qx antigravity; then
+    EXPLICIT_OPTIONAL_TAGS="${EXPLICIT_OPTIONAL_TAGS},antigravity"
   fi
 
   if ! printf '%s\n' "${SELECTED_AI_TOOLS[@]}" | grep -Eqx 'ai-gemini|ai-claude'; then

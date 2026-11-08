@@ -186,7 +186,8 @@ def test_gate_fails_when_dialog_is_absent(tmp_path):
 # the AI-tool prompts. Only BitNet is wanted, and only Claude Code is declined.
 BUNDLE_ANSWERS = ["n"] * 20
 BUNDLE_ANSWERS[9] = "y"  # "Install BitNet.cpp?"
-# Claude Code declined, Jev (default No) picked, rest defaulted.
+# Claude Code declined, Jev (default No) picked, rest defaulted. The last
+# answer is Antigravity (default No); the round-trip test sets it.
 AI_ANSWERS = ["", "", "n", "", "", "", "y"]
 
 SELECTION_BODY = """
@@ -211,14 +212,19 @@ def field(out: str, name: str) -> str:
 
 
 @needs_pty
-def test_plain_selection_round_trips_the_answers(tmp_path):
+@pytest.mark.parametrize(
+    "antigravity_answer,explicit",
+    [("y", "bitnet,jev,antigravity"), ("", "bitnet,jev")],
+    ids=["antigravity-yes", "antigravity-default-no"],
+)
+def test_plain_selection_round_trips_the_answers(tmp_path, antigravity_answer, explicit):
     """What was answered is what reaches the tags - the whole of #53."""
     body = SELECTION_BODY.replace(
         "__SELECTION_DISPATCH__", extract_selection_dispatch()
     )
     program = write_program(tmp_path, SELECTION_HELPERS, body)
     bindir = stub_dialog(tmp_path)
-    answers = "\n".join(BUNDLE_ANSWERS + AI_ANSWERS) + "\n"
+    answers = "\n".join(BUNDLE_ANSWERS + AI_ANSWERS + [antigravity_answer]) + "\n"
     out = run(
         [SCRIPT, "-qec", f"bash {program} < /dev/null", "/dev/null"],
         path=with_stub(bindir),
@@ -227,9 +233,10 @@ def test_plain_selection_round_trips_the_answers(tmp_path):
     )
 
     assert field(out, "BUNDLES") == "bitnet"
-    # Jev is offered with the AI tools but is opt-in like a bundle: a `never`
-    # tag that runs only when picked, never a skip tag an old machine lacks.
-    assert field(out, "EXPLICIT") == "bitnet,jev"
+    # Jev and Antigravity are offered with the AI tools but are opt-in like a
+    # bundle: a `never` tag that runs only when picked, never a skip tag an
+    # old machine lacks.
+    assert field(out, "EXPLICIT") == explicit
 
     ai = field(out, "AI").split()
     assert "ai-claude" not in ai
@@ -241,12 +248,20 @@ def test_plain_selection_round_trips_the_answers(tmp_path):
     assert {"network", "music", "education"} <= set(skip), skip
     assert "bitnet" not in skip, skip
     assert "jev" not in skip, skip
+    assert "antigravity" not in skip, skip
 
 
 def test_jev_defaults_to_no_in_the_plain_picker():
     text = INSTALL_SH.read_text(encoding="utf-8")
     assert '[[ "${opt_jev,,}" == "y" ]] && SELECTED_AI_TOOLS+=("jev")' in text
     assert '"jev"             "Jev client (official TypeSafe SDK, your own API key)" off' in text
+
+
+def test_antigravity_defaults_to_no_in_both_pickers():
+    text = INSTALL_SH.read_text(encoding="utf-8")
+    assert '[[ "${opt_antigravity,,}" == "y" ]] && SELECTED_AI_TOOLS+=("antigravity")' in text
+    assert '"antigravity"     "Google Antigravity IDE and agent hub (snaps, desktop only)" off' in text
+    assert "[y/N]" in next(l for l in text.splitlines() if "_ask_tty opt_antigravity" in l)
 
 
 TIMEZONE_HELPERS = ("_say_tty", "_ask_tty", "_select_timezone_plain")

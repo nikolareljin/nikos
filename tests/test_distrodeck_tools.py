@@ -411,6 +411,21 @@ def test_owned_tools_are_dropped_from_a_saved_list_with_a_note() -> None:
     assert "ai-stack" in result.stderr and "nikos add mongodb" in result.stderr
 
 
+def test_dev_tools_never_passes_antigravity_to_distrodeck(tmp_path: Path) -> None:
+    # distrodeck's antigravity is Google's apt repository, stale at 1.23.2; the
+    # snaps come from `nikos add antigravity`. Passing the name through would
+    # put the apt copy back next to the snap on every update.
+    assert _run_dev_tools_selection(tmp_path, catalog=True, tools="antigravity,vlc") == [
+        "install-tools --tools vlc"
+    ]
+
+
+def test_antigravity_is_dropped_from_a_saved_list_with_a_note() -> None:
+    result = bash('nikos_tools_drop_owned "antigravity,vlc"')
+    assert result.stdout.strip() == "vlc"
+    assert "nikos add antigravity" in result.stderr, result.stderr
+
+
 def test_the_shell_owned_list_matches_the_playbook_var() -> None:
     out = bash('printf "%s" "$NIKOS_DISTRODECK_OWNED_TOOLS"').stdout
     assert out.split(",") == OWNED

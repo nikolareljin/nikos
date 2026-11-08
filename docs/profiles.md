@@ -31,7 +31,7 @@ Every role in `site.yml`, assigned to a layer:
 | Layer | Roles | Runs on |
 |---|---|---|
 | core | `base`, `github-setup`, `ai-stack`, `cloud-ai-cli`, `agent-dev`, `dev-tools`, `network` | both profiles |
-| desktop | `desktop`, `theming`, `editors`, `music`, `education` | `desktop` only |
+| desktop | `desktop`, `theming`, `editors`, `music`, `education`, `antigravity` (also named to run) | `desktop` only |
 | optional (named to run) | `neovim`, `java`, `podman`, `openclaw`, `bun`, `redis`, `postgres`, `mongodb`, `zsh`, `act`, `fabric`, `jev`, `k8s-tools`, `qdrant`, `bitnet`, `mistral-rs`, `monitoring` | both profiles, when asked for |
 
 The desktop-layer roles carry `when: nikos_profile == 'desktop'` in `site.yml`,
@@ -39,9 +39,12 @@ so a server run skips them even when they are named in `--tags`. On a desktop
 they can also be left out for one run with
 `--skip-tags desktop,theming,editors`.
 
-On a server, `nikos add music` and `nikos add education` stop with an error
-instead of reporting success for a role that would not run, and the installer
-says when a desktop bundle was selected but will be skipped.
+On a server, `nikos add music`, `nikos add education` and `nikos add antigravity`
+stop with an error instead of reporting success for a role that would not run,
+and the installer says when a desktop bundle was selected but will be skipped.
+`antigravity` is in both lists: it carries `never` like the optional roles, so
+it runs only when named, and the desktop gate, because it installs two GUI
+snaps.
 
 `base` holds only what makes sense with no screen. `inkscape` (wallpaper
 export) lives in `theming` and `xfconf` (Xfce settings) in `desktop`.

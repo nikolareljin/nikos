@@ -360,6 +360,7 @@ def _run_cmd_update(tmp_path: Path, continuation: bool, optional_tags: str, play
         f'return {playbook_rc}; }}\n'
         '_models_offer_removal() { echo "models:offer-removal" >> "${CALLS}"; }\n'
         '_exec_update_continuation() { echo "continuation" >> "${CALLS}"; }\n'
+        '_migrate_antigravity_to_snap() { echo "antigravity:migrate" >> "${CALLS}"; }\n'
         f'_get_saved_optional_tags() {{ printf "%s\\n" {optional_tags!r}; }}\n'
         + extract_helper("cmd_update")
         + "\n\ncmd_update\n",
@@ -384,9 +385,12 @@ def test_update_syncs_then_runs_both_playbook_passes(tmp_path):
     # actually re-synced the checkout can be running a CLI the update replaced.
     assert calls[1] == "continuation", calls
     # Removal is offered before anything is pulled, so the space is free first.
-    assert calls[-3:] == [
+    assert calls[-4:] == [
         "models:offer-removal",
         "playbook:-e nikos_update_mode=true",
+        # The one-time Antigravity move runs before the selection is read, so
+        # the bundle it adds is in this same replay.
+        "antigravity:migrate",
         # No saved skip tags on the replay: Ansible gives skip tags precedence
         # over selected tags, so a saved skip would defeat the selection.
         "playbook:--no-saved-skip-tags -e nikos_update_mode=true --tags redis,postgres",
@@ -411,6 +415,7 @@ def test_continuation_does_not_re_sync_the_checkout(tmp_path):
     assert calls == [
         "models:offer-removal",
         "playbook:-e nikos_update_mode=true",
+        "antigravity:migrate",
         "playbook:--no-saved-skip-tags -e nikos_update_mode=true --tags redis",
     ], calls
 
@@ -421,3 +426,95 @@ def test_a_failed_playbook_is_reported_with_its_exit_code_and_skips_the_replay(t
     assert result.returncode == 4, result.stderr
     assert "nikos update failed (exit 4)" in result.stderr and "/logs/run.log" in result.stderr
     assert not [c for c in calls if "--tags" in c], calls
+
+
+# -- The one-time Antigravity move to the snaps -------------------------------
+
+ANTIGRAVITY_HELPERS = SELECTION_HELPERS + ("_get_saved_tools", "_migrate_antigravity_to_snap")
+
+
+def _run_antigravity_migration(
+    tmp_path: Path, *, profile: str, tools: str, apt_installed: bool, selected: str = "redis", runs: int = 1
+):
+    """Drive the helper with a fake dpkg-query and a saved selections file."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir(exist_ok=True)
+    status = "install ok installed" if apt_installed else ""
+    (bindir / "dpkg-query").write_text(
+        "#!/bin/sh\n"
+        + (f'printf "%s" "{status}"\n' if apt_installed else 'echo "dpkg-query: no packages found" >&2; exit 1\n'),
+        encoding="utf-8",
+    )
+    (bindir / "dpkg-query").chmod(0o755)
+    config_dir = tmp_path / "config"
+    (config_dir / "logs").mkdir(parents=True, exist_ok=True)
+    (config_dir / "selected-options.env").write_text(
+        "NIKOS_SKIP_TAGS_SAVED='network'\n"
+        f"NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED='{selected}'\n"
+        "NIKOS_OPTIONAL_TAGS_MIGRATED='1'\n"
+        f"NIKOS_DISTRODECK_TOOLS_SAVED='{tools}'\n",
+        encoding="utf-8",
+    )
+    program = tmp_path / "probe.sh"
+    program.write_text(
+        "set -euo pipefail\n"
+        f'NIKOS_CONFIG_DIR={str(config_dir)!r}\n'
+        'SELECTIONS_FILE="${NIKOS_CONFIG_DIR}/selected-options.env"\n'
+        f'NIKOS_LOG_DIR={str(config_dir / "logs")!r}\n'
+        "print_info() { echo \"INFO:$*\"; }\n"
+        "print_error() { echo \"ERROR:$*\" >&2; }\n"
+        "_logfile() { echo \"LOG:$*\"; }\n"
+        f'_nikos_var() {{ printf "%s\\n" "{profile}"; }}\n'
+        + "\n\n".join(extract_helper(name) for name in ANTIGRAVITY_HELPERS)
+        + "\n\n"
+        + "_migrate_antigravity_to_snap\n" * runs,
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(program)],
+        capture_output=True,
+        text=True,
+        cwd=str(tmp_path),
+        env={"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path)},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result, read_selections(config_dir)
+
+
+def test_antigravity_in_the_saved_distrodeck_list_adds_the_bundle_on_a_desktop(tmp_path):
+    """distrodeck's antigravity is the stale apt path; the bundle brings the snaps."""
+    result, saved = _run_antigravity_migration(
+        tmp_path, profile="desktop", tools="antigravity,vlc", apt_installed=False
+    )
+    assert saved["NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED"] == "redis,antigravity"
+    # The distrodeck list is left as it was: dev-tools drops the owned name itself.
+    assert saved["NIKOS_DISTRODECK_TOOLS_SAVED"] == "antigravity,vlc"
+    assert "INFO:" in result.stdout and "LOG:" in result.stdout, result.stdout
+
+
+def test_an_installed_apt_antigravity_adds_the_bundle_on_a_desktop(tmp_path):
+    _, saved = _run_antigravity_migration(tmp_path, profile="desktop", tools="vlc", apt_installed=True)
+    assert saved["NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED"] == "redis,antigravity"
+
+
+def test_a_desktop_without_antigravity_is_left_alone(tmp_path):
+    result, saved = _run_antigravity_migration(tmp_path, profile="desktop", tools="vlc", apt_installed=False)
+    assert saved["NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED"] == "redis"
+    assert "INFO:" not in result.stdout, result.stdout
+
+
+def test_a_server_is_left_alone_even_with_the_apt_package(tmp_path):
+    """The role does not run on a server, so a selection there would be a lie."""
+    result, saved = _run_antigravity_migration(
+        tmp_path, profile="server", tools="antigravity", apt_installed=True
+    )
+    assert saved["NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED"] == "redis"
+    assert "INFO:" not in result.stdout, result.stdout
+
+
+def test_the_antigravity_move_happens_once(tmp_path):
+    result, saved = _run_antigravity_migration(
+        tmp_path, profile="desktop", tools="antigravity", apt_installed=True, runs=3
+    )
+    assert saved["NIKOS_EXPLICIT_OPTIONAL_TAGS_SAVED"] == "redis,antigravity"
+    assert result.stdout.count("INFO:") == 1, result.stdout
