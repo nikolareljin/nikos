@@ -26,7 +26,7 @@ nikos/
 │   ├── agent-dev/                  # LangChain, LlamaIndex, Claude Code
 │   ├── dev-tools/                  # distrodeck, image-view, vellum, git-lantern, ai-runner
 │   └── optional/
-│       ├── network/                # nmap, wireshark, OpenVPN
+│       ├── network/                # nmap, wireshark (tshark on a server), OpenVPN
 │       ├── music/                  # LMMS, Ardour, Audacity
 │       ├── education/              # LibreOffice, draw.io, Anki
 │       ├── neovim/                 # Neovim + starter lazy.nvim config

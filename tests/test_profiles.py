@@ -13,6 +13,7 @@ by the `nikos` CLI. Each check here is one way that fact could be lost:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -336,3 +337,160 @@ def test_server_next_step_points_at_ssh_not_the_display_manager() -> None:
 def test_desktop_next_step_is_unchanged(env: dict, expected: str) -> None:
     assert expected in _next_step("desktop", **env)
     assert expected in _next_step("", **env)
+
+
+# The network bundle runs on both profiles. Its GUI packages (the Wireshark Qt
+# front end, the OpenVPN NetworkManager GUI plugin) are useless on a server,
+# so two tasks inside the role split by profile; the role itself stays
+# ungated so the installer keeps offering the tag on a server.
+NETWORK_TASKS = REPO / "roles" / "optional" / "network" / "tasks" / "main.yml"
+# network-manager-openvpn depends on network-manager; on a server that would
+# install NetworkManager beside netplan/networkd, so a server gets openvpn.
+NETWORK_DESKTOP = {"wireshark", "network-manager-openvpn", "network-manager-openvpn-gnome"}
+NETWORK_SERVER = {"tshark", "openvpn"}
+NETWORK_SHARED = {"nmap", "tcpdump", "traceroute", "netcat-openbsd"}
+
+
+def _network_tasks() -> list[dict]:
+    return yaml.safe_load(NETWORK_TASKS.read_text(encoding="utf-8"))
+
+
+def _apt_names(task: dict) -> set[str]:
+    name = task.get("ansible.builtin.apt", {}).get("name", [])
+    return {name} if isinstance(name, str) else set(name)
+
+
+def test_network_bundle_installs_gui_packages_only_on_a_desktop() -> None:
+    ungated, desktop, server = set(), set(), set()
+    for task in _network_tasks():
+        if "ansible.builtin.apt" not in task:
+            continue
+        names = _apt_names(task)
+        when = task.get("when")
+        if when is None:
+            ungated |= names
+        elif when == "nikos_profile == 'desktop'":
+            desktop |= names
+        elif when == "nikos_profile == 'server'":
+            server |= names
+        else:
+            pytest.fail(f"unexpected gate {when!r} on {task.get('name')}")
+    assert desktop == NETWORK_DESKTOP
+    assert server == NETWORK_SERVER
+    assert not any(n.startswith("network-manager") for n in ungated | server)
+    assert ungated == NETWORK_SHARED
+    assert not ungated & (desktop | server)
+
+
+def test_wireshark_capture_answer_is_seeded_before_the_install() -> None:
+    """apt runs non-interactive, so an unseeded wireshark-common/install-setuid
+    takes its default (false) and the wireshark group grants nothing."""
+    tasks = _network_tasks()
+    seeds = [i for i, t in enumerate(tasks) if "ansible.builtin.debconf" in t]
+    assert len(seeds) == 1, tasks
+    seed = tasks[seeds[0]]
+    assert seed["ansible.builtin.debconf"] == {
+        "name": "wireshark-common",
+        "question": "wireshark-common/install-setuid",
+        "vtype": "boolean",
+        "value": "true",
+    }
+    assert seed.get("when") is None, "seeded on both profiles"
+    installs = [i for i, t in enumerate(tasks) if _apt_names(t) & {"wireshark", "tshark"}]
+    assert installs and seeds[0] < min(installs)
+    # An install that already has wireshark-common never re-reads the answer
+    # through apt; a changed seed notifies a handler that reconfigures it.
+    handlers = yaml.safe_load(
+        (NETWORK_TASKS.parent.parent / "handlers" / "main.yml").read_text(encoding="utf-8")
+    )
+    handler = next(h for h in handlers if h["name"] == seed["notify"])
+    assert handler["ansible.builtin.command"]["cmd"].startswith("dpkg-reconfigure -f noninteractive")
+    assert handler["become"] is True
+
+
+def _task_status(stdout: str) -> dict[str, str]:
+    """Task name -> the first status word printed under it (ok, changed, skipping)."""
+    status: dict[str, str] = {}
+    current = None
+    for line in stdout.splitlines():
+        match = re.match(r"TASK \[(?:[\w-]+ : )?(.+?)\] \*+", line)
+        if match:
+            current = match.group(1)
+            continue
+        match = re.match(r"(ok|changed|skipping|failed|fatal): \[localhost\]", line)
+        if match and current and current not in status:
+            status[current] = match.group(1)
+    return status
+
+
+@pytest.mark.parametrize("profile", ["server", "desktop"])
+def test_network_run_installs_the_capture_tool_for_the_profile(profile: str) -> None:
+    result = _ansible("--tags", "network", "-e", f"nikos_profile={profile}")
+    assert result.returncode == 0, result.stdout + result.stderr
+    status = _task_status(result.stdout)
+    gui = status["Install the Wireshark GUI and the OpenVPN NetworkManager plugins"]
+    tshark = status["Install tshark and openvpn"]
+    assert status["Install network tools"] != "skipping", status
+    if profile == "server":
+        assert gui == "skipping" and tshark != "skipping", status
+    else:
+        assert gui != "skipping" and tshark == "skipping", status
+
+
+@pytest.mark.parametrize(
+    "profile,expected",
+    [("server", "nmap, tshark, OpenVPN"), ("desktop", "nmap, wireshark, OpenVPN"), ("", "nmap, wireshark, OpenVPN")],
+    ids=["server", "desktop", "unset-is-desktop"],
+)
+def test_installer_names_the_capture_tool_the_profile_gets(profile: str, expected: str) -> None:
+    script = "\n".join(
+        [_extract("_network_bundle_tools"), f'_chosen_profile="{profile}"', "_network_bundle_tools"]
+    )
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+    assert out.stdout == expected
+    text = INSTALL_SH.read_text(encoding="utf-8")
+    # Both pickers read it; a literal tool list in either one goes stale.
+    assert text.count("$(_network_bundle_tools)") == 2, text.count("$(_network_bundle_tools)")
+    assert "(nmap, wireshark, OpenVPN)" not in text
+
+
+NETWORK_LEFTOVERS = ["wireshark", "network-manager-openvpn-gnome", "network-manager-openvpn", "network-manager"]
+WARN_TASK = "Warn about desktop network packages left on a server"
+
+
+@pytest.mark.parametrize(
+    "profile,installed,expected",
+    [
+        ("server", ["network-manager", "wireshark", "curl"], ["wireshark", "network-manager"]),
+        ("server", NETWORK_LEFTOVERS, NETWORK_LEFTOVERS),
+        ("server", ["curl"], []),
+        ("server", [], []),
+        ("desktop", NETWORK_LEFTOVERS, []),
+    ],
+    ids=["server-some", "server-all", "server-none", "server-empty", "desktop-never"],
+)
+def test_network_run_names_desktop_leftovers_on_a_server(
+    profile: str, installed: list[str], expected: list[str]
+) -> None:
+    """Never removed (network-manager over SSH can cut the link); named instead.
+
+    Package facts are faked through network_installed_packages, so the result
+    does not depend on what the test host has installed.
+    """
+    facts = json.dumps({"network_installed_packages": {p: [{"name": p}] for p in installed}})
+    result = _ansible("--tags", "network", "-e", f"nikos_profile={profile}", "-e", facts)
+    assert result.returncode == 0, result.stdout + result.stderr
+    warn = _task_status(result.stdout).get(WARN_TASK)
+    if not expected:
+        assert warn == "skipping", result.stdout
+        assert "WARN: desktop network packages" not in result.stdout
+        return
+    assert warn == "ok", result.stdout
+    line = re.search(r"sudo apt-get remove ([\w -]+)", result.stdout)
+    assert line and line.group(1).split() == expected, result.stdout
+    assert "WARN: desktop network packages from an earlier run are still installed: " + " ".join(expected) in result.stdout
+    assert "over SSH can drop the connection" in result.stdout
+
+
+def test_network_role_never_removes_packages() -> None:
+    assert "state: absent" not in NETWORK_TASKS.read_text(encoding="utf-8")

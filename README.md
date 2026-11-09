@@ -189,7 +189,7 @@ Additional tools installed directly:
 nikos setup          # run full playbook (first install)
 nikos update         # move to the newest release, then re-run the playbook
 nikos update --ref X # update to a specific branch or tag instead
-nikos add network    # install optional: nmap, wireshark, OpenVPN
+nikos add network    # install optional: nmap, wireshark (tshark on a server), OpenVPN
 nikos add music      # install optional: LMMS, Ardour, Audacity
 nikos add education  # install optional: LibreOffice, draw.io, Anki
 nikos add neovim     # install optional: Neovim + starter lazy.nvim config

@@ -1263,6 +1263,15 @@ _release_note() {
   esac
 }
 
+# The network bundle's capture tool for the chosen profile: the role installs
+# the Wireshark GUI on a desktop and tshark on a server.
+_network_bundle_tools() {
+  case "${_chosen_profile:-desktop}" in
+    server) printf 'nmap, tshark, OpenVPN' ;;
+    *) printf 'nmap, wireshark, OpenVPN' ;;
+  esac
+}
+
 # Tags that site.yml runs only on the desktop profile: the tags of every role
 # carrying `when: nikos_profile == 'desktop'` there, plus the tags of the tasks
 # inside those roles (`ai-vscode` sits inside `editors`). Read from the
@@ -1379,7 +1388,7 @@ _checklist_item() {
 _select_bundles_dialog() {
   dialog_init
   local result dialog_status items=()
-  _checklist_item items "network"       "Network tools (nmap, wireshark, OpenVPN)"     off
+  _checklist_item items "network"       "Network tools ($(_network_bundle_tools))"     off
   _checklist_item items "music"         "Music tools (LMMS, Ardour, Audacity)"         off
   _checklist_item items "education"     "Education tools (LibreOffice, draw.io, Anki)$(_release_note education)" off
   _checklist_item items "neovim"        "Neovim with lazy.nvim starter config"         off
@@ -1517,7 +1526,7 @@ _select_bundles_plain() {
 
   SELECTED_BUNDLES=()
   _say_tty "Optional app bundles (press Enter to skip each):"
-  _ask_optional network opt_network "  Install network tools? (nmap, wireshark, OpenVPN) [y/N] "
+  _ask_optional network opt_network "  Install network tools? ($(_network_bundle_tools)) [y/N] "
   _ask_optional music opt_music "  Install music tools? (LMMS, Ardour, Audacity) [y/N] "
   _ask_optional education opt_education "  Install education tools? (LibreOffice, draw.io, Anki)$(_release_note education) [y/N] "
   _say_tty ""

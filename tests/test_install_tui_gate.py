@@ -48,6 +48,7 @@ SELECTION_HELPERS = (
     "_say_tty",
     "_ask_tty",
     "_ask_optional",
+    "_network_bundle_tools",
     "_desktop_only_tags",
     "_hidden_on_this_profile",
     "_require_tty_for_selection",
